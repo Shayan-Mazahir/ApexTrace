@@ -177,17 +177,17 @@ class Track:
         d2 = (seg[:, 0] - x) ** 2 + (seg[:, 1] - y) ** 2
         i = lo + int(np.argmin(d2))
         hx, hy = math.cos(self.heading[i]), math.sin(self.heading[i])
-        dx, dy = x - self.xy[i, 0], y - self.xy[i, 1]
+        dx, dy = float(x - self.xy[i, 0]), float(y - self.xy[i, 1])
         along = dx * hx + dy * hy
         lateral = -dx * hy + dy * hx
         s = float(np.clip(self.s[i] + along, 0.0, self.length))
         return TrackLocation(
             index=i,
             s=s,
-            lateral_offset=lateral,
+            lateral_offset=float(lateral),
             heading=float(self.heading[i]),
             curvature=float(self.curvature[i]),
-            boundary_distance=self.half_width - abs(lateral),
+            boundary_distance=float(self.half_width - abs(lateral)),
         )
 
     def is_inside_track(self, x: float, y: float) -> bool:
