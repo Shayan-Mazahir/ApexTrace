@@ -1,6 +1,6 @@
 {
   "name": "monza_worn_brakes",
-  "description": "Monza with brakes at 50% effectiveness and no warning margin. The warning system assumes nominal brakes.",
+  "description": "Monza lap with brakes at 50% effectiveness and no warning margin. The warning system assumes nominal brakes, so the first heavy stop (Rettifilo) comes up short.",
   "scenario": {
     "scenario_id": "monza_worn_brakes",
     "seed": 2,

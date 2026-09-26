@@ -1,6 +1,6 @@
 {
   "name": "monza_grip_mismatch",
-  "description": "Monza where the system believes grip is 0.95 but the surface only gives 0.70.",
+  "description": "Monza lap where the system believes grip is 0.95 but the surface only gives 0.70. No upgrade addresses grip estimation.",
   "scenario": {
     "scenario_id": "monza_grip_mismatch",
     "seed": 3,

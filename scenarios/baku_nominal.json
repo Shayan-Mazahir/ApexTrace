@@ -1,10 +1,10 @@
 {
   "name": "baku_nominal",
-  "description": "Baku, healthy car and clean telemetry. Expected: pass.",
+  "description": "One flying lap of Baku, healthy car and clean telemetry. Expected: lap completed.",
   "scenario": {
     "scenario_id": "baku_nominal",
     "seed": 5,
     "track": "baku",
-    "entry_speed": 55.0
+    "entry_speed": 75.0
   }
 }
