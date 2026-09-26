@@ -228,3 +228,105 @@ class ConfigurationComparison(BaseModel):
     evaluations: list[ConfigurationEvaluation]
     fixed_vs_baseline: dict[str, list[str]] = Field(description="configuration -> scenarios that fail in baseline but pass here")
     new_failures_vs_baseline: dict[str, list[str]]
+
+
+# --------------------------------------------------------------------------- #
+# API requests / misc responses
+# --------------------------------------------------------------------------- #
+
+MAX_BATCH = 1000
+MAX_COMPARE = 500
+
+
+class ScenarioPreset(BaseModel):
+    name: str
+    description: str
+    scenario: Scenario
+
+
+class ConfigurationInfo(BaseModel):
+    name: ConfigurationName
+    description: str
+
+
+class RunRequest(BaseModel):
+    scenario: Scenario
+    configuration: ConfigurationName = ConfigurationName.BASELINE
+    include_telemetry: bool = False
+
+
+class BatchRequest(BaseModel):
+    scenarios: list[Scenario] = Field(min_length=1, max_length=MAX_BATCH)
+    configuration: ConfigurationName = ConfigurationName.BASELINE
+
+
+class BatchResult(BaseModel):
+    configuration: ConfigurationName
+    scenario_count: int
+    stress_test_failures: int
+    results: list[SimulationResult]
+
+
+class ReplayRequest(BaseModel):
+    scenario: Scenario
+    configuration: ConfigurationName = ConfigurationName.BASELINE
+    sample_hz: float = Field(default=50.0, gt=0, le=100.0)
+
+
+class GenerateScenariosRequest(BaseModel):
+    count: int = Field(default=50, ge=1, le=MAX_COMPARE)
+    seed: int = Field(default=0, ge=0)
+    track: TrackName | None = Field(default=None, description="None = both tracks")
+
+
+class EvaluateRequest(BaseModel):
+    scenarios: list[Scenario] = Field(min_length=1, max_length=MAX_COMPARE)
+    configuration: ConfigurationName = ConfigurationName.BASELINE
+
+
+class CompareRequest(BaseModel):
+    scenarios: list[Scenario] = Field(min_length=1, max_length=MAX_COMPARE)
+    configurations: list[ConfigurationName] = Field(default_factory=lambda: list(ConfigurationName))
+
+
+# --------------------------------------------------------------------------- #
+# Live simulation over WebSocket (/ws/simulation)
+# --------------------------------------------------------------------------- #
+
+
+class LiveStart(BaseModel):
+    """First client message. ``mode='manual'`` means the client sends LiveControl messages (e.g. a wheel)."""
+
+    type: Literal["start"] = "start"
+    scenario: Scenario
+    configuration: ConfigurationName = ConfigurationName.BASELINE
+    mode: Literal["scripted", "manual"] = "scripted"
+    rate_hz: float = Field(default=50.0, gt=0, le=100.0, description="state messages per second of sim time")
+    speedup: float = Field(default=1.0, gt=0, le=20.0, description="sim seconds per wall-clock second")
+
+
+class LiveControl(BaseModel):
+    type: Literal["control"] = "control"
+    steering: float = Field(ge=-1.0, le=1.0)
+    throttle: float = Field(ge=0.0, le=1.0)
+    brake: float = Field(ge=0.0, le=1.0)
+
+
+class LiveTrackMessage(BaseModel):
+    type: Literal["track"] = "track"
+    track: TrackGeometry
+
+
+class LiveStateMessage(BaseModel):
+    type: Literal["state"] = "state"
+    state: VehicleState
+
+
+class LiveResultMessage(BaseModel):
+    type: Literal["result"] = "result"
+    result: SimulationResult
+
+
+class LiveErrorMessage(BaseModel):
+    type: Literal["error"] = "error"
+    detail: str
