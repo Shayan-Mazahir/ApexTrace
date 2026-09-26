@@ -303,8 +303,16 @@ def _distance_to_segment(px: float, py: float, a: tuple[float, float], b: tuple[
     return math.hypot(px - (a[0] + t * abx), py - (a[1] + t * aby))
 
 
+def half_width_at(idx: int, profile: TrackProfile) -> float:
+    """Local half width from the drawn edges. `track_width` is the nominal
+    width only; Baku's castle section narrows to 7.6 m."""
+    n = loop_size(profile.centerline)
+    (cx, cy), (lx, ly) = profile.centerline[idx % n], profile.left_edge[idx % n]
+    return math.hypot(lx - cx, ly - cy)
+
+
 def _clearance_at_index(x: float, y: float, idx: int, profile: TrackProfile) -> float:
-    """Half the track width minus the distance to the centerline *polyline*
+    """Local half width minus the distance to the centerline *polyline*
     (the two segments touching the nearest sample), not just the nearest
     sample point — sample spacing is as large as the clearances we report."""
     line = profile.centerline
@@ -314,7 +322,7 @@ def _clearance_at_index(x: float, y: float, idx: int, profile: TrackProfile) -> 
         _distance_to_segment(x, y, line[(idx - 1) % n], here),
         _distance_to_segment(x, y, here, line[(idx + 1) % n]),
     )
-    return profile.track_width / 2 - distance
+    return half_width_at(idx, profile) - distance
 
 
 def signed_lateral(x: float, y: float, idx: int, profile: TrackProfile) -> float:
