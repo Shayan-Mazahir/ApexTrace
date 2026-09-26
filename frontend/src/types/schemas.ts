@@ -250,3 +250,67 @@ export type LiveServerMessage =
   | { type: 'state'; state: VehicleState }
   | { type: 'result'; result: SimulationResult }
   | { type: 'error'; detail: string }
+
+// ------------------------------------------------------- AI (predictions)
+// ModelPrediction values are TCN estimates of the simulator outcome, never a
+// simulator result. Ground truth is always a SimulationResult.
+
+export type SearchStrategyName = 'sac' | 'tpe' | 'random'
+
+export interface ModelPrediction {
+  kind: 'model_prediction'
+  scenario_id: string
+  failure_probability: number
+  uncertainty: number
+  predicted_failure: boolean
+}
+
+export interface PredictRequest {
+  scenarios: Partial<Scenario>[]
+  configuration?: ConfigurationName
+}
+
+export interface ScenarioSearchRequest {
+  strategy?: SearchStrategyName
+  use_tcn_selection?: boolean
+  budget?: number
+  track?: TrackName | null
+  seed?: number
+  candidates_per_round?: number
+  per_round?: number
+}
+
+export interface SearchTestRecord {
+  scenario: Scenario
+  prediction: ModelPrediction | null
+  result: SimulationResult
+}
+
+export interface ScenarioSearchResponse {
+  strategy_requested: SearchStrategyName
+  strategy_used: string
+  used_tcn_selection: boolean
+  notes: string[]
+  budget: number
+  simulations_run: number
+  stress_test_failures: number
+  distinct_failure_conditions: number
+  tests_until_first_failure: number | null
+  candidates_screened: number
+  screening_sim_seconds: number
+  tested: SearchTestRecord[]
+}
+
+export interface ModelStatus {
+  available: boolean
+  path: string
+  metadata: Record<string, unknown> | null
+}
+
+export interface AIStatus {
+  tcn: ModelStatus
+  tcn_heldout_evaluation: Record<string, unknown> | null
+  sac: ModelStatus
+  default_strategy: SearchStrategyName
+  experiment: Record<string, unknown> | null
+}
