@@ -1,0 +1,228 @@
+{
+  "trained_at": "2026-09-26T12:17:26",
+  "train_seconds": 67.3,
+  "dataset": {
+    "source": "LimitLab simulator (synthetic, baseline configuration)",
+    "num_runs": 5000,
+    "seed": 42,
+    "prefix_seconds": 2.0,
+    "feature_hz": 20.0,
+    "seq_len": 40,
+    "channels": [
+      "speed",
+      "distance_to_corner",
+      "lateral_offset",
+      "acceleration",
+      "throttle",
+      "brake",
+      "steering",
+      "warning_level",
+      "advised_speed_gap",
+      "measured_speed_error",
+      "telemetry_age_ms",
+      "packet_dropped",
+      "param_entry_speed",
+      "param_corner_curvature",
+      "param_actual_grip",
+      "param_grip_error",
+      "param_telemetry_delay_ms",
+      "param_sensor_noise",
+      "param_packet_loss",
+      "param_driver_reaction_delay",
+      "param_warning_margin",
+      "param_brake_effectiveness",
+      "track_monza",
+      "track_baku"
+    ],
+    "tracks": [
+      "monza",
+      "baku"
+    ],
+    "bounds": [
+      {
+        "name": "actual_grip",
+        "low": 0.6,
+        "high": 1.1
+      },
+      {
+        "name": "grip_error",
+        "low": -0.1,
+        "high": 0.2
+      },
+      {
+        "name": "telemetry_delay_ms",
+        "low": 0.0,
+        "high": 300.0
+      },
+      {
+        "name": "sensor_noise",
+        "low": 0.0,
+        "high": 1.0
+      },
+      {
+        "name": "packet_loss",
+        "low": 0.0,
+        "high": 0.4
+      },
+      {
+        "name": "driver_reaction_delay",
+        "low": 0.1,
+        "high": 0.8
+      },
+      {
+        "name": "warning_margin",
+        "low": 0.0,
+        "high": 0.5
+      },
+      {
+        "name": "brake_effectiveness",
+        "low": 0.5,
+        "high": 1.0
+      }
+    ],
+    "failures": 973,
+    "records": 5000
+  },
+  "train_size": 4250,
+  "val_size": 750,
+  "best_epoch": 10,
+  "train_config": {
+    "epochs": 40,
+    "batch_size": 128,
+    "lr": 0.001,
+    "weight_decay": 0.0001,
+    "val_fraction": 0.15,
+    "patience": 12,
+    "seed": 0
+  },
+  "threshold": 0.7699999999999999,
+  "threshold_rule": "max F1 on validation split",
+  "validation_metrics": {
+    "n": 750,
+    "positives": 139,
+    "threshold": 0.7699999999999999,
+    "accuracy": 0.9373333333333334,
+    "precision": 0.8833333333333333,
+    "recall": 0.762589928057554,
+    "f1": 0.8185328185328185,
+    "roc_auc": 0.9616856433020523,
+    "confusion_matrix": {
+      "tp": 106,
+      "fp": 14,
+      "fn": 33,
+      "tn": 597
+    }
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 0.8172554221994737,
+      "val_loss": 0.553803563117981
+    },
+    {
+      "epoch": 2,
+      "train_loss": 0.49636045618618235,
+      "val_loss": 0.4789414405822754
+    },
+    {
+      "epoch": 3,
+      "train_loss": 0.4335168910307043,
+      "val_loss": 0.47429797053337097
+    },
+    {
+      "epoch": 4,
+      "train_loss": 0.3969881935119629,
+      "val_loss": 0.4455675482749939
+    },
+    {
+      "epoch": 5,
+      "train_loss": 0.37058634978182176,
+      "val_loss": 0.4208727180957794
+    },
+    {
+      "epoch": 6,
+      "train_loss": 0.3511479147041545,
+      "val_loss": 0.4029024541378021
+    },
+    {
+      "epoch": 7,
+      "train_loss": 0.3372087379623862,
+      "val_loss": 0.42151889204978943
+    },
+    {
+      "epoch": 8,
+      "train_loss": 0.32929463653003466,
+      "val_loss": 0.42635565996170044
+    },
+    {
+      "epoch": 9,
+      "train_loss": 0.30937392447976503,
+      "val_loss": 0.40321484208106995
+    },
+    {
+      "epoch": 10,
+      "train_loss": 0.29741843377842625,
+      "val_loss": 0.39788350462913513
+    },
+    {
+      "epoch": 11,
+      "train_loss": 0.2907390336709864,
+      "val_loss": 0.4357871413230896
+    },
+    {
+      "epoch": 12,
+      "train_loss": 0.28199492440504187,
+      "val_loss": 0.42277273535728455
+    },
+    {
+      "epoch": 13,
+      "train_loss": 0.2670817722292507,
+      "val_loss": 0.40407854318618774
+    },
+    {
+      "epoch": 14,
+      "train_loss": 0.2663945691585541,
+      "val_loss": 0.44237565994262695
+    },
+    {
+      "epoch": 15,
+      "train_loss": 0.2738149164424223,
+      "val_loss": 0.4633979797363281
+    },
+    {
+      "epoch": 16,
+      "train_loss": 0.2679963258154252,
+      "val_loss": 0.4796939194202423
+    },
+    {
+      "epoch": 17,
+      "train_loss": 0.2461890707576976,
+      "val_loss": 0.44898471236228943
+    },
+    {
+      "epoch": 18,
+      "train_loss": 0.24258734873463125,
+      "val_loss": 0.45586666464805603
+    },
+    {
+      "epoch": 19,
+      "train_loss": 0.23664618062973022,
+      "val_loss": 0.45826616883277893
+    },
+    {
+      "epoch": 20,
+      "train_loss": 0.22261548155896804,
+      "val_loss": 0.5479163527488708
+    },
+    {
+      "epoch": 21,
+      "train_loss": 0.21747252075111165,
+      "val_loss": 0.5134562849998474
+    },
+    {
+      "epoch": 22,
+      "train_loss": 0.21136106697250814,
+      "val_loss": 0.4763314127922058
+    }
+  ]
+}
