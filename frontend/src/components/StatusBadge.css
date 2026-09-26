@@ -1,0 +1,39 @@
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: 4px;
+  background: var(--color-charcoal-light);
+  border: 1px solid currentColor;
+}
+
+.status-badge__glyph {
+  font-size: var(--font-size-md);
+  line-height: 1;
+}
+
+.status-badge--success {
+  color: var(--color-teal);
+}
+
+.status-badge--info {
+  color: var(--color-white);
+}
+
+.status-badge--warning {
+  color: var(--color-amber);
+}
+
+.status-badge--danger {
+  color: var(--color-red);
+}
+
+.status-badge--neutral {
+  color: var(--color-neutral);
+}

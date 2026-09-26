@@ -1,0 +1,30 @@
+import type { InputAdapter, RawInputSample } from '../InputAdapter'
+
+const STEERING_AXIS = 0
+const THROTTLE_BUTTON = 7 // right trigger, standard mapping
+const BRAKE_BUTTON = 6 // left trigger, standard mapping
+
+export function discoverGamepadIndex(): number | null {
+  const pads = navigator.getGamepads?.() ?? []
+  for (const pad of pads) {
+    if (pad) return pad.index
+  }
+  return null
+}
+
+export function createGamepadAdapter(index: number): InputAdapter {
+  return {
+    id: `gamepad-${index}`,
+    label: 'Gamepad/Wheel',
+    isAvailable: () => navigator.getGamepads?.()[index] != null,
+    poll(): RawInputSample {
+      const pad = navigator.getGamepads?.()[index]
+      if (!pad) return { steeringRaw: 0, throttleRaw: 0, brakeRaw: 0 }
+      return {
+        steeringRaw: pad.axes[STEERING_AXIS] ?? 0,
+        throttleRaw: pad.buttons[THROTTLE_BUTTON]?.value ?? 0,
+        brakeRaw: pad.buttons[BRAKE_BUTTON]?.value ?? 0,
+      }
+    },
+  }
+}
