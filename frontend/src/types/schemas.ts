@@ -1,5 +1,6 @@
 // Mirrors backend/app/schemas.py — keep both in sync by hand until codegen is added.
 //
+// A scenario is one flying lap of a closed track; `s` wraps at the lap length.
 // Units: metres, seconds, m/s, m/s^2, radians unless a name says otherwise
 // (`*_ms` = milliseconds). World frame: track starts at the origin heading +x,
 // +y is to the left. Simulator values are ground truth; nothing here is a
@@ -28,7 +29,6 @@ export interface Scenario {
   entry_speed: number
   actual_grip: number
   estimated_grip: number
-  corner_curvature: number | null
   telemetry_delay_ms: number
   sensor_noise: number
   packet_loss: number
@@ -44,6 +44,7 @@ export interface VehicleState {
   x: number
   y: number
   s: number
+  lap_progress: number
   lateral_offset: number
   speed: number
   heading: number
@@ -57,23 +58,38 @@ export interface VehicleState {
   estimated_grip: number
   boundary_distance: number
   on_track: boolean
+  next_corner: string
   warning: WarningLevel
   warning_source: WarningSource
+  warning_corner: string | null
   advised_speed: number | null
   measured_speed: number | null
   telemetry_age_ms: number | null
   packet_dropped: boolean
 }
 
-export interface SimulationMetrics {
-  corner_entry_speed: number | null
-  safe_corner_speed: number
-  advised_corner_speed: number
-  overspeed_at_entry: number | null
-  max_lateral_error: number
-  max_grip_usage: number
+export interface CornerMetrics {
+  name: string
+  entry_speed: number
+  approach_max_speed: number
+  safe_speed: number
+  advised_speed: number
+  overspeed_at_entry: number
+  warning_timestamp: number | null
   warning_lead_time: number | null
   warning_too_late: boolean
+}
+
+export interface SimulationMetrics {
+  lap_completed: boolean
+  lap_time: number | null
+  lap_distance: number
+  corners: CornerMetrics[]
+  max_overspeed_at_entry: number | null
+  corners_with_late_warning: number
+  warning_too_late: boolean
+  max_lateral_error: number
+  max_grip_usage: number
   stale_telemetry_fraction: number
   packets_dropped: number
   sim_time: number
@@ -88,6 +104,8 @@ export interface SimulationResult {
   failed: boolean
   left_track: boolean
   failure_reason: 'left_track' | null
+  failure_corner: string | null
+  failure_s: number | null
   warning_triggered: boolean
   warning_timestamp: number | null
   failure_timestamp: number | null
@@ -105,6 +123,7 @@ export interface CornerInfo {
   curvature: number
   radius: number
   direction: 'left' | 'right'
+  width: number
 }
 
 export interface BrakingZoneInfo {
@@ -120,8 +139,9 @@ export interface TrackGeometry {
   display_name: string
   purpose: string
   width: number
+  min_width: number
   length: number
-  corner_curvature: number
+  closed: boolean
   centerline: Point2[]
   left_boundary: Point2[]
   right_boundary: Point2[]
@@ -132,7 +152,13 @@ export interface TrackGeometry {
 
 export interface ReplayEvent {
   timestamp: number
-  kind: 'caution_shown' | 'brake_now_shown' | 'corner_entry' | 'left_track' | 'finished'
+  kind:
+    | 'caution_shown'
+    | 'brake_now_shown'
+    | 'corner_entry'
+    | 'left_track'
+    | 'lap_completed'
+    | 'finished'
   detail: string | null
 }
 
@@ -154,7 +180,8 @@ export interface ScenarioOutcome {
   failed: boolean
   minimum_boundary_distance: number
   warning_too_late: boolean
-  corner_entry_speed: number | null
+  failure_corner: string | null
+  lap_time: number | null
 }
 
 export interface ConfigurationEvaluation {
