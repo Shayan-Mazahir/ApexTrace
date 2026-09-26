@@ -197,9 +197,9 @@ def _pure_pursuit(state, profile, lookahead_m=10.0):
     dx, dy = tx - state.x, ty - state.y
     alpha = _wrap_angle(math.atan2(dy, dx) - state.heading)
     wanted = 2 * math.sin(alpha) / max(math.hypot(dx, dy), 1.0)
-    from app.placeholder_sim import G_LAT, MAX_CURVATURE
-    capacity = min(MAX_CURVATURE, G_LAT / max(state.speed**2, 1.0))
-    return max(-1.0, min(1.0, wanted / capacity))
+    from app.f1_car import steering_for_curvature
+
+    return steering_for_curvature(state.speed, wanted)
 
 
 def test_pure_pursuit_at_a_safe_speed_completes_clean_laps_and_times_them():

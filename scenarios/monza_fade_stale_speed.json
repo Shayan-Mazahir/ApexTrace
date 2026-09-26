@@ -1,7 +1,7 @@
 {
   "id": "monza_fade_stale_speed",
   "name": "Monza \u2014 brake fade + stale telemetry",
-  "description": "Brakes fade gradually over the first minute while telemetry into Ascari arrives 350 ms late.",
+  "description": "Brakes fade to 90% effectiveness after the first few seconds while telemetry into Ascari arrives 350 ms late (recalibrated for the 2026 car model).",
   "track": "monza",
   "seed": 12,
   "faults": [
@@ -20,7 +20,7 @@
       },
       "duration_s": null,
       "parameters": {
-        "effectiveness": 0.7
+        "effectiveness": 0.9
       },
       "ramp_in_s": 0.0,
       "ramp_out_s": 0.0,

@@ -20,7 +20,8 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from app.budget import config_label, enumerate_configs
-from app.placeholder_sim import G_LAT, MAX_CURVATURE, TRACK_PRESETS, DemoVehicleState, loop_size, signed_clearance
+from app.f1_car import max_lateral_accel, steering_for_curvature
+from app.placeholder_sim import TRACK_PRESETS, DemoVehicleState, loop_size, signed_clearance
 from app.schemas import UpgradeConfig, UpgradeOption
 from app.stress.run import TICK_DT, RunConfig, StressRun
 from app.stress.spec import DriverConfig, StartConfig, StressScenario
@@ -76,15 +77,18 @@ class ScriptedDriver:
         dx, dy = tx - v.x, ty - v.y
         alpha = (math.atan2(dy, dx) - v.heading + math.pi) % (2 * math.pi) - math.pi
         wanted = 2 * math.sin(alpha) / max(math.hypot(dx, dy), 1.0)
-        capacity = min(MAX_CURVATURE, G_LAT / max(v.speed**2, 1.0))
-        steering = max(-1.0, min(1.0, wanted / capacity))
+        steering = steering_for_curvature(v.speed, wanted)
+        # Throttle and cornering share the rear tyres' grip: feed the power in
+        # as the corner opens up instead of flooring it at the apex.
+        lateral_use = min(1.0, v.speed * v.speed * abs(wanted) / max_lateral_accel(v.speed))
+        power = 0.8 * max(0.1, 1.0 - lateral_use**2)
 
         error = target - v.speed
         if error < -0.3:
             return steering, 0.0, max_brake
         if error > 0.3:
-            return steering, 0.8, 0.0
-        return steering, 0.3, 0.0
+            return steering, power, 0.0
+        return steering, min(power, 0.3), 0.0
 
 
 @dataclass
