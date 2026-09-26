@@ -68,10 +68,28 @@ def test_degraded_braking_is_invisible_to_system():
     assert ws.required_distance(80.0, v_adv) < needed_worn
 
 
-def test_past_last_corner_is_safe():
+def test_warning_names_the_corner():
     ws = WarningSystem(estimated_grip=1.0, warning_margin=0.1)
-    out = ws.evaluate(Measurement(speed=90.0, s=CORNER.s_exit + 10, sent_at=0.0), TRACK)
-    assert out.level is WarningLevel.SAFE
+    out = ws.evaluate(measure(80.0, 100.0), TRACK)
+    assert out.corner == CORNER.name
+
+
+def test_lookahead_warns_for_tighter_corner_behind_a_faster_one():
+    """Approaching Ascari (T8 fast, T9 tight) the warning targets T9's lower speed."""
+    ws = WarningSystem(estimated_grip=1.0, warning_margin=0.1)
+    t8, t9 = TRACK.corner_by_name("T8 Ascari"), TRACK.corner_by_name("T9 Ascari")
+    assert ws.advised_speed(t9.curvature) < ws.advised_speed(t8.curvature)
+    out = ws.evaluate(Measurement(speed=80.0, s=t8.s_entry - 60.0, sent_at=0.0), TRACK)
+    assert out.level is WarningLevel.BRAKE_NOW and out.corner == "T9 Ascari"
+
+
+def test_after_last_corner_looks_to_first_corner_of_next_lap():
+    ws = WarningSystem(estimated_grip=1.0, warning_margin=0.1)
+    last = TRACK.corners[-1]
+    out = ws.evaluate(Measurement(speed=90.0, s=last.s_exit + 10, sent_at=0.0), TRACK)
+    assert out.level is WarningLevel.SAFE  # the first corner is still > 1 km away
+    near = ws.evaluate(Measurement(speed=90.0, s=TRACK.length - 5.0, sent_at=0.0), TRACK)
+    assert near.corner == CORNER.name
 
 
 def test_no_measurement_is_safe():

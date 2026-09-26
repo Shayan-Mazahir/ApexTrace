@@ -6,7 +6,7 @@ F1 values. Units are SI (m, s, m/s, m/s^2) unless a name says otherwise.
 
 # Simulation clock. 100 Hz gives 10 ms resolution for telemetry delay faults.
 DT = 0.01
-MAX_SIM_TIME = 30.0
+MAX_SIM_TIME = 240.0  # one lap; generous so a slow lap never times out
 # Keep simulating this long after leaving the track so replays show the excursion.
 POST_FAILURE_TIME = 0.5
 
@@ -32,6 +32,7 @@ WARNING_ASSUMED_REACTION = 0.5    # seconds of driver reaction it budgets for
 CAUTION_DISTANCE_FACTOR = 1.5
 CAUTION_DISTANCE_EXTRA = 20.0
 SAFE_SPEED_TOLERANCE = 0.5
+WARNING_LOOKAHEAD = 1000.0      # metres of track the system checks ahead
 
 # Telemetry faults.
 SPEED_NOISE_STD = 2.5             # m/s at sensor_noise = 1.0

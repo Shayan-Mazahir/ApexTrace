@@ -75,7 +75,7 @@ def test_stale_telemetry_under_packet_loss():
 
 
 def test_baku_shadow_zone_amplifies_loss():
-    zone_start = BAKU.profile.telemetry_shadow_zones[0][0]
+    zone_start = BAKU.shadow_zones[0][0]
     inside, _ = drive_channel(FaultConfig(packet_loss=0.1), track=BAKU, ticks=200, s0=zone_start)
     outside, _ = drive_channel(FaultConfig(packet_loss=0.1), track=BAKU, ticks=200, s0=0.0)
     # 200 ticks * 0.5 m from s0 covers 100 m
