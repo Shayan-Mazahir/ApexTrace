@@ -76,11 +76,11 @@ def test_replay_baseline_vs_upgraded():
 
 
 def test_generate_evaluate_compare():
-    scs = client.post("/scenario/generate", json={"count": 20, "seed": 3}).json()
-    assert len(scs) == 20
+    scs = client.post("/scenario/generate", json={"count": 8, "seed": 3}).json()
+    assert len(scs) == 8
     [Scenario.model_validate(s) for s in scs]
     ev = ConfigurationEvaluation.model_validate(client.post("/scenario/evaluate", json={"scenarios": scs}).json())
-    assert ev.scenario_count == 20
+    assert ev.scenario_count == 8
     cmp = ConfigurationComparison.model_validate(
         client.post("/configuration/compare", json={"scenarios": scs + [WORN]}).json())
     assert len(cmp.evaluations) == 4

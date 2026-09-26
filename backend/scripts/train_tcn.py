@@ -24,7 +24,7 @@ def main() -> None:
     ap.add_argument("--output", default="models/tcn")
     ap.add_argument("--epochs", type=int, default=40)
     ap.add_argument("--hidden", type=int, default=32)
-    ap.add_argument("--levels", type=int, default=4)
+    ap.add_argument("--levels", type=int, default=5)
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
 

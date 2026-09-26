@@ -82,5 +82,9 @@ def get_predictor(model_dir: str | None = None) -> FailurePredictor:
 
 
 def model_available(model_dir: str | Path = DEFAULT_MODEL_DIR) -> bool:
+    """True if a trained model exists AND matches the current feature layout."""
     d = Path(model_dir)
-    return (d / "model.pt").exists() and (d / "config.json").exists()
+    if not ((d / "model.pt").exists() and (d / "config.json").exists()):
+        return False
+    cfg = json.loads((d / "config.json").read_text())
+    return cfg.get("channels") == list(CHANNELS) and cfg.get("seq_len") == SEQ_LEN

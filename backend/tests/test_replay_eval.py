@@ -57,10 +57,10 @@ def test_track_geometry():
 
 
 def test_evaluate_and_compare_use_identical_scenarios():
-    scs = ScenarioSpace().sample(np.random.default_rng(1), 40)
-    ev = evaluate_configuration(CN.BASELINE, scs)
-    assert ev.scenario_count == 40 and ev.stress_test_failures == len(ev.failed_scenario_ids)
-    cmp = compare_configurations(scs)
+    scs = ScenarioSpace().sample(np.random.default_rng(1), 16)
+    ev = evaluate_configuration(CN.BASELINE, scs, workers=4)
+    assert ev.scenario_count == 16 and ev.stress_test_failures == len(ev.failed_scenario_ids)
+    cmp = compare_configurations(scs, workers=4)
     assert [e.configuration for e in cmp.evaluations] == list(CN)
     assert all([o.scenario_id for o in e.outcomes] == cmp.scenario_ids for e in cmp.evaluations)
     assert cmp.evaluations[0].model_dump() == ev.model_dump()

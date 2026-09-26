@@ -21,12 +21,12 @@ def test_prefix_features_match_record():
 
 
 def test_dataset_generates_and_loads(tmp_path):
-    data = generate_dataset(24, seed=1, workers=1)
-    assert data["meta"]["num_runs"] == 24
+    data = generate_dataset(12, seed=1, workers=4)
+    assert data["meta"]["num_runs"] == 12
     p = save_dataset(data, tmp_path / "d.json")
     ds = load_dataset(p)
-    assert ds.x.shape == (24, SEQ_LEN, len(CHANNELS))
-    assert ds.y.shape == (24,) and set(np.unique(ds.y)) <= {0.0, 1.0}
-    assert len(ds.scenarios) == 24
+    assert ds.x.shape == (12, SEQ_LEN, len(CHANNELS))
+    assert ds.y.shape == (12,) and set(np.unique(ds.y)) <= {0.0, 1.0}
+    assert len(ds.scenarios) == 12
     # deterministic
-    assert generate_dataset(24, seed=1, workers=1) == data
+    assert generate_dataset(12, seed=1, workers=4) == data

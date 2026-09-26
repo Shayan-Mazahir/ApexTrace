@@ -22,9 +22,10 @@ from app.sim.simulator import Simulator
 
 
 def simulate_record(scenario: Scenario, configuration: ConfigurationName = ConfigurationName.BASELINE) -> dict:
-    """Run one scenario fully; keep prefix features + ground-truth label."""
+    """Run one lap fully; keep prefix features + ground-truth label."""
     sim = Simulator(scenario, configuration, record=True)
     x = run_prefix(sim)
+    sim.record = False  # the rest of the lap only matters for the label
     while not sim.done:
         sim.step()
     r = sim.result()
@@ -36,6 +37,7 @@ def simulate_record(scenario: Scenario, configuration: ConfigurationName = Confi
         "minimum_boundary_distance": r.minimum_boundary_distance,
         "warning_too_late": r.metrics.warning_too_late,
         "sim_time": r.metrics.sim_time,
+        "failure_corner": r.failure_corner,
     }
 
 
@@ -53,7 +55,7 @@ def generate_dataset(num_runs: int, seed: int, space: ScenarioSpace | None = Non
     records = generate_records(scenarios, workers)
     return {
         "meta": {
-            "source": "LimitLab simulator (synthetic, baseline configuration)",
+            "source": "LimitLab simulator (synthetic, one flying lap per run, baseline configuration)",
             "num_runs": num_runs,
             "seed": seed,
             "prefix_seconds": PREFIX_SECONDS,

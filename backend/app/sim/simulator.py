@@ -258,8 +258,9 @@ class Simulator:
 
     # ------------------------------------------------------------------ #
 
-    def telemetry(self) -> list[VehicleState]:
-        return [VehicleState.model_construct(**dict(zip(FRAME_FIELDS, f))) for f in self.frames]
+    def telemetry(self, limit: int | None = None) -> list[VehicleState]:
+        frames = self.frames if limit is None else self.frames[:limit]
+        return [VehicleState.model_construct(**dict(zip(FRAME_FIELDS, f))) for f in frames]
 
     def _corner_metrics(self, corner: Corner, ct: _CornerTrack) -> CornerMetrics:
         sc = self.scenario

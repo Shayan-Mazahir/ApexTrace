@@ -18,7 +18,7 @@ from torch import nn
 class TCNConfig:
     in_channels: int
     hidden: int = 32
-    levels: int = 4
+    levels: int = 5  # receptive field 125 steps >= the 120-step prefix
     kernel_size: int = 3
     dropout: float = 0.15
 

@@ -1,9 +1,11 @@
-"""Turn a (partial) simulator run into model input.
+"""Turn a (partial) simulator lap into model input.
 
-The TCN sees the first ``PREFIX_SECONDS`` of a run, sampled at ``FEATURE_HZ``,
-plus the scenario parameters as constant channels. It is asked whether the
-run will end in a simulator failure. The prefix is a fraction of a full run,
-which is what makes screening candidates cheaper than simulating them fully.
+The TCN sees the first ``PREFIX_SECONDS`` of a lap (the approach to and first
+braking zones of the opening corners), sampled at ``FEATURE_HZ``, plus the
+scenario parameters as constant channels. It is asked whether the lap will
+end in a simulator failure anywhere on the track. The prefix is a small
+fraction of a lap, which is what makes screening candidates cheaper than
+simulating them fully.
 """
 
 from __future__ import annotations
@@ -14,9 +16,10 @@ from app.schemas import ConfigurationName, Scenario, VehicleState, WarningLevel
 from app.sim import constants as C
 from app.sim.scenario_space import PARAM_NAMES, TRACKS, ScenarioSpace
 from app.sim.simulator import Simulator
+from app.sim.track import Track, get_track
 
-PREFIX_SECONDS = 2.0
-FEATURE_HZ = 20.0
+PREFIX_SECONDS = 12.0
+FEATURE_HZ = 10.0
 SEQ_LEN = int(round(PREFIX_SECONDS * FEATURE_HZ))
 _STRIDE = int(round(1.0 / (FEATURE_HZ * C.DT)))
 PREFIX_TICKS = SEQ_LEN * _STRIDE
@@ -26,7 +29,8 @@ AGE_CAP_MS = 1000.0
 
 SEQUENCE_CHANNELS: tuple[str, ...] = (
     "speed",
-    "distance_to_corner",
+    "distance_to_next_corner",
+    "next_corner_curvature",
     "lateral_offset",
     "acceleration",
     "throttle",
@@ -44,10 +48,12 @@ CHANNELS: tuple[str, ...] = SEQUENCE_CHANNELS + STATIC_CHANNELS
 _SPACE = ScenarioSpace()
 
 
-def frame_features(f: VehicleState, corner_entry: float) -> list[float]:
+def frame_features(f: VehicleState, track: Track) -> list[float]:
+    corner = track.next_corner(f.s)
     return [
         f.speed,
-        corner_entry - f.s,
+        corner.s_entry - f.s if track.get_current_corner(f.s) else track.distance_ahead(f.s, corner.s_entry),
+        abs(corner.curvature),
         f.lateral_offset,
         f.acceleration,
         f.throttle,
@@ -65,10 +71,11 @@ def static_features(scenario: Scenario) -> list[float]:
     return list(_SPACE.to_unit(scenario)) + [float(scenario.track == t) for t in TRACKS]
 
 
-def features_from_frames(frames: list[VehicleState], scenario: Scenario, corner_entry: float) -> np.ndarray:
+def features_from_frames(frames: list[VehicleState], scenario: Scenario) -> np.ndarray:
     """(SEQ_LEN, len(CHANNELS)) array from recorded 100 Hz frames."""
+    track = get_track(scenario.track)
     picked = frames[: PREFIX_TICKS : _STRIDE]
-    rows = [frame_features(f, corner_entry) for f in picked]
+    rows = [frame_features(f, track) for f in picked]
     while len(rows) < SEQ_LEN:  # run ended early: hold last value
         rows.append(rows[-1])
     seq = np.asarray(rows, dtype=np.float32)
@@ -80,7 +87,7 @@ def run_prefix(sim: Simulator) -> np.ndarray:
     """Advance ``sim`` through the prefix window and return its features."""
     while not sim.done and len(sim.frames) < PREFIX_TICKS:
         sim.step()
-    return features_from_frames(sim.telemetry()[:PREFIX_TICKS], sim.scenario, sim.corner.s_entry)
+    return features_from_frames(sim.telemetry(PREFIX_TICKS), sim.scenario)
 
 
 def prefix_features(
