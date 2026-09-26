@@ -1,0 +1,47 @@
+.drive-hud {
+  position: fixed;
+  bottom: var(--space-md);
+  right: var(--space-md);
+  z-index: 10;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid var(--color-charcoal-light);
+  border-radius: 6px;
+  padding: var(--space-sm) var(--space-md);
+  font-family: var(--font-mono);
+  color: var(--color-white);
+}
+
+.drive-hud__speed {
+  font-size: var(--font-size-xl);
+  font-weight: 700;
+}
+
+.drive-hud__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: var(--font-size-xs);
+  color: var(--color-neutral);
+}
+
+.drive-hud__row span {
+  width: 56px;
+  flex-shrink: 0;
+}
+
+.drive-hud__bar {
+  flex: 1;
+  height: 6px;
+  background: var(--color-charcoal-light);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.drive-hud__bar-fill {
+  height: 100%;
+  background: var(--color-orange);
+}

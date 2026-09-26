@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 
-interface Calibration {
+export interface Calibration {
   center: number
   deadzone: number
 }

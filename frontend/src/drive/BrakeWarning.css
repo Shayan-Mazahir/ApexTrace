@@ -1,0 +1,27 @@
+.brake-warning {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 20;
+  font-family: var(--font-base);
+  font-size: var(--font-size-display);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--color-white);
+  background: rgba(239, 68, 68, 0.85);
+  padding: var(--space-md) var(--space-xl);
+  border-radius: 8px;
+  animation: brake-warning-pulse 0.5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes brake-warning-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}

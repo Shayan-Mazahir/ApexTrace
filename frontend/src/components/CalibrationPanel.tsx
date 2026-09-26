@@ -1,9 +1,25 @@
-import { useInputAdapter } from '../input/useInputAdapter'
+import type { RawInputSample } from '../input/InputAdapter'
+import type { Calibration } from '../input/useCalibration'
+import type { NormalizedControls } from '../input/useInputAdapter'
 import './CalibrationPanel.css'
 
-export function CalibrationPanel() {
-  const { source, raw, normalized, calibration, setCenter, setDeadzone } = useInputAdapter()
+interface CalibrationPanelProps {
+  source: string
+  raw: RawInputSample
+  normalized: NormalizedControls
+  calibration: Calibration
+  setCenter: () => void
+  setDeadzone: (value: number) => void
+}
 
+export function CalibrationPanel({
+  source,
+  raw,
+  normalized,
+  calibration,
+  setCenter,
+  setDeadzone,
+}: CalibrationPanelProps) {
   return (
     <div className="calibration-panel">
       <div className="calibration-panel__source">Input: {source}</div>
