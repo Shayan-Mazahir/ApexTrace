@@ -2,7 +2,7 @@
 
     python scripts/demo.py
 
-1. Preset scenario -> baseline run fails -> each upgrade re-run on the SAME scenario.
+1. Preset lap -> baseline run fails at some corner -> each upgrade re-run on the SAME scenario.
 2. Replay saved for baseline and upgraded runs.
 3. Candidate scenarios -> SAC proposals + TCN screening -> selected scenarios
    -> real simulator -> ground truth (prediction and result shown side by side).
@@ -36,16 +36,19 @@ def main() -> None:
         cells = []
         for cfg in ConfigurationName:
             r = run_scenario(sc, cfg)
-            cells.append(f"{cfg.value}={'FAIL' if r.failed else 'pass'}")
-        print(f"{name:24s} " + "  ".join(cells))
+            cells.append(f"{cfg.value}=" + (f"FAIL@{r.failure_corner}" if r.failed else f"lap {r.metrics.lap_time:.1f}s"))
+        print(f"{name:22s} " + " | ".join(cells))
 
     section("2. Replays")
     sc = Scenario.model_validate(json.loads((ROOT / "scenarios" / "monza_worn_brakes.json").read_text())["scenario"])
     for cfg in (ConfigurationName.BASELINE, ConfigurationName.BRAKE_SERVICE):
         rp = build_replay(sc, cfg, sample_hz=20)
         p = save_replay(rp, Path("data/replays") / f"{sc.scenario_id}_{cfg.value}.json")
-        ev = ", ".join(f"{e.kind}@{e.timestamp:.2f}s" for e in rp.events)
-        print(f"{cfg.value:14s} {'FAIL' if rp.result.failed else 'pass'}  {len(rp.frames)} frames -> {p}\n    {ev}")
+        ev = ", ".join(f"{e.kind}({e.detail or ''})@{e.timestamp:.1f}s" for e in rp.events
+                       if e.kind in ("left_track", "lap_completed", "finished"))
+        n_entries = sum(e.kind == "corner_entry" for e in rp.events)
+        print(f"{cfg.value:14s} {'FAIL' if rp.result.failed else 'pass'}  {len(rp.frames)} frames, "
+              f"{n_entries} corners reached -> {p}\n    {ev}")
 
     section("3. Adversarial search -> TCN screening -> simulator")
     if not model_available():
@@ -61,8 +64,8 @@ def main() -> None:
     for t in out.tested:
         p = t.prediction
         print(f"{t.scenario.scenario_id:18s} {t.scenario.track:6s} {p.predicted_failure_probability:13.2f} "
-              f"{p.uncertainty:6.2f}  {'FAIL' if t.result.failed else 'pass'} "
-              f"(min boundary {t.result.minimum_boundary_distance:+.2f} m)")
+              f"{p.uncertainty:6.2f}  " + (f"FAIL at {t.result.failure_corner}" if t.result.failed
+                                           else f"pass (lap {t.result.metrics.lap_time:.1f} s)"))
     print(f"stress-test failures found: {len(out.failures)} of {len(out.tested)} simulations "
           f"({out.distinct_failure_conditions} distinct conditions)")
 

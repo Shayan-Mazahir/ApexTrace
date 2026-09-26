@@ -10,76 +10,76 @@
     ],
     "configuration": "baseline",
     "bounds": "app/sim/scenario_space.py DEFAULT_BOUNDS + track entry-speed/curvature ranges",
-    "mean_full_run_sim_seconds": 9.292016,
+    "mean_full_run_sim_seconds": 57.21904,
     "note": "Offline training cost is not included in the budget: the TCN used its training-set simulations and SAC its training simulations (see models/*/training_metadata.json). Screening cost is the simulated prefix time for every TCN-screened candidate.",
-    "wall_seconds": 40.5
+    "wall_seconds": 451.8
   },
   "summary": {
     "random": {
       "stress_test_failures": {
-        "mean": 9.0,
-        "std": 1.6733200530681511,
-        "min": 7,
-        "max": 12,
+        "mean": 13.6,
+        "std": 2.727636339397171,
+        "min": 9,
+        "max": 16,
         "runs_without_value": 0
       },
       "distinct_failure_conditions": {
-        "mean": 8.8,
-        "std": 1.7204650534085253,
-        "min": 7,
-        "max": 12,
+        "mean": 13.4,
+        "std": 3.0724582991474434,
+        "min": 8,
+        "max": 16,
         "runs_without_value": 0
       },
       "tests_until_first_failure": {
-        "mean": 6.4,
-        "std": 5.535341001239219,
+        "mean": 2.4,
+        "std": 1.019803902718557,
         "min": 1,
-        "max": 16,
+        "max": 4,
         "runs_without_value": 0
       },
       "screening_full_sim_equivalents": 0.0
     },
     "tpe": {
       "stress_test_failures": {
-        "mean": 22.4,
-        "std": 6.2801273872430325,
-        "min": 15,
-        "max": 32,
+        "mean": 19.0,
+        "std": 8.07465169527454,
+        "min": 7,
+        "max": 28,
         "runs_without_value": 0
       },
       "distinct_failure_conditions": {
-        "mean": 8.4,
+        "mean": 10.4,
         "std": 2.4166091947189146,
-        "min": 5,
-        "max": 12,
+        "min": 6,
+        "max": 13,
         "runs_without_value": 0
       },
       "tests_until_first_failure": {
-        "mean": 6.8,
-        "std": 3.249615361854384,
+        "mean": 4.8,
+        "std": 2.9257477676655586,
         "min": 2,
-        "max": 12,
+        "max": 10,
         "runs_without_value": 0
       },
       "screening_full_sim_equivalents": 0.0
     },
     "sac": {
       "stress_test_failures": {
-        "mean": 43.0,
-        "std": 2.6076809620810595,
-        "min": 38,
-        "max": 45,
+        "mean": 43.2,
+        "std": 2.3151673805580453,
+        "min": 40,
+        "max": 46,
         "runs_without_value": 0
       },
       "distinct_failure_conditions": {
-        "mean": 30.2,
-        "std": 1.469693845669907,
-        "min": 29,
+        "mean": 31.0,
+        "std": 2.0976176963403033,
+        "min": 28,
         "max": 33,
         "runs_without_value": 0
       },
       "tests_until_first_failure": {
-        "mean": 1.6,
+        "mean": 1.4,
         "std": 0.8,
         "min": 1,
         "max": 3,
@@ -89,41 +89,41 @@
     },
     "sac+tcn_selection": {
       "stress_test_failures": {
-        "mean": 46.6,
-        "std": 1.3564659966250536,
+        "mean": 47.0,
+        "std": 1.4142135623730951,
         "min": 45,
-        "max": 48,
+        "max": 49,
         "runs_without_value": 0
       },
       "distinct_failure_conditions": {
-        "mean": 32.4,
-        "std": 2.0591260281974,
-        "min": 30,
-        "max": 36,
+        "mean": 30.4,
+        "std": 3.2619012860600183,
+        "min": 25,
+        "max": 35,
         "runs_without_value": 0
       },
       "tests_until_first_failure": {
-        "mean": 1.0,
-        "std": 0.0,
+        "mean": 1.2,
+        "std": 0.4,
         "min": 1,
-        "max": 1,
+        "max": 2,
         "runs_without_value": 0
       },
-      "screening_full_sim_equivalents": 43.047708914836136
+      "screening_full_sim_equivalents": 41.9440801523409
     },
     "random+tcn_selection": {
       "stress_test_failures": {
-        "mean": 32.2,
-        "std": 1.9390719429665315,
-        "min": 29,
-        "max": 34,
+        "mean": 35.8,
+        "std": 3.919183588453085,
+        "min": 32,
+        "max": 41,
         "runs_without_value": 0
       },
       "distinct_failure_conditions": {
-        "mean": 26.6,
-        "std": 2.4166091947189146,
+        "mean": 27.8,
+        "std": 3.4292856398964493,
         "min": 22,
-        "max": 29,
+        "max": 31,
         "runs_without_value": 0
       },
       "tests_until_first_failure": {
@@ -133,7 +133,7 @@
         "max": 1,
         "runs_without_value": 0
       },
-      "screening_full_sim_equivalents": 43.047708914836136
+      "screening_full_sim_equivalents": 41.9440801523409
     }
   },
   "runs": {
@@ -142,59 +142,7 @@
         "seed": 0,
         "simulations": 50,
         "stress_test_failures": 12,
-        "tests_until_first_failure": 1,
-        "distinct_failure_conditions": 12,
-        "screening_sim_seconds": 0.0,
-        "candidates_screened": 0,
-        "notes": []
-      },
-      {
-        "seed": 1,
-        "simulations": 50,
-        "stress_test_failures": 9,
-        "tests_until_first_failure": 16,
-        "distinct_failure_conditions": 9,
-        "screening_sim_seconds": 0.0,
-        "candidates_screened": 0,
-        "notes": []
-      },
-      {
-        "seed": 2,
-        "simulations": 50,
-        "stress_test_failures": 8,
-        "tests_until_first_failure": 9,
-        "distinct_failure_conditions": 8,
-        "screening_sim_seconds": 0.0,
-        "candidates_screened": 0,
-        "notes": []
-      },
-      {
-        "seed": 3,
-        "simulations": 50,
-        "stress_test_failures": 7,
-        "tests_until_first_failure": 2,
-        "distinct_failure_conditions": 7,
-        "screening_sim_seconds": 0.0,
-        "candidates_screened": 0,
-        "notes": []
-      },
-      {
-        "seed": 4,
-        "simulations": 50,
-        "stress_test_failures": 9,
         "tests_until_first_failure": 4,
-        "distinct_failure_conditions": 8,
-        "screening_sim_seconds": 0.0,
-        "candidates_screened": 0,
-        "notes": []
-      }
-    ],
-    "tpe": [
-      {
-        "seed": 0,
-        "simulations": 50,
-        "stress_test_failures": 32,
-        "tests_until_first_failure": 6,
         "distinct_failure_conditions": 12,
         "screening_sim_seconds": 0.0,
         "candidates_screened": 0,
@@ -204,8 +152,8 @@
         "seed": 1,
         "simulations": 50,
         "stress_test_failures": 16,
-        "tests_until_first_failure": 8,
-        "distinct_failure_conditions": 5,
+        "tests_until_first_failure": 1,
+        "distinct_failure_conditions": 16,
         "screening_sim_seconds": 0.0,
         "candidates_screened": 0,
         "notes": []
@@ -213,9 +161,9 @@
       {
         "seed": 2,
         "simulations": 50,
-        "stress_test_failures": 25,
+        "stress_test_failures": 16,
         "tests_until_first_failure": 2,
-        "distinct_failure_conditions": 7,
+        "distinct_failure_conditions": 16,
         "screening_sim_seconds": 0.0,
         "candidates_screened": 0,
         "notes": []
@@ -223,7 +171,59 @@
       {
         "seed": 3,
         "simulations": 50,
+        "stress_test_failures": 9,
+        "tests_until_first_failure": 3,
+        "distinct_failure_conditions": 8,
+        "screening_sim_seconds": 0.0,
+        "candidates_screened": 0,
+        "notes": []
+      },
+      {
+        "seed": 4,
+        "simulations": 50,
         "stress_test_failures": 15,
+        "tests_until_first_failure": 2,
+        "distinct_failure_conditions": 15,
+        "screening_sim_seconds": 0.0,
+        "candidates_screened": 0,
+        "notes": []
+      }
+    ],
+    "tpe": [
+      {
+        "seed": 0,
+        "simulations": 50,
+        "stress_test_failures": 13,
+        "tests_until_first_failure": 3,
+        "distinct_failure_conditions": 11,
+        "screening_sim_seconds": 0.0,
+        "candidates_screened": 0,
+        "notes": []
+      },
+      {
+        "seed": 1,
+        "simulations": 50,
+        "stress_test_failures": 20,
+        "tests_until_first_failure": 10,
+        "distinct_failure_conditions": 13,
+        "screening_sim_seconds": 0.0,
+        "candidates_screened": 0,
+        "notes": []
+      },
+      {
+        "seed": 2,
+        "simulations": 50,
+        "stress_test_failures": 28,
+        "tests_until_first_failure": 2,
+        "distinct_failure_conditions": 12,
+        "screening_sim_seconds": 0.0,
+        "candidates_screened": 0,
+        "notes": []
+      },
+      {
+        "seed": 3,
+        "simulations": 50,
+        "stress_test_failures": 27,
         "tests_until_first_failure": 6,
         "distinct_failure_conditions": 10,
         "screening_sim_seconds": 0.0,
@@ -233,9 +233,9 @@
       {
         "seed": 4,
         "simulations": 50,
-        "stress_test_failures": 24,
-        "tests_until_first_failure": 12,
-        "distinct_failure_conditions": 8,
+        "stress_test_failures": 7,
+        "tests_until_first_failure": 3,
+        "distinct_failure_conditions": 6,
         "screening_sim_seconds": 0.0,
         "candidates_screened": 0,
         "notes": []
@@ -247,7 +247,7 @@
         "simulations": 50,
         "stress_test_failures": 44,
         "tests_until_first_failure": 1,
-        "distinct_failure_conditions": 30,
+        "distinct_failure_conditions": 33,
         "screening_sim_seconds": 0.0,
         "candidates_screened": 0,
         "notes": []
@@ -255,9 +255,9 @@
       {
         "seed": 1,
         "simulations": 50,
-        "stress_test_failures": 43,
-        "tests_until_first_failure": 2,
-        "distinct_failure_conditions": 30,
+        "stress_test_failures": 40,
+        "tests_until_first_failure": 1,
+        "distinct_failure_conditions": 29,
         "screening_sim_seconds": 0.0,
         "candidates_screened": 0,
         "notes": []
@@ -265,9 +265,9 @@
       {
         "seed": 2,
         "simulations": 50,
-        "stress_test_failures": 38,
-        "tests_until_first_failure": 3,
-        "distinct_failure_conditions": 29,
+        "stress_test_failures": 46,
+        "tests_until_first_failure": 1,
+        "distinct_failure_conditions": 32,
         "screening_sim_seconds": 0.0,
         "candidates_screened": 0,
         "notes": []
@@ -285,9 +285,9 @@
       {
         "seed": 4,
         "simulations": 50,
-        "stress_test_failures": 45,
-        "tests_until_first_failure": 1,
-        "distinct_failure_conditions": 29,
+        "stress_test_failures": 41,
+        "tests_until_first_failure": 3,
+        "distinct_failure_conditions": 28,
         "screening_sim_seconds": 0.0,
         "candidates_screened": 0,
         "notes": []
@@ -297,50 +297,50 @@
       {
         "seed": 0,
         "simulations": 50,
-        "stress_test_failures": 45,
+        "stress_test_failures": 48,
         "tests_until_first_failure": 1,
-        "distinct_failure_conditions": 32,
-        "screening_sim_seconds": 400.0,
+        "distinct_failure_conditions": 25,
+        "screening_sim_seconds": 2400.0,
         "candidates_screened": 200,
         "notes": []
       },
       {
         "seed": 1,
         "simulations": 50,
-        "stress_test_failures": 48,
-        "tests_until_first_failure": 1,
-        "distinct_failure_conditions": 36,
-        "screening_sim_seconds": 400.0,
+        "stress_test_failures": 49,
+        "tests_until_first_failure": 2,
+        "distinct_failure_conditions": 32,
+        "screening_sim_seconds": 2400.0,
         "candidates_screened": 200,
         "notes": []
       },
       {
         "seed": 2,
         "simulations": 50,
-        "stress_test_failures": 47,
+        "stress_test_failures": 46,
         "tests_until_first_failure": 1,
         "distinct_failure_conditions": 30,
-        "screening_sim_seconds": 400.0,
+        "screening_sim_seconds": 2400.0,
         "candidates_screened": 200,
         "notes": []
       },
       {
         "seed": 3,
         "simulations": 50,
-        "stress_test_failures": 45,
+        "stress_test_failures": 47,
         "tests_until_first_failure": 1,
-        "distinct_failure_conditions": 33,
-        "screening_sim_seconds": 400.0,
+        "distinct_failure_conditions": 35,
+        "screening_sim_seconds": 2400.0,
         "candidates_screened": 200,
         "notes": []
       },
       {
         "seed": 4,
         "simulations": 50,
-        "stress_test_failures": 48,
+        "stress_test_failures": 45,
         "tests_until_first_failure": 1,
-        "distinct_failure_conditions": 31,
-        "screening_sim_seconds": 400.0,
+        "distinct_failure_conditions": 30,
+        "screening_sim_seconds": 2400.0,
         "candidates_screened": 200,
         "notes": []
       }
@@ -349,50 +349,50 @@
       {
         "seed": 0,
         "simulations": 50,
-        "stress_test_failures": 34,
+        "stress_test_failures": 32,
         "tests_until_first_failure": 1,
-        "distinct_failure_conditions": 27,
-        "screening_sim_seconds": 400.0,
+        "distinct_failure_conditions": 22,
+        "screening_sim_seconds": 2400.0,
         "candidates_screened": 200,
         "notes": []
       },
       {
         "seed": 1,
         "simulations": 50,
-        "stress_test_failures": 33,
+        "stress_test_failures": 41,
         "tests_until_first_failure": 1,
-        "distinct_failure_conditions": 29,
-        "screening_sim_seconds": 400.0,
+        "distinct_failure_conditions": 31,
+        "screening_sim_seconds": 2400.0,
         "candidates_screened": 200,
         "notes": []
       },
       {
         "seed": 2,
         "simulations": 50,
-        "stress_test_failures": 29,
+        "stress_test_failures": 40,
         "tests_until_first_failure": 1,
-        "distinct_failure_conditions": 22,
-        "screening_sim_seconds": 400.0,
+        "distinct_failure_conditions": 31,
+        "screening_sim_seconds": 2400.0,
         "candidates_screened": 200,
         "notes": []
       },
       {
         "seed": 3,
         "simulations": 50,
-        "stress_test_failures": 31,
+        "stress_test_failures": 34,
         "tests_until_first_failure": 1,
-        "distinct_failure_conditions": 27,
-        "screening_sim_seconds": 400.0,
+        "distinct_failure_conditions": 29,
+        "screening_sim_seconds": 2400.0,
         "candidates_screened": 200,
         "notes": []
       },
       {
         "seed": 4,
         "simulations": 50,
-        "stress_test_failures": 34,
+        "stress_test_failures": 32,
         "tests_until_first_failure": 1,
-        "distinct_failure_conditions": 28,
-        "screening_sim_seconds": 400.0,
+        "distinct_failure_conditions": 26,
+        "screening_sim_seconds": 2400.0,
         "candidates_screened": 200,
         "notes": []
       }
