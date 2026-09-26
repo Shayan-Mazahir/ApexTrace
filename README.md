@@ -51,18 +51,32 @@ Health check: `curl localhost:8000/health`.
 
 ## Controls
 
-| Action | Keyboard | Wheel / gamepad |
-| --- | --- | --- |
-| Throttle / brake | W / ↑, S / ↓ / Space | right / left trigger |
-| Steer | A / ←, D / → | axis 0 |
-| Shift up / down (manual) | E / Q | RB / LB (paddles) |
-| DRS / active aero (manual) | F | A |
-| Reverse (when stopped) | R | X |
-| Cycle battery mode | B | Y |
+| Action | Keyboard | Wheel / gamepad | ESP32 wheel |
+| --- | --- | --- | --- |
+| Throttle / brake | W / ↑, S / ↓ / Space | right / left trigger | joystick forward / back |
+| Steer | A / ←, D / → | axis 0 | turn the wheel |
+| Shift up / down (manual) | E / Q | RB / LB (paddles) | — |
+| DRS / active aero (manual) | F | A | — |
+| Reverse (when stopped) | R | X | — |
+| Cycle battery mode | B | Y | — |
+| Reset to grid | dock button | dock button | press the joystick down |
 
 A wheel/gamepad is used automatically if the browser sees one (calibrate
 centre and dead-zone in the Controls panel of the Drive screen). The view
 button cycles cockpit, chase and overview cameras.
+
+**ESP32 wheel** (`embedded-firmware/`): flash `steering-wheel/steering-wheel.ino`,
+plug the ESP32 into the driver laptop, and run the serial-to-WebSocket bridge
+alongside the app (`pip install pyserial websockets` once):
+
+```bash
+cd embedded-firmware && python bridge.py   # auto-detects the port; --list / --port to choose
+```
+
+Its live readout shows the steering, pedal and reset values it forwards, so
+the hardware can be checked on its own. The Drive screen picks the wheel up
+automatically (Controls panel: `Input: ESP32 wheel`); a plugged-in gamepad
+takes priority. On Linux, reading the port needs the `dialout` group.
 
 **Car setup** (track picker or the dock during a run; applies immediately):
 traction control Off/Medium/Full, ABS On/Off, automatic or manual

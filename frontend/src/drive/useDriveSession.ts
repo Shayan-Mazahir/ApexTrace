@@ -29,6 +29,7 @@ export function useDriveSession(
   normalizedControls: NormalizedControls,
   buttonCounts?: React.MutableRefObject<ButtonCounts>,
   ersPresses = 0,
+  resetPresses = 0,
 ) {
   const { reportError } = useErrorContext()
   const { driverSession, setDriverSession } = useActiveSession()
@@ -117,6 +118,16 @@ export function useDriveSession(
   const reset = useCallback(() => {
     if (send({ type: 'reset' })) setRunning(true)
   }, [send])
+
+  // The ESP32 wheel's joystick press does what "Reset to grid" does. Handled
+  // here like the battery button: a new press count, not the `reset` identity,
+  // is what triggers it.
+  const resetSeen = useRef(resetPresses)
+  useEffect(() => {
+    if (resetPresses === resetSeen.current) return
+    resetSeen.current = resetPresses
+    reset()
+  }, [resetPresses, reset])
 
   useEffect(() => {
     if (stream.connection !== 'connected' || !driverSession) return

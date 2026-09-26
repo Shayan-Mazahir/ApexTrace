@@ -15,11 +15,12 @@ export interface NormalizedControls {
 const IDLE_SAMPLE: RawInputSample = { steeringRaw: 0, throttleRaw: 0, brakeRaw: 0 }
 
 export type ButtonCounts = Record<ButtonId, number>
-const ZERO_COUNTS = (): ButtonCounts => ({ shiftUp: 0, shiftDown: 0, drs: 0, reverse: 0, ersCycle: 0 })
+const ZERO_COUNTS = (): ButtonCounts => ({ shiftUp: 0, shiftDown: 0, drs: 0, reverse: 0, ersCycle: 0, reset: 0 })
 
-// Prefers a connected gamepad/wheel, falls back to keyboard. The hardware
-// adapter is wired in but never auto-selected — it reports unavailable
-// until a real ESP32/Pi transport exists.
+// Prefers a connected gamepad/wheel, then the ESP32 wheel over the bridge,
+// then keyboard. The ESP32's socket opens (and can go stale) after mount, so
+// the adapter choice is re-run whenever its availability changes — without
+// that, hardware is passed over once at startup and never reconsidered.
 export function useInputAdapter() {
   const { calibration, setCenter, setDeadzone } = useCalibration()
   const [source, setSource] = useState('Keyboard')
@@ -32,19 +33,23 @@ export function useInputAdapter() {
 
   useEffect(() => {
     const keyboard = createKeyboardAdapter()
-    const hardware = createHardwareAdapter()
+    // Assigned just below; pickAdapter is passed *into* the hardware adapter as
+    // its availability callback, so it has to be defined first.
+    let hardware: InputAdapter | null = null
 
     const pickAdapter = () => {
       const gamepadIndex = discoverGamepadIndex()
       const next =
         gamepadIndex != null
           ? createGamepadAdapter(gamepadIndex)
-          : hardware.isAvailable()
+          : hardware?.isAvailable()
             ? hardware
             : keyboard
       adapterRef.current = next
       setSource(next.label)
     }
+
+    hardware = createHardwareAdapter(pickAdapter)
 
     pickAdapter()
     window.addEventListener('gamepadconnected', pickAdapter)
@@ -80,6 +85,7 @@ export function useInputAdapter() {
       window.removeEventListener('gamepadconnected', pickAdapter)
       window.removeEventListener('gamepaddisconnected', pickAdapter)
       keyboard.dispose?.()
+      hardware?.dispose?.()
     }
   }, [])
 

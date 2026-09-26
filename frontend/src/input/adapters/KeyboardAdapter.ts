@@ -10,12 +10,13 @@ export const BUTTON_KEYS: Record<ButtonId, string[]> = {
   drs: ['f', 'F'],
   reverse: ['r', 'R'],
   ersCycle: ['b', 'B'],
+  reset: [], // the ESP32 wheel's joystick press; on keyboard use the "Reset to grid" button
 }
 
 export function createKeyboardAdapter(): InputAdapter {
   const held = new Set<string>()
 
-  const presses: Record<ButtonId, number> = { shiftUp: 0, shiftDown: 0, drs: 0, reverse: 0, ersCycle: 0 }
+  const presses: Record<ButtonId, number> = { shiftUp: 0, shiftDown: 0, drs: 0, reverse: 0, ersCycle: 0, reset: 0 }
   const onKeyDown = (event: KeyboardEvent) => {
     held.add(event.key)
     if (event.repeat) return

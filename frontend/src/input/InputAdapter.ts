@@ -8,9 +8,11 @@ export interface RawInputSample {
   brakeRaw: number
 }
 
-// Discrete car controls (gear shifts, active aero, reverse, battery mode).
-export type ButtonId = 'shiftUp' | 'shiftDown' | 'drs' | 'reverse' | 'ersCycle'
-export const BUTTON_IDS: ButtonId[] = ['shiftUp', 'shiftDown', 'drs', 'reverse', 'ersCycle']
+// Discrete car controls (gear shifts, active aero, reverse, battery mode) and
+// `reset`, which puts the car back on the grid like the "Reset to grid" button
+// (only the ESP32 wheel has one; keyboard and gamepad leave it unmapped).
+export type ButtonId = 'shiftUp' | 'shiftDown' | 'drs' | 'reverse' | 'ersCycle' | 'reset'
+export const BUTTON_IDS: ButtonId[] = ['shiftUp', 'shiftDown', 'drs', 'reverse', 'ersCycle', 'reset']
 
 export interface InputAdapter {
   id: string

@@ -35,7 +35,7 @@ const VIEW_BUTTON_LABEL: Record<SceneView, string> = {
 
 export function DriveScreen() {
   const input = useInputAdapter()
-  const session = useDriveSession(input.normalized, input.buttonCounts, input.presses.ersCycle)
+  const session = useDriveSession(input.normalized, input.buttonCounts, input.presses.ersCycle, input.presses.reset)
   const demo = useDemo()
   const { selection } = useGarage()
   const { start, connectionState } = session
