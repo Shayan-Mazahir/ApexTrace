@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app import placeholder_eval
+from app.stress import evaluation
 from app.evaluation_routes import router as evaluation_router
 from app.scenarios import router as scenarios_router
 from app.schemas import HealthStatus
@@ -16,7 +16,7 @@ from app.sessions import sweep_loop
 async def lifespan(_: FastAPI):
     sweeper = asyncio.create_task(sweep_loop())
     # Warm the (deterministic, cached) evaluation so the first click is instant.
-    warmup = asyncio.create_task(asyncio.to_thread(placeholder_eval.evaluate_all))
+    warmup = asyncio.create_task(asyncio.to_thread(evaluation.evaluate_all, "heldout"))
     yield
     sweeper.cancel()
     warmup.cancel()

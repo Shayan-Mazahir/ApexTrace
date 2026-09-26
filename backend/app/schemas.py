@@ -38,6 +38,7 @@ class TrackProfile(BaseModel):
     seed: int
     track_width: float
     total_length: float
+    barrier_offset: float  # barrier distance outside the track edge (m); walls stop the car
     start_finish: tuple[float, float]
     centerline: list[tuple[float, float]]
     left_edge: list[tuple[float, float]]
@@ -131,25 +132,6 @@ class VehicleStateMessage(BaseModel):
     best_lap_s: float | None
 
 
-class FaultState(BaseModel):
-    """Bounded fault levels; the ranges are the hard limits for engineer input."""
-
-    grip_multiplier: float = Field(1.0, ge=0.65, le=1.0, allow_inf_nan=False)
-    telemetry_delay_ms: float = Field(0.0, ge=0.0, le=400.0, allow_inf_nan=False)
-    brake_wear: float = Field(1.0, ge=0.75, le=1.0, allow_inf_nan=False)
-
-
-class ScenarioConfig(BaseModel):
-    id: str
-    name: str
-    description: str
-    track: TrackId
-    seed: int
-    faults: FaultState
-    onset_distance: float = Field(ge=0)
-    end_distance: float = Field(gt=0)
-
-
 class PauseMessage(BaseModel):
     type: Literal["pause"] = "pause"
 
@@ -166,18 +148,27 @@ class PongMessage(BaseModel):
     type: Literal["pong"] = "pong"
 
 
-class SetFaultsMessage(BaseModel):
-    type: Literal["set_faults"] = "set_faults"
-    faults: FaultState
+class ArmScenarioMessage(BaseModel):
+    """Arm a saved scenario: resets the run to the scenario's start with its
+    seed; faults then wait for their own triggers (arming != activating)."""
 
-
-class LaunchScenarioMessage(BaseModel):
-    type: Literal["launch_scenario"] = "launch_scenario"
+    type: Literal["arm_scenario"] = "arm_scenario"
     scenario_id: str
+    overrides: dict = Field(default_factory=dict)
 
 
-class ClearScenarioMessage(BaseModel):
-    type: Literal["clear_scenario"] = "clear_scenario"
+class CancelScenarioMessage(BaseModel):
+    type: Literal["cancel_scenario"] = "cancel_scenario"
+
+
+class AddFaultMessage(BaseModel):
+    type: Literal["add_fault"] = "add_fault"
+    fault: dict
+
+
+class CancelFaultMessage(BaseModel):
+    type: Literal["cancel_fault"] = "cancel_fault"
+    fault_id: str
 
 
 ClientMessage = Annotated[
@@ -187,9 +178,10 @@ ClientMessage = Annotated[
         ResumeMessage,
         ResetMessage,
         PongMessage,
-        SetFaultsMessage,
-        LaunchScenarioMessage,
-        ClearScenarioMessage,
+        ArmScenarioMessage,
+        CancelScenarioMessage,
+        AddFaultMessage,
+        CancelFaultMessage,
     ],
     Field(discriminator="type"),
 ]
@@ -201,9 +193,10 @@ ENGINEER_MESSAGE_TYPES = {
     "resume",
     "reset",
     "pong",
-    "set_faults",
-    "launch_scenario",
-    "clear_scenario",
+    "arm_scenario",
+    "cancel_scenario",
+    "add_fault",
+    "cancel_fault",
 }
 
 
@@ -233,94 +226,3 @@ class UpgradeCatalog(BaseModel):
     budget_defaults: BudgetDefaults
     upgrades: list[UpgradeSpec]
     configs: list[UpgradeOption]
-
-
-class SuiteTestInfo(BaseModel):
-    id: str
-    track: TrackId
-    name: str
-    seed: int
-    faults: FaultState
-    onset_distance: float
-    end_distance: float
-    cruise_speed: float
-    reaction_s: float
-    lateral_offset: float
-
-
-class Acceptance(BaseModel):
-    max_track_exits: int
-    min_clearance_m: float
-    require_lap_complete: bool
-
-
-class SuiteInfo(BaseModel):
-    version: str
-    acceptance: Acceptance
-    tests: list[SuiteTestInfo]
-
-
-class TestResult(BaseModel):
-    test_id: str
-    track: TrackId
-    passed: bool
-    track_exit: bool
-    completed: bool
-    min_clearance_m: float
-    min_warning_lead_s: float | None
-    warnings_missed: int
-    lap_time_s: float | None
-
-
-class ConfigResult(BaseModel):
-    key: str
-    label: str
-    upgrades: UpgradeConfig
-    cost_cad: int
-    test_count: int
-    track_exits: int
-    min_clearance_m: float
-    min_warning_lead_s: float | None
-    warnings_missed: int
-    passed: bool
-    failed_test_ids: list[str]
-    tests: list[TestResult]
-
-
-class EvaluationResponse(BaseModel):
-    suite: SuiteInfo
-    configs: list[ConfigResult]
-
-
-class ReplayFrame(BaseModel):
-    t: float
-    x: float
-    y: float
-    heading: float
-    speed: float
-    throttle: float
-    brake: float
-    distance: float
-    clearance: float
-    warning_active: bool
-    track_exit: bool
-    lap_complete: bool
-
-
-class ReplayRun(BaseModel):
-    label: str
-    upgrades: UpgradeConfig
-    result: TestResult
-    frames: list[ReplayFrame]
-
-
-class ReplayRequest(BaseModel):
-    test_id: str
-    baseline: UpgradeConfig = Field(default_factory=UpgradeConfig)
-    upgraded: UpgradeConfig
-
-
-class ReplayResponse(BaseModel):
-    test: SuiteTestInfo
-    baseline: ReplayRun
-    upgraded: ReplayRun

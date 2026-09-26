@@ -42,6 +42,7 @@ COMBINED_GRIP = 0.85
 # Off the track (runoff/grass): no grip for power, heavy drag, speed capped.
 RUNOFF_MAX_SPEED = 22.0
 RUNOFF_DECEL = 18.0
+CAR_HALF_WIDTH = 1.0
 
 # Corner detection from the smoothed centerline.
 HAZARD_RADIUS_M = 260.0  # tighter than this counts as a corner
@@ -247,6 +248,7 @@ def build_profile_from_layout(layout: Layout, seed: int = 1, sector_count: int =
         seed=seed,
         track_width=layout.width_m,
         total_length=total_length,
+        barrier_offset=layout.barrier_offset_m,
         start_finish=(0.0, 0.0),
         centerline=centerline,
         left_edge=left_edge,
@@ -312,6 +314,34 @@ def _clearance_at_index(x: float, y: float, idx: int, profile: TrackProfile) -> 
         _distance_to_segment(x, y, here, line[(idx + 1) % n]),
     )
     return profile.track_width / 2 - distance
+
+
+def signed_lateral(x: float, y: float, idx: int, profile: TrackProfile) -> float:
+    """Signed offset from the centerline at sample idx (+ = left of travel)."""
+    line = profile.centerline
+    n = loop_size(line)
+    (cx, cy), (lx, ly) = line[idx % n], profile.left_edge[idx % n]
+    nx, ny = lx - cx, ly - cy
+    norm = math.hypot(nx, ny) or 1.0
+    return ((x - cx) * nx + (y - cy) * ny) / norm
+
+
+def state_at_distance(profile: TrackProfile, distance: float, speed: float = 0.0,
+                      lateral_offset: float = 0.0, heading_error: float = 0.0) -> "DemoVehicleState":
+    """A car placed `distance` metres along the lap, pointing down the track."""
+    line = profile.centerline
+    n = loop_size(line)
+    i = round((distance % profile.total_length) / (profile.total_length / n)) % n
+    (x0, y0), (x1, y1) = line[i], line[(i + 1) % n]
+    heading = math.atan2(y1 - y0, x1 - x0)
+    return DemoVehicleState(
+        x=x0 - math.sin(heading) * lateral_offset,
+        y=y0 + math.cos(heading) * lateral_offset,
+        heading=heading + heading_error,
+        speed=speed,
+        nearest_point_index=i,
+        distance_along_lap=i * profile.total_length / n,
+    )
 
 
 def signed_clearance(x: float, y: float, profile: TrackProfile, hint: int | None = None) -> float:
@@ -416,6 +446,8 @@ class DemoVehicleState:
     last_lap_time: float | None = None
     best_lap_time: float | None = None
     lap_clean: bool = True  # current lap has no track exit
+    barrier_contacts: int = 0
+    in_contact: bool = False
 
 
 def start_heading(profile: TrackProfile) -> float:
@@ -468,6 +500,32 @@ def step(
     n = loop_size(line)
     sample_step = profile.total_length / n
     idx = nearest_index(x, y, line, hint=state.nearest_point_index)
+
+    # Barriers are solid: past them the car is pushed back, loses speed by
+    # impact angle, and is turned along the wall.
+    (cx, cy), (lx, ly) = line[idx % n], profile.left_edge[idx % n]
+    half_width = math.hypot(lx - cx, ly - cy)
+    nx, ny = (lx - cx) / (half_width or 1.0), (ly - cy) / (half_width or 1.0)
+    lateral = (x - cx) * nx + (y - cy) * ny
+    limit = half_width + profile.barrier_offset - CAR_HALF_WIDTH
+    in_contact = abs(lateral) > limit
+    barrier_contacts = state.barrier_contacts
+    if in_contact:
+        side = 1.0 if lateral > 0 else -1.0
+        excess = abs(lateral) - limit
+        x -= nx * excess * side
+        y -= ny * excess * side
+        (tx0, ty0), (tx1, ty1) = line[idx % n], line[(idx + 1) % n]
+        along = math.atan2(ty1 - ty0, tx1 - tx0)
+        rel = (heading - along + math.pi) % (2 * math.pi) - math.pi
+        if abs(rel) > math.pi / 2:  # hitting it while going the wrong way
+            along += math.pi
+            rel = (heading - along + math.pi) % (2 * math.pi) - math.pi
+        impact = abs(math.sin(rel))  # 0 = glancing, 1 = head-on
+        speed *= max(0.0, 1.0 - 0.9 * impact) * 0.92
+        heading = along - side * 0.04  # nudged away from the wall
+        if not state.in_contact:
+            barrier_contacts += 1
     off_track = _clearance_at_index(x, y, idx, profile) < 0
 
     delta_idx = (idx - state.nearest_point_index) % n
@@ -510,4 +568,6 @@ def step(
         last_lap_time=last_lap,
         best_lap_time=best_lap,
         lap_clean=lap_clean,
+        barrier_contacts=barrier_contacts,
+        in_contact=in_contact,
     )

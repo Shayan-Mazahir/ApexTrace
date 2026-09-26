@@ -77,7 +77,9 @@ def test_join_existing_session_shares_run_id_and_seed():
 def test_scenarios_endpoints():
     listed = client.get("/scenarios").json()
     assert {s["id"] for s in listed} == set(SCENARIOS)
-    assert client.get("/scenarios/baku_stale_telemetry").json()["track"] == "baku"
+    assert client.get("/scenarios/baku_sensor_freeze").json()["track"] == "baku"
+    catalog = client.get("/faults/catalog").json()
+    assert any(c["status"] == "requires_model_extension" for c in catalog)
     assert client.get("/scenarios/nope").status_code == 404
 
 
@@ -119,10 +121,11 @@ def test_engineer_faults_reach_both_clients():
         f"/ws/engineer/{sid}"
     ) as engineer:
         engineer.send_json(
-            {"type": "set_faults", "faults": {"grip_multiplier": 0.7, "telemetry_delay_ms": 200}}
+            {"type": "add_fault", "fault": {"id": "d", "type": "uplink_delay", "parameters": {"delay_ms": 200}}}
         )
-        wanted = lambda m: m["effective"]["telemetry_delay_ms"] == 200
-        assert recv_until(engineer, "fault_state", where=wanted)["effective"]["grip_multiplier"] == 0.7
+        wanted = lambda m: m["effective"]["uplink_delay_ms"] == 200
+        state = recv_until(engineer, "fault_state", where=wanted)
+        assert state["faults"][0]["state"] == "active" and state["faults"][0]["source"] == "manual"
         assert recv_until(driver, "fault_state", where=wanted)
         assert recv_until(driver, "vehicle_state", where=lambda m: m["injected_delay_ms"] == 200)
 
@@ -144,7 +147,7 @@ def test_malformed_and_forbidden_messages_do_not_kill_the_session():
     with client.websocket_connect(f"/ws/driver/{sid}") as ws:
         ws.send_text("{{{ not json")
         assert recv_until(ws, "error")["code"] == "invalid_json"
-        ws.send_json({"type": "set_faults", "faults": {"grip_multiplier": 0.8}})
+        ws.send_json({"type": "add_fault", "fault": {"id": "g", "type": "grip_loss"}})
         assert recv_until(ws, "error")["code"] == "forbidden"
         ws.send_json(control(sid, steering="wat"))
         assert recv_until(ws, "error")["code"] == "invalid_message"
@@ -157,12 +160,12 @@ def test_engineer_launches_scenario_and_run_id_changes():
     created = new_session("monza")
     sid = created["session_id"]
     with client.websocket_connect(f"/ws/engineer/{sid}") as engineer:
-        engineer.send_json({"type": "launch_scenario", "scenario_id": "monza_high_speed_braking"})
+        engineer.send_json({"type": "arm_scenario", "scenario_id": "monza_wet_braking", "overrides": {"seed": 42}})
         info = recv_until(engineer, "session_info", where=lambda m: m["scenario_id"] is not None)
         assert info["run_id"] != created["run_id"]
-        assert info["seed"] == SCENARIOS["monza_high_speed_braking"].seed
+        assert info["seed"] == 42 and info["scenario_id"] == "monza_wet_braking"
 
-        engineer.send_json({"type": "launch_scenario", "scenario_id": "baku_stale_telemetry"})
+        engineer.send_json({"type": "arm_scenario", "scenario_id": "baku_sensor_freeze"})
         assert recv_until(engineer, "error")["code"] == "scenario_track_mismatch"
 
 

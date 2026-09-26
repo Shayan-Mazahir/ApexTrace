@@ -29,6 +29,7 @@ class Layout:
     length_m: float
     width_m: float
     narrow_width_m: float
+    barrier_offset_m: float
     waypoints: tuple[Waypoint, ...]
 
 
@@ -42,6 +43,7 @@ BAKU = Layout(
     length_m=6003,
     width_m=12,
     narrow_width_m=7.6,
+    barrier_offset_m=1.5,  # street circuit: walls right at the edge
     waypoints=(
         W(1700, 441),
         W(1860, 370),
@@ -106,6 +108,7 @@ MONZA = Layout(
     length_m=5793,
     width_m=14,
     narrow_width_m=14,
+    barrier_offset_m=14.0,  # runoff then barriers
     waypoints=(
         W(1490, 842),
         W(1250, 842),

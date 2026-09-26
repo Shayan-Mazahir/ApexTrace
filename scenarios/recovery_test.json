@@ -1,0 +1,68 @@
+{
+  "id": "recovery_test",
+  "name": "Recovery test",
+  "description": "A blackout and a grip loss both clear mid-lap; checks that data freshness and warning state recover.",
+  "track": "monza",
+  "seed": 33,
+  "faults": [
+    {
+      "id": "short_blackout",
+      "type": "uplink_blackout",
+      "enabled": true,
+      "target": "uplink",
+      "trigger": {
+        "kind": "time",
+        "start": 10.0,
+        "end": 14.0,
+        "zone_id": null,
+        "pad_m": 0.0,
+        "repeat": "once_per_run"
+      },
+      "duration_s": null,
+      "parameters": {
+        "release_buffer": 0.0,
+        "release_delay_ms": 600.0
+      },
+      "ramp_in_s": 0.0,
+      "ramp_out_s": 0.0,
+      "seed": 0,
+      "source": "preset"
+    },
+    {
+      "id": "temporary_wet",
+      "type": "grip_loss",
+      "enabled": true,
+      "target": "world",
+      "trigger": {
+        "kind": "time",
+        "start": 10.0,
+        "end": 25.0,
+        "zone_id": null,
+        "pad_m": 0.0,
+        "repeat": "once_per_run"
+      },
+      "duration_s": null,
+      "parameters": {
+        "grip_multiplier": 0.75
+      },
+      "ramp_in_s": 0.0,
+      "ramp_out_s": 0.0,
+      "seed": 0,
+      "source": "preset"
+    }
+  ],
+  "start": {
+    "distance_m": 0.0,
+    "speed_ms": 0.0,
+    "lateral_offset_m": 0.0,
+    "heading_error_rad": 0.0
+  },
+  "driver": {
+    "kind": "scripted",
+    "cruise_speed_ms": 84.0,
+    "reaction_s": 0.3
+  },
+  "max_time_s": 240.0,
+  "laps": 1,
+  "source": "preset"
+}
