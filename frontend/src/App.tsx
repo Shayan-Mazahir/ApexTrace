@@ -1,4 +1,5 @@
 import './App.css'
+import { ActiveSessionProvider } from './app/ActiveSessionContext'
 import { ErrorProvider } from './app/ErrorContext'
 import { ScreenProvider, useScreen } from './app/ScreenContext'
 import { ScreenNav } from './app/ScreenNav'
@@ -39,9 +40,11 @@ function AppShell() {
 function App() {
   return (
     <ErrorProvider>
-      <ScreenProvider>
-        <AppShell />
-      </ScreenProvider>
+      <ActiveSessionProvider>
+        <ScreenProvider>
+          <AppShell />
+        </ScreenProvider>
+      </ActiveSessionProvider>
     </ErrorProvider>
   )
 }

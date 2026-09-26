@@ -1,37 +1,30 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useState } from 'react'
+import type { WarningState } from '../stream/warningState'
 import './BrakeWarning.css'
 
-interface BrakeWarningProps {
-  reason: string | null
-  hazardZone: string | null
-}
-
-// Reason/zone come straight from the backend's warning_reason /
-// next_hazard_zone fields — still Person A's demo-only placeholder
-// trigger (not the real grip/braking-distance warning system), but now
-// server-computed rather than guessed on the frontend.
-export function BrakeWarning({ reason, hazardZone }: BrakeWarningProps) {
-  const startedAtRef = useRef<number | null>(null)
+// Rendered from sequenced warning events (out-of-order ones are dropped
+// upstream). The trigger itself is still the backend's placeholder rule,
+// pending Person A's real grip/braking-distance warning system.
+export function BrakeWarning({ warning }: { warning: WarningState }) {
+  const [now, setNow] = useState(() => Date.now())
 
   useEffect(() => {
-    if (reason && startedAtRef.current === null) {
-      startedAtRef.current = Date.now()
-    } else if (!reason) {
-      startedAtRef.current = null
-    }
-  }, [reason])
+    if (!warning.active) return
+    const interval = setInterval(() => setNow(Date.now()), 100)
+    return () => clearInterval(interval)
+  }, [warning.active])
 
-  if (!reason) return null
+  if (!warning.active) return null
 
-  const ageSeconds = startedAtRef.current ? (Date.now() - startedAtRef.current) / 1000 : 0
+  const ageSeconds = warning.since === null ? 0 : Math.max(0, now - warning.since) / 1000
 
   return (
     <div className="brake-warning" role="alert">
       <div className="brake-warning__label">BRAKE</div>
-      <div className="brake-warning__reason">{reason}</div>
+      <div className="brake-warning__reason">{warning.reason}</div>
       <div className="brake-warning__meta">
-        {hazardZone ? `${hazardZone} · ` : ''}
-        {ageSeconds.toFixed(1)}s
+        {warning.hazardZone ? `${warning.hazardZone} · ` : ''}
+        warning age {ageSeconds.toFixed(1)}s
       </div>
     </div>
   )

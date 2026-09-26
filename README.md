@@ -43,3 +43,16 @@ npm run dev
 
 Open the printed local URL (default `http://localhost:5173`). The status
 bar in the top-left shows whether it reached the backend `/health` endpoint.
+
+## Tests
+
+```bash
+cd backend && source venv/bin/activate && python -m pytest   # sessions, faults, scenarios, sim
+cd frontend && npm test                                       # stream/warning/quality logic
+```
+
+## Two-device demo
+
+1. Drive screen -> pick a track -> **Start**. Note the Session ID shown at the top.
+2. On the second device/tab, Engineer screen -> paste the Session ID -> **Join**.
+3. Engineer applies faults or launches a saved scenario (`scenarios/*.json`).

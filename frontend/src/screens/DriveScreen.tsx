@@ -5,28 +5,43 @@ import { BrakeWarning } from '../drive/BrakeWarning'
 import { DriveHud } from '../drive/DriveHud'
 import { RunStateBanner } from '../drive/RunStateBanner'
 import { TrackSelector } from '../drive/TrackSelector'
-import { useDriveSession } from '../drive/useDriveSession'
+import { useDriveSession, type ConnectionState } from '../drive/useDriveSession'
+import { SimulatedFaultLabel } from '../components/SimulatedFaultLabel'
 import { useInputAdapter } from '../input/useInputAdapter'
 import { Scene } from '../scene/Scene'
 import './DriveScreen.css'
 
-const CONNECTION_LABEL: Record<string, string> = {
+const CONNECTION_LABEL: Record<ConnectionState, string> = {
   idle: 'Session idle',
   connecting: 'Connecting…',
   connected: 'Session connected',
-  error: 'Session error',
+  reconnecting: 'Reconnecting…',
+  closed: 'Session ended',
 }
 
-const CONNECTION_TONE: Record<string, StatusTone> = {
+const CONNECTION_TONE: Record<ConnectionState, StatusTone> = {
   idle: 'neutral',
   connecting: 'neutral',
   connected: 'success',
-  error: 'danger',
+  reconnecting: 'warning',
+  closed: 'danger',
 }
 
 export function DriveScreen() {
   const input = useInputAdapter()
   const session = useDriveSession(input.normalized)
+
+  const info = session.sessionInfo
+  const engineerLabel = info?.engineer_connected
+    ? 'Engineer station connected'
+    : info?.engineer_ever_connected
+      ? 'Engineer station disconnected'
+      : 'No engineer station'
+  const engineerTone: StatusTone = info?.engineer_connected
+    ? 'success'
+    : info?.engineer_ever_connected
+      ? 'danger'
+      : 'neutral'
 
   return (
     <div className="drive-screen">
@@ -39,29 +54,33 @@ export function DriveScreen() {
         />
       </Canvas>
 
-      <BrakeWarning
-        reason={session.vehicleState?.warning_reason ?? null}
-        hazardZone={session.vehicleState?.next_hazard_zone ?? null}
-      />
+      <BrakeWarning warning={session.warning} />
       <RunStateBanner vehicleState={session.vehicleState} />
 
       <div className="drive-screen__top-controls">
         <TrackSelector
           value={session.selectedTrack}
           onChange={session.selectTrack}
-          disabled={session.connectionState !== 'idle'}
+          disabled={session.sessionId !== null && session.connectionState !== 'closed'}
         />
         <StatusBadge
           label={CONNECTION_LABEL[session.connectionState]}
           tone={CONNECTION_TONE[session.connectionState]}
         />
+        <StatusBadge label={engineerLabel} tone={engineerTone} />
+        <SimulatedFaultLabel delayMs={session.vehicleState?.injected_delay_ms ?? 0} />
       </div>
+      {session.sessionId && (
+        <div className="drive-screen__session-id">
+          Session ID <strong>{session.sessionId}</strong> · Run {session.sessionInfo?.run_id ?? '—'}
+        </div>
+      )}
 
       <div className="drive-screen__run-controls">
         <button
           type="button"
           onClick={session.start}
-          disabled={session.connectionState === 'connecting' || session.connectionState === 'connected'}
+          disabled={session.connectionState !== 'idle' && session.connectionState !== 'closed'}
         >
           Start
         </button>
@@ -74,6 +93,9 @@ export function DriveScreen() {
         </button>
         <button type="button" onClick={session.reset} disabled={session.connectionState !== 'connected'}>
           Reset
+        </button>
+        <button type="button" onClick={session.endSession} disabled={session.sessionId === null}>
+          End session
         </button>
       </div>
 

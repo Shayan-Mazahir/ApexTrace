@@ -38,5 +38,26 @@ change.
 - A placeholder 3D scene (floor, lights, camera, one box standing in for the
   car) with orbit controls, rendered via React Three Fiber.
 
-Nothing else — no track geometry, simulation loop, WebSocket session, fault
-injection, or ML yet. Those land in later phases per the task breakdown.
+(That was the Phase 0 baseline. Since then: full-lap tracks, driver and
+engineer sessions, fault injection, and saved scenarios have landed; the
+simulator is still a placeholder pending `backend/sim/*`, and there is no ML
+yet.)
+
+## Session protocol (driver + engineer)
+
+- `WS /ws/driver/{id}` sends `control_input`; `WS /ws/engineer/{id}` sends
+  `set_faults`, `launch_scenario`, `clear_scenario`. Both may `pause`/`resume`/`reset`.
+  Role permissions are enforced server-side; every message is validated against
+  the pydantic union in `backend/app/schemas.py`. Malformed or forbidden
+  messages get an `error` reply and never touch session state.
+- One server-side tick loop per session broadcasts `vehicle_state`,
+  `warning_event` (sequenced; the browser drops stale/out-of-order ones),
+  `fault_state` (on change), `session_info` (run id, seed, presence) and a
+  1 Hz `heartbeat`.
+- Sessions outlive their sockets: clients reconnect with backoff and get the
+  current state back. Sessions with no clients are swept after 5 minutes.
+- Fault ranges (hard limits): grip 0.65-1.0, telemetry delay 0-400 ms, brake
+  wear 0.75-1.0. Telemetry delay is injected only on the warning-data path.
+  Measured packet age and injected delay are reported separately.
+- Saved scenarios live in `scenarios/*.json` and apply their faults over a
+  lap-distance window (distance-triggered, so onset is corner-relative).

@@ -52,12 +52,16 @@ export interface TrackProfileSummary {
 export interface SessionCreateResponse {
   session_id: string
   role: SessionRole
+  run_id: string
+  seed: number
   track_profile: TrackProfile
 }
 
 export interface SessionJoinResponse {
   session_id: string
   role: SessionRole
+  run_id: string
+  seed: number
   track_profile: TrackProfile
 }
 
@@ -89,7 +93,91 @@ export interface VehicleStateMessage {
   next_hazard_distance: number | null
   signed_clearance: number
   packet_age_ms: number
+  injected_delay_ms: number
   warning_reason: string | null
   track_exit: boolean
   lap_complete: boolean
 }
+
+export interface FaultState {
+  grip_multiplier: number
+  telemetry_delay_ms: number
+  brake_wear: number
+}
+
+// Hard limits, mirroring backend FaultState.
+export const FAULT_LIMITS = {
+  grip_multiplier: { min: 0.65, max: 1 },
+  telemetry_delay_ms: { min: 0, max: 400 },
+  brake_wear: { min: 0.75, max: 1 },
+} as const
+
+export const NO_FAULTS: FaultState = { grip_multiplier: 1, telemetry_delay_ms: 0, brake_wear: 1 }
+
+export interface ScenarioConfig {
+  id: string
+  name: string
+  description: string
+  track: TrackId
+  seed: number
+  faults: FaultState
+  onset_distance: number
+  end_distance: number
+}
+
+export interface WarningEventMessage {
+  type: 'warning_event'
+  seq: number
+  active: boolean
+  reason: string | null
+  hazard_zone: string | null
+  hazard_id: string | null
+  source_t: number
+}
+
+export interface FaultStateMessage {
+  type: 'fault_state'
+  manual: FaultState
+  effective: FaultState
+  scenario_id: string | null
+  scenario_active: boolean
+  distance_along_lap: number
+  t: number
+}
+
+export interface SessionInfoMessage {
+  type: 'session_info'
+  session_id: string
+  run_id: string
+  seed: number
+  track: TrackId
+  scenario_id: string | null
+  driver_connected: boolean
+  engineer_connected: boolean
+  engineer_ever_connected: boolean
+}
+
+export interface HeartbeatMessage {
+  type: 'heartbeat'
+  t: number
+}
+
+export interface ServerErrorMessage {
+  type: 'error'
+  code: string
+  message: string
+}
+
+export type ServerMessage =
+  | VehicleStateMessage
+  | WarningEventMessage
+  | FaultStateMessage
+  | SessionInfoMessage
+  | HeartbeatMessage
+  | ServerErrorMessage
+
+export type ClientCommand =
+  | { type: 'pause' | 'resume' | 'reset' | 'pong' | 'clear_scenario' }
+  | { type: 'set_faults'; faults: FaultState }
+  | { type: 'launch_scenario'; scenario_id: string }
+  | ControlInputMessage

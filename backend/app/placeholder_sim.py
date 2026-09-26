@@ -271,14 +271,22 @@ def distance_to_hazard(distance_along_lap: float, hazard: HazardZone, profile: T
 WARNING_DISTANCE = 40.0  # meters, demo-only threshold
 
 
-def warning_reason(distance_along_lap: float, profile: TrackProfile) -> str | None:
+def warning_hazard(distance_along_lap: float, profile: TrackProfile) -> HazardZone | None:
+    """The hazard the warning is currently about, if one is close enough."""
     hazard = next_hazard_zone(distance_along_lap, profile)
     if hazard is None:
         return None
-    ahead = distance_to_hazard(distance_along_lap, hazard, profile)
-    if ahead < WARNING_DISTANCE:
-        return f"Approaching {hazard.label} in {ahead:.0f}m"
+    if distance_to_hazard(distance_along_lap, hazard, profile) < WARNING_DISTANCE:
+        return hazard
     return None
+
+
+def warning_reason(distance_along_lap: float, profile: TrackProfile) -> str | None:
+    hazard = warning_hazard(distance_along_lap, profile)
+    if hazard is None:
+        return None
+    ahead = distance_to_hazard(distance_along_lap, hazard, profile)
+    return f"Approaching {hazard.label} in {ahead:.0f}m"
 
 
 MAX_SPEED = 40.0
@@ -311,13 +319,15 @@ def step(
     brake: float,
     dt: float,
     profile: TrackProfile,
+    grip: float = 1.0,
+    brake_wear: float = 1.0,
 ) -> DemoVehicleState:
     if state.lap_complete or state.track_exit:
         return state
 
-    accel = throttle * ACCEL - brake * BRAKE_DECEL - DRAG * (state.speed / MAX_SPEED)
+    accel = throttle * ACCEL - brake * BRAKE_DECEL * brake_wear - DRAG * (state.speed / MAX_SPEED)
     speed = max(0.0, min(MAX_SPEED, state.speed + accel * dt))
-    yaw_rate = steering * MAX_CURVATURE * speed
+    yaw_rate = steering * MAX_CURVATURE * grip * speed
     heading = state.heading + yaw_rate * dt
     x = state.x + math.cos(heading) * speed * dt
     y = state.y + math.sin(heading) * speed * dt

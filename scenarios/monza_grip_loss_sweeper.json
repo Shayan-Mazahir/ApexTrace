@@ -1,0 +1,10 @@
+{
+  "id": "monza_grip_loss_sweeper",
+  "name": "Monza grip loss at Parabolica",
+  "description": "Wet-patch style grip loss through the final sweeper.",
+  "track": "monza",
+  "seed": 103,
+  "faults": { "grip_multiplier": 0.65, "telemetry_delay_ms": 0, "brake_wear": 1.0 },
+  "onset_distance": 1250,
+  "end_distance": 1500
+}

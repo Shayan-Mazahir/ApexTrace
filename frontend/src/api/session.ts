@@ -1,4 +1,5 @@
 import type {
+  ScenarioConfig,
   SessionCreateResponse,
   SessionJoinResponse,
   SessionRole,
@@ -46,7 +47,30 @@ export async function joinSession(
   return response.json()
 }
 
-export function driverWebSocketUrl(sessionId: string): string {
+// true/false when the server answered, null when it could not be reached.
+export async function sessionExists(sessionId: string): Promise<boolean | null> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/sessions/${sessionId}/join`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role: 'engineer' }),
+    })
+    if (response.status === 404) return false
+    return response.ok ? true : null
+  } catch {
+    return null
+  }
+}
+
+export async function listScenarios(): Promise<ScenarioConfig[]> {
+  const response = await fetch(`${API_BASE_URL}/scenarios`)
+  if (!response.ok) {
+    throw new Error(`Failed to list scenarios: ${response.status}`)
+  }
+  return response.json()
+}
+
+export function sessionWebSocketUrl(role: SessionRole, sessionId: string): string {
   const base = API_BASE_URL.replace(/^http/, 'ws')
-  return `${base}/ws/driver/${sessionId}`
+  return `${base}/ws/${role}/${sessionId}`
 }

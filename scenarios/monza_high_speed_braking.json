@@ -1,0 +1,10 @@
+{
+  "id": "monza_high_speed_braking",
+  "name": "Monza high-speed braking",
+  "description": "Worn brakes and slightly reduced grip on the back straight into the Ascari braking zone.",
+  "track": "monza",
+  "seed": 101,
+  "faults": { "grip_multiplier": 0.85, "telemetry_delay_ms": 0, "brake_wear": 0.75 },
+  "onset_distance": 850,
+  "end_distance": 1250
+}

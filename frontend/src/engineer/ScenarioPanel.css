@@ -1,0 +1,50 @@
+.scenario-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.scenario-panel__presets {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.scenario-panel__preset--selected {
+  border-color: var(--color-orange) !important;
+  color: var(--color-orange) !important;
+}
+
+.scenario-panel__select {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  font-size: var(--font-size-xs);
+  color: var(--color-neutral);
+}
+
+.scenario-panel__select select {
+  background: var(--color-charcoal-light);
+  color: var(--color-white);
+  border: 1px solid var(--color-neutral);
+  border-radius: 4px;
+  padding: var(--space-xs) var(--space-sm);
+  font-family: var(--font-mono);
+}
+
+.scenario-panel__description {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-neutral);
+}
+
+.scenario-panel__actions {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+.scenario-panel__active {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--color-neutral);
+}

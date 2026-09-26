@@ -1,0 +1,10 @@
+{
+  "id": "baku_stale_telemetry",
+  "name": "Azerbaijan stale telemetry",
+  "description": "400 ms injected warning-path delay through the Turn 16 braking zone.",
+  "track": "baku",
+  "seed": 202,
+  "faults": { "grip_multiplier": 1.0, "telemetry_delay_ms": 400, "brake_wear": 1.0 },
+  "onset_distance": 700,
+  "end_distance": 1000
+}

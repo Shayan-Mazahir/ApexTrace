@@ -3,68 +3,48 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
-from dataclasses import dataclass, field
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, WebSocket
 from starlette.websockets import WebSocketDisconnect
 
-from app.placeholder_sim import (
-    TRACK_PRESETS,
-    DemoVehicleState,
-    distance_to_hazard,
-    next_hazard_zone,
-    sector_at,
-    signed_clearance,
-    step,
-    warning_reason,
-)
+from app.placeholder_sim import TRACK_PRESETS
 from app.schemas import (
     SessionCreateRequest,
     SessionCreateResponse,
     SessionJoinRequest,
     SessionJoinResponse,
+    SessionRole,
     TrackId,
     TrackProfile,
     TrackProfileSummary,
 )
+from app.session_state import TICK_DT, Session, handle_raw_message
 
-TICK_HZ = 20
-TICK_DT = 1 / TICK_HZ
-
-
-@dataclass
-class Session:
-    session_id: str
-    track_profile: TrackProfile
-    vehicle: DemoVehicleState = field(default_factory=DemoVehicleState)
-    control: dict[str, float] = field(
-        default_factory=lambda: {"steering": 0.0, "throttle": 0.0, "brake": 0.0}
-    )
-    running: bool = True
-    last_control_received_at: float | None = None
-
+HEARTBEAT_SECONDS = 1.0
+SESSION_TTL_SECONDS = 300.0
+SWEEP_INTERVAL_SECONDS = 30.0
 
 SESSIONS: dict[str, Session] = {}
 
 router = APIRouter()
 
 
-def apply_client_message(session: Session, message: dict) -> None:
-    """Mutates session state from one decoded client WS message. Pulled out
-    of the socket handler so it's testable without asyncio/timing."""
-    msg_type = message.get("type")
-    if msg_type == "control_input":
-        session.control["steering"] = max(-1.0, min(1.0, float(message.get("steering", 0.0))))
-        session.control["throttle"] = max(0.0, min(1.0, float(message.get("throttle", 0.0))))
-        session.control["brake"] = max(0.0, min(1.0, float(message.get("brake", 0.0))))
-        session.last_control_received_at = time.monotonic()
-    elif msg_type == "pause":
-        session.running = False
-    elif msg_type == "resume":
-        session.running = True
-    elif msg_type == "reset":
-        session.vehicle = DemoVehicleState()
-        session.running = True
+def cleanup_stale_sessions(now: float | None = None, ttl: float = SESSION_TTL_SECONDS) -> list[str]:
+    """Drops sessions nobody is connected to and nobody has touched for `ttl`."""
+    now = time.monotonic() if now is None else now
+    removed = []
+    for session_id, session in list(SESSIONS.items()):
+        if not session.clients and now - session.last_active > ttl:
+            del SESSIONS[session_id]
+            removed.append(session_id)
+    return removed
+
+
+async def sweep_loop() -> None:
+    while True:
+        await asyncio.sleep(SWEEP_INTERVAL_SECONDS)
+        cleanup_stale_sessions()
 
 
 @router.get("/tracks", response_model=list[TrackProfileSummary])
@@ -91,8 +71,16 @@ def get_track(track_id: TrackId) -> TrackProfile:
 def create_session(body: SessionCreateRequest) -> SessionCreateResponse:
     track_profile = TRACK_PRESETS[body.track]
     session_id = uuid.uuid4().hex[:8]
-    SESSIONS[session_id] = Session(session_id=session_id, track_profile=track_profile)
-    return SessionCreateResponse(session_id=session_id, role=body.role, track_profile=track_profile)
+    seed = body.seed if body.seed is not None else track_profile.seed
+    session = Session(session_id=session_id, track_profile=track_profile, seed=seed)
+    SESSIONS[session_id] = session
+    return SessionCreateResponse(
+        session_id=session_id,
+        role=body.role,
+        run_id=session.run_id,
+        seed=session.seed,
+        track_profile=track_profile,
+    )
 
 
 @router.post("/sessions/{session_id}/join", response_model=SessionJoinResponse)
@@ -100,82 +88,84 @@ def join_session(session_id: str, body: SessionJoinRequest) -> SessionJoinRespon
     session = SESSIONS.get(session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="session not found")
+    session.touch()
     return SessionJoinResponse(
-        session_id=session_id, role=body.role, track_profile=session.track_profile
+        session_id=session_id,
+        role=body.role,
+        run_id=session.run_id,
+        seed=session.seed,
+        track_profile=session.track_profile,
     )
 
 
-def _build_vehicle_state_message(session: Session, start_time: float) -> dict:
-    vehicle = session.vehicle
-    profile = session.track_profile
-    sector = sector_at(vehicle.distance_along_lap, profile)
-    hazard = next_hazard_zone(vehicle.distance_along_lap, profile)
-
-    packet_age_ms = 0.0
-    if session.last_control_received_at is not None:
-        packet_age_ms = max(0.0, (time.monotonic() - session.last_control_received_at) * 1000)
-
-    return {
-        "type": "vehicle_state",
-        "seq": vehicle.seq,
-        "t": time.monotonic() - start_time,
-        "x": vehicle.x,
-        "y": vehicle.y,
-        "heading": vehicle.heading,
-        "speed": vehicle.speed,
-        "lap_progress": (vehicle.distance_along_lap % profile.total_length) / profile.total_length,
-        "sector_index": sector.index,
-        "sector_name": sector.name,
-        "distance_along_lap": vehicle.distance_along_lap,
-        "next_hazard_zone": hazard.label if hazard else None,
-        "next_hazard_distance": distance_to_hazard(vehicle.distance_along_lap, hazard, profile)
-        if hazard
-        else None,
-        "signed_clearance": signed_clearance(vehicle.x, vehicle.y, profile),
-        "packet_age_ms": packet_age_ms,
-        "warning_reason": warning_reason(vehicle.distance_along_lap, profile),
-        "track_exit": vehicle.track_exit,
-        "lap_complete": vehicle.lap_complete,
-    }
+async def broadcast(session: Session, messages: list[dict[str, Any]]) -> None:
+    for websocket in list(session.clients):
+        try:
+            for message in messages:
+                await websocket.send_json(message)
+        except Exception:
+            session.clients.pop(websocket, None)
 
 
-@router.websocket("/ws/driver/{session_id}")
-async def driver_ws(websocket: WebSocket, session_id: str) -> None:
+async def run_session_loop(session: Session) -> None:
+    last_heartbeat = 0.0
+    while session.clients:
+        await asyncio.sleep(TICK_DT)
+        now = time.monotonic()
+        session.touch(now)
+        messages = session.tick(now)
+        if now - last_heartbeat >= HEARTBEAT_SECONDS:
+            last_heartbeat = now
+            messages.append({"type": "heartbeat", "t": now - session.start_time})
+        await broadcast(session, messages)
+
+
+def ensure_loop(session: Session) -> None:
+    if session.loop_task is None or session.loop_task.done():
+        session.loop_task = asyncio.create_task(run_session_loop(session))
+
+
+async def serve_client(websocket: WebSocket, session_id: str, role: SessionRole) -> None:
     session = SESSIONS.get(session_id)
     if session is None:
         await websocket.close(code=4404)
         return
 
     await websocket.accept()
-    start_time = time.monotonic()
+    session.clients[websocket] = role
+    if role == "engineer":
+        session.engineer_ever_connected = True
+    session.touch()
+    session.queue_session_info()
+    ensure_loop(session)
 
-    async def broadcast_loop() -> None:
-        try:
-            while True:
-                await asyncio.sleep(TICK_DT)
-                if session.running:
-                    session.vehicle = step(
-                        session.vehicle,
-                        session.control["steering"],
-                        session.control["throttle"],
-                        session.control["brake"],
-                        TICK_DT,
-                        session.track_profile,
-                    )
-                await websocket.send_json(_build_vehicle_state_message(session, start_time))
-        except (WebSocketDisconnect, RuntimeError):
-            pass
+    # A (re)connecting client gets the full current picture immediately.
+    try:
+        await websocket.send_json(session.session_info())
+        await websocket.send_json(session.fault_state_message())
+    except Exception:
+        session.clients.pop(websocket, None)
+        return
 
-    loop_task = asyncio.create_task(broadcast_loop())
     try:
         while True:
-            message = await websocket.receive_json()
-            apply_client_message(session, message)
+            text = await websocket.receive_text()
+            session.touch()
+            for reply in handle_raw_message(session, role, text):
+                await websocket.send_json(reply)
     except WebSocketDisconnect:
         pass
     finally:
-        loop_task.cancel()
-        try:
-            await loop_task
-        except asyncio.CancelledError:
-            pass
+        session.clients.pop(websocket, None)
+        session.touch()
+        session.queue_session_info()
+
+
+@router.websocket("/ws/driver/{session_id}")
+async def driver_ws(websocket: WebSocket, session_id: str) -> None:
+    await serve_client(websocket, session_id, "driver")
+
+
+@router.websocket("/ws/engineer/{session_id}")
+async def engineer_ws(websocket: WebSocket, session_id: str) -> None:
+    await serve_client(websocket, session_id, "engineer")

@@ -1,137 +1,99 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { createSession } from '../api/session'
+import { useActiveSession } from '../app/ActiveSessionContext'
 import { useErrorContext } from '../app/ErrorContext'
-import { createSession, driverWebSocketUrl } from '../api/session'
 import type { NormalizedControls } from '../input/useInputAdapter'
-import type { TrackId, TrackProfile, VehicleStateMessage } from '../types/schemas'
+import { useSessionStream } from '../stream/useSessionStream'
+import type { TrackId } from '../types/schemas'
 
-export type ConnectionState = 'idle' | 'connecting' | 'connected' | 'error'
+export type ConnectionState = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'closed'
 
 const SEND_INTERVAL_MS = 50 // 20Hz, matches the backend tick rate
-const MAX_TRAIL_POINTS = 2000
 
-// Owns the session lifecycle: create -> connect WS -> stream controls up,
-// vehicle_state down. All actual state (position, track_exit, lap_complete)
-// is server-authoritative — this hook never computes physics locally.
+// Creates/attaches the driver's session and streams controls up. All state
+// (position, faults, warnings, lap progress) is server-authoritative — this
+// hook never computes physics locally.
 export function useDriveSession(normalizedControls: NormalizedControls) {
   const { reportError } = useErrorContext()
-  const [selectedTrack, setSelectedTrack] = useState<TrackId>('monza')
-  const [connectionState, setConnectionState] = useState<ConnectionState>('idle')
-  const [trackProfile, setTrackProfile] = useState<TrackProfile | null>(null)
-  const [vehicleState, setVehicleState] = useState<VehicleStateMessage | null>(null)
+  const { driverSession, setDriverSession } = useActiveSession()
+  const [selectedTrack, setSelectedTrack] = useState<TrackId>(driverSession?.track ?? 'monza')
+  const [creating, setCreating] = useState(false)
   const [running, setRunning] = useState(true)
-  const [trail, setTrail] = useState<[number, number][]>([])
-  const [previousLapTrail, setPreviousLapTrail] = useState<[number, number][]>([])
 
-  const wsRef = useRef<WebSocket | null>(null)
+  const stream = useSessionStream('driver', driverSession?.id ?? null)
+  const { send } = stream
+
   const seqRef = useRef(0)
-  const sessionIdRef = useRef<string | null>(null)
-  const seedRef = useRef(0)
   const controlsRef = useRef(normalizedControls)
   controlsRef.current = normalizedControls
 
+  const connectionState: ConnectionState = creating ? 'connecting' : stream.connection
+
   const start = useCallback(async () => {
-    if (connectionState === 'connecting' || connectionState === 'connected') return
-    setConnectionState('connecting')
+    if (creating || (driverSession && stream.connection !== 'closed')) return
+    setCreating(true)
     try {
-      const { session_id, track_profile } = await createSession(selectedTrack)
-      sessionIdRef.current = session_id
-      seedRef.current = track_profile.seed
-      setTrackProfile(track_profile)
-      setVehicleState(null)
-      setTrail([])
-      setPreviousLapTrail([])
+      const created = await createSession(selectedTrack)
       seqRef.current = 0
-
-      const ws = new WebSocket(driverWebSocketUrl(session_id))
-      wsRef.current = ws
-
-      ws.onopen = () => setConnectionState('connected')
-
-      ws.onmessage = (event) => {
-        const message = JSON.parse(event.data) as VehicleStateMessage
-        if (message.type !== 'vehicle_state') return
-        setVehicleState(message)
-        setTrail((prev) => {
-          const next: [number, number][] = [...prev, [message.x, message.y]]
-          return next.length > MAX_TRAIL_POINTS ? next.slice(next.length - MAX_TRAIL_POINTS) : next
-        })
-      }
-
-      ws.onerror = () => {
-        setConnectionState('error')
-        reportError('Drive session WebSocket error')
-      }
-
-      ws.onclose = () => setConnectionState((prev) => (prev === 'error' ? prev : 'idle'))
-
       setRunning(true)
+      setDriverSession({
+        id: created.session_id,
+        track: selectedTrack,
+        seed: created.seed,
+        profile: created.track_profile,
+      })
     } catch (err) {
-      setConnectionState('error')
       reportError(err instanceof Error ? err.message : 'Failed to start session')
+    } finally {
+      setCreating(false)
     }
-  }, [connectionState, selectedTrack, reportError])
+  }, [creating, driverSession, stream.connection, selectedTrack, setDriverSession, reportError])
+
+  const endSession = useCallback(() => setDriverSession(null), [setDriverSession])
 
   const togglePause = useCallback(() => {
-    const ws = wsRef.current
-    if (!ws || ws.readyState !== WebSocket.OPEN) return
     const next = !running
-    ws.send(JSON.stringify({ type: next ? 'resume' : 'pause' }))
-    setRunning(next)
-  }, [running])
+    if (send({ type: next ? 'resume' : 'pause' })) setRunning(next)
+  }, [running, send])
 
   const reset = useCallback(() => {
-    const ws = wsRef.current
-    if (!ws || ws.readyState !== WebSocket.OPEN) return
-    ws.send(JSON.stringify({ type: 'reset' }))
-    setTrail((prev) => {
-      if (prev.length > 1) setPreviousLapTrail(prev)
-      return []
-    })
-    setRunning(true)
-  }, [])
-
-  const selectTrack = useCallback((track: TrackId) => setSelectedTrack(track), [])
+    if (send({ type: 'reset' })) setRunning(true)
+  }, [send])
 
   useEffect(() => {
-    return () => {
-      wsRef.current?.close()
-      wsRef.current = null
-    }
-  }, [])
-
-  useEffect(() => {
-    if (connectionState !== 'connected') return
+    if (stream.connection !== 'connected' || !driverSession) return
     const interval = setInterval(() => {
-      const ws = wsRef.current
-      if (!ws || ws.readyState !== WebSocket.OPEN) return
       seqRef.current += 1
-      ws.send(
-        JSON.stringify({
-          type: 'control_input',
-          seq: seqRef.current,
-          session_id: sessionIdRef.current,
-          track: selectedTrack,
-          seed: seedRef.current,
-          t_client: Date.now(),
-          steering: controlsRef.current.steering,
-          throttle: controlsRef.current.throttle,
-          brake: controlsRef.current.brake,
-        }),
-      )
+      send({
+        type: 'control_input',
+        seq: seqRef.current,
+        session_id: driverSession.id,
+        track: driverSession.track,
+        seed: driverSession.seed,
+        t_client: Date.now(),
+        steering: controlsRef.current.steering,
+        throttle: controlsRef.current.throttle,
+        brake: controlsRef.current.brake,
+      })
     }, SEND_INTERVAL_MS)
     return () => clearInterval(interval)
-  }, [connectionState, selectedTrack])
+  }, [stream.connection, driverSession, send])
 
   return {
     selectedTrack,
-    selectTrack,
+    selectTrack: setSelectedTrack,
     connectionState,
-    trackProfile,
-    vehicleState,
-    trail,
-    previousLapTrail,
+    sessionId: driverSession?.id ?? null,
+    trackProfile: driverSession?.profile ?? null,
+    vehicleState: stream.vehicleState,
+    warning: stream.warning,
+    faultState: stream.faultState,
+    sessionInfo: stream.sessionInfo,
+    trail: stream.trail,
+    previousLapTrail: stream.previousLapTrail,
     running,
     start,
+    endSession,
     togglePause,
     reset,
   }
