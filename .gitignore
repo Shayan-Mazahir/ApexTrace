@@ -11,3 +11,7 @@ frontend/dist/
 .DS_Store
 .vscode/
 .idea/
+
+# Person A generated artifacts
+backend/data/
+.pytest_cache/
