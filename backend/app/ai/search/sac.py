@@ -128,7 +128,7 @@ class SACAgent:
         self.opt_alpha.zero_grad()
         alpha_loss.backward()
         self.opt_alpha.step()
-        return {"critic_loss": float(critic_loss), "actor_loss": float(actor_loss), "alpha": float(alpha)}
+        return {"critic_loss": critic_loss.item(), "actor_loss": actor_loss.item(), "alpha": alpha.item()}
 
     def save(self, out_dir: str | Path, meta: dict) -> Path:
         out = Path(out_dir)
