@@ -13,6 +13,7 @@ import { LinkIndicators } from '../engineer/LinkIndicators'
 import { RunInfo } from '../engineer/RunInfo'
 import { ScenarioPanel } from '../engineer/ScenarioPanel'
 import { TcnPanel } from '../engineer/TcnPanel'
+import { HelpNote } from '../components/HelpNote'
 import { useEngineerSession } from '../engineer/useEngineerSession'
 import { Scene } from '../scene/Scene'
 import type { FaultType, StressScenario } from '../types/schemas'
@@ -114,6 +115,18 @@ export function EngineerScreen() {
         </Section>
 
         <Section title="Stress scenario">
+          <HelpNote title="What is this screen? Read this first" open>
+            <p>
+              You are the <b>engineer</b> at the pit wall. A driver is driving the car on the <b>Drive</b> tab (same session code).
+              Here you break things on purpose and watch whether the car&apos;s <b>brake warning system</b> still keeps it on the track.
+            </p>
+            <ol>
+              <li><b>Nothing runs automatically.</b> The car drives normally until you arm a scenario or add a fault.</li>
+              <li><b>Scenario</b> (first dropdown) = a ready-made bundle of faults, e.g. &quot;wet braking zone&quot;. Pick one and press <b>Arm scenario</b>: the driver&apos;s lap restarts from the scenario start and the faults switch on by themselves when the car reaches their trigger zone.</li>
+              <li><b>Add a fault</b> (second dropdown) = one single fault you build by hand (what breaks, how much, and where/when it starts). Use it to experiment on top of, or instead of, a scenario.</li>
+              <li>Watch <b>Faults (actual state)</b>: each fault goes waiting, active, then completed. <b>Reset experiment</b> puts everything back to the start.</li>
+            </ol>
+          </HelpNote>
           <ScenarioPanel
             scenarios={scenarios}
             profile={engineer.trackProfile}

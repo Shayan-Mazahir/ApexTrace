@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { FaultSpec, FaultType, TrackProfile, TriggerKind } from '../types/schemas'
+import { HelpNote } from '../components/HelpNote'
 import './FaultBuilder.css'
 
 interface FaultBuilderProps {
@@ -43,6 +44,18 @@ export function FaultBuilder({ catalog, profile, disabled, onAdd }: FaultBuilder
 
   return (
     <div className="fault-builder">
+      <HelpNote title="What do the fault layers mean?">
+        <ul>
+          <li><b>world</b>: the road itself (wet patch: less tyre grip).</li>
+          <li><b>vehicle</b>: the car (brakes fade, steering/brake actuators slow down).</li>
+          <li><b>sensor</b>: what the car <i>measures</i> (speed reads wrong, position drifts, a sensor freezes, grip estimate lags).</li>
+          <li><b>uplink</b>: car to pit-wall network (delay, packet loss, blackout).</li>
+          <li><b>warning_service</b>: the remote computer that decides &quot;BRAKE NOW&quot; (slow to compute).</li>
+          <li><b>downlink</b>: warning back to the driver&apos;s display (delayed or lost).</li>
+          <li><b>driver</b>: the scripted driver (slow reaction, weak braking, ignores a warning).</li>
+        </ul>
+        <p><b>Trigger</b>: <i>Whole run</i> = always on; <i>Track zone</i> = starts N metres before a braking zone; <i>Distance</i> / <i>Time</i> = a window you type in.</p>
+      </HelpNote>
       <label className="fault-builder__field">
         <span>Fault type</span>
         <select value={type} disabled={disabled} onChange={(e) => choose(e.target.value)}>

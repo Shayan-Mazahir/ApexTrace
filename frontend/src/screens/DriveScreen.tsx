@@ -8,7 +8,6 @@ import { StatusBadge, type StatusTone } from '../components/StatusBadge'
 import { BrakeWarning } from '../drive/BrakeWarning'
 import { CarSetupPanel } from '../drive/CarSetupPanel'
 import { DriveHud } from '../drive/DriveHud'
-import { Minimap } from '../drive/Minimap'
 import { RunStateBanner } from '../drive/RunStateBanner'
 import { TelemetryPanel } from '../drive/TelemetryPanel'
 import { TrackPicker } from '../drive/TrackPicker'
@@ -120,12 +119,6 @@ export function DriveScreen() {
             {v?.local_fallback_active && <StatusBadge tone="info" label="Local warning fallback active" />}
             {info && <StatusBadge tone="neutral" label={`Car: ${carLabel(info.upgrades)}`} />}
           </div>
-
-          {profile && (
-            <div className="drive-screen__minimap">
-              <Minimap profile={profile} car={v ? { x: v.x, y: v.y } : null} />
-            </div>
-          )}
 
           <BrakeWarning warning={session.warning} />
           <RunStateBanner vehicleState={v} />

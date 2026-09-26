@@ -158,7 +158,7 @@ export function F1Car({ livery = DEFAULT_LIVERY, speed, steering, aeroOpen, mark
     open.current += (aero - open.current) * Math.min(1, d * 8) // flaps actuate in ~0.3 s
   })
 
-  const body = { color: livery.primary, metalness: 0.3, roughness: 0.35 }
+  const body = { color: livery.primary, metalness: 0.45, roughness: 0.22, envMapIntensity: 1.3 }
 
   return (
     <group>

@@ -1,7 +1,7 @@
 .telemetry {
   position: fixed;
   right: var(--space-md);
-  top: 360px; /* under the minimap, clear of the driver display */
+  top: 150px; /* under the best-lap card */
   z-index: 10;
   display: flex;
   gap: 8px;

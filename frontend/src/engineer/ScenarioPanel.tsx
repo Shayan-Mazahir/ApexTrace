@@ -79,7 +79,7 @@ export function ScenarioPanel({ scenarios, profile, activeScenarioId, disabled, 
           </ul>
           <div className="scenario-panel__grid">
             <label>
-              <span>Trigger zone</span>
+              <span title="Which braking zone the faults are attached to. 'as defined' keeps the preset's own zone.">Trigger zone</span>
               <select value={zone} disabled={disabled || !hasZoneFaults} onChange={(e) => setZone(e.target.value)}>
                 <option value="">as defined</option>
                 {profile?.hazard_zones.map((h) => (
@@ -90,17 +90,17 @@ export function ScenarioPanel({ scenarios, profile, activeScenarioId, disabled, 
               </select>
             </label>
             <label>
-              <span>Severity ×{severity.toFixed(2)}</span>
+              <span title="Scales how bad every fault is. 1.00 = as written; higher = harsher (more grip lost, longer delay).">Severity ×{severity.toFixed(2)}</span>
               <input type="range" min={0.25} max={1.5} step={0.05} value={severity} disabled={disabled}
                 onChange={(e) => setSeverity(Number(e.target.value))} />
             </label>
             <label>
-              <span>Duration cap (s)</span>
+              <span title="Force each fault to end after this many seconds. Blank = it lasts as long as its trigger says.">Duration cap (s)</span>
               <input type="number" min={0.5} step={0.5} placeholder="none" value={duration} disabled={disabled}
                 onChange={(e) => setDuration(e.target.value)} />
             </label>
             <label>
-              <span>Seed</span>
+              <span title="Same seed + same scenario = exactly the same run every time (noise, jitter, packet loss).">Seed</span>
               <input type="number" value={seed} disabled={disabled} onChange={(e) => setSeed(e.target.value)} />
             </label>
           </div>

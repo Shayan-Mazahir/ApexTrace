@@ -364,7 +364,7 @@ export function TrackScenery({ profile }: { profile: TrackProfile }) {
           <TexturedStrip strip={parts.runoffR} map={asphaltTexture()} colour="#b9b2a4" />
         </>
       )}
-      <TexturedStrip strip={parts.road} map={asphaltTexture()} colour="#e4e6ea" roughness={0.95} />
+      <TexturedStrip strip={parts.road} map={asphaltTexture()} colour="#b8bbc2" roughness={0.95} />
       <ColourStrip strip={parts.lineL} />
       <ColourStrip strip={parts.lineR} />
       <ColourStrip strip={parts.kerbL} />

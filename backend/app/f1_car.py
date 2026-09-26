@@ -84,8 +84,16 @@ class CarParams:
     # reverse
     reverse_force: float = 6_000.0  # N at full throttle
     reverse_max_speed: float = 22 / 3.6
+    reverse_hold_s: float = 0.4  # automatic: brake held this long at standstill selects reverse
     reverse_engage_speed: float = 1.5  # m/s: gear change to/from R only below this
     steer_slip_allowance: float = 0.12  # rad beyond the steady-state angle at full lock
+    # stability control (part of the traction-control modes): once the rear slip
+    # angle passes the threshold it adds a corrective yaw moment (like ESC
+    # braking one front wheel) and moves brake bias forward. "off" has none.
+    esc_slip_full: float = math.radians(2.5)
+    esc_slip_medium: float = math.radians(6.0)
+    esc_yaw_full: float = 5.0  # max corrective yaw acceleration, rad/s^2
+    esc_yaw_medium: float = 2.5
 
     @property
     def cg_to_rear(self) -> float:
@@ -138,6 +146,8 @@ class CarState:
     ax: float = 0.0  # body-frame accelerations of the last substep (m/s^2)
     ay: float = 0.0
     tc_cut: float = 0.0  # fraction of requested drive removed by traction control
+    stop_hold: float = 0.0  # s stationary with the brake held and no throttle (automatic: engages reverse)
+    brake_reverse: bool = False  # reverse engaged by holding the brake: brake pedal drives, throttle stops
     wheelspin: bool = False
     front_lock: bool = False
     rear_lock: bool = False
@@ -325,7 +335,11 @@ def _update_drs(state: CarState, setup: CarSetup, requests: DriverRequests, allo
 def _step_reverse(s: CarState, heading: float, steering: float, throttle: float, brake: float, dt: float,
                   grip: float, brake_scale: float, p: CarParams) -> tuple[CarState, float, float, float]:
     """Reversing is always slow, so a kinematic model is enough: throttle drives
-    backwards up to reverse_max_speed, the brake stops the car."""
+    backwards up to reverse_max_speed, the brake stops the car. When reverse was
+    engaged by holding the brake at standstill the pedals swap (brake = go
+    backwards, throttle = stop), as in an automatic road car's R."""
+    if s.brake_reverse:
+        throttle, brake = brake, throttle
     vx = s.vx
     drive = throttle * p.reverse_force * (1.0 if -vx < p.reverse_max_speed else 0.0)
     stop = brake * min(p.brake_force_max * brake_scale, grip * p.mu_long * p.mass * G) + 300.0
@@ -376,11 +390,25 @@ def step_car(
     brake = max(0.0, min(1.0, brake))
 
     gear = _update_gear(state, setup, requests, throttle, brake, p)
+    automatic = setup.gearbox == "automatic"
+    stop_hold, brake_reverse = state.stop_hold, state.brake_reverse
+    if automatic and state.gear != REVERSE and abs(state.vx) < 0.3 and brake > 0.5 and throttle < 0.05:
+        stop_hold += dt
+    else:
+        stop_hold = 0.0
+    if automatic and gear != REVERSE and stop_hold >= p.reverse_hold_s:
+        gear, brake_reverse, stop_hold = REVERSE, True, 0.0  # stopped and still on the brakes: select R
+    elif gear == REVERSE and brake_reverse and throttle > 0.3 and brake < 0.05 and abs(state.vx) < 0.5:
+        gear, brake_reverse = 1, False  # throttle from standstill: back to drive
+    if gear != REVERSE:
+        brake_reverse = False
     if gear == REVERSE:
-        return _step_reverse(replace(state, gear=gear, drs_open=False, drs_available=False),
+        return _step_reverse(replace(state, gear=gear, drs_open=False, drs_available=False, stop_hold=stop_hold,
+                                     brake_reverse=brake_reverse),
                              heading, steering, throttle, brake, dt, grip, brake_scale, p)
     drs_open, drs_available = _update_drs(state, setup, requests, drs_allowed, throttle, brake, steering)
-    s = replace(state, gear=gear, drs_open=drs_open, drs_available=drs_available)
+    s = replace(state, gear=gear, drs_open=drs_open, drs_available=drs_available, stop_hold=stop_hold,
+                brake_reverse=brake_reverse)
 
     n = max(1, math.ceil(dt / SUBSTEP))
     h = dt / n
@@ -419,6 +447,14 @@ def step_car(
         # the stopping force, even at full pedal (so wear matters at any speed).
         brake_total = brake * p.brake_force_max
         brake_f, brake_r = brake_total * p.brake_bias_front, brake_total * (1 - p.brake_bias_front)
+        # stability control: rear slip angle of the previous substep (needs vx > 0)
+        esc_thr = {"full": p.esc_slip_full, "medium": p.esc_slip_medium}.get(setup.traction_control)
+        esc_gain = {"full": p.esc_yaw_full, "medium": p.esc_yaw_medium}.get(setup.traction_control, 0.0)
+        rear_slip_prev = math.atan2(vy - b * r, max(vx, 3.0))
+        esc_excess = max(0.0, abs(rear_slip_prev) - esc_thr) if esc_thr is not None and vx > 3.0 else 0.0
+        if esc_excess > 0:  # rear stepping out: shed rear braking, the front does the work
+            shift = min(1.0, esc_excess / 0.08)
+            brake_f, brake_r = brake_f + brake_r * shift, brake_r * (1 - shift)
 
         # longitudinal capacity left after cornering load (friction circle)
         fy_f_prev = abs(s.ay) * m * b / L
@@ -441,11 +477,15 @@ def step_car(
         rear_lock = brake_r > room_r and vx > 2.0
         drive = drive_request if brake < 0.05 else 0.0
         if setup.traction_control == "full":
-            allowed = 0.90 * room_r
+            # straight-line launch may use 90% of the rear's room; cornering load
+            # shrinks that to 65% so the rear keeps lateral grip to hold the car
+            allowed = (0.90 - 0.25 * min(1.0, fy_r_prev / max(cap_r_lat, 1e-6))) * room_r
         elif setup.traction_control == "medium":
             allowed = 0.98 * room_r  # lets the rear work harder; a big lateral load can still break it loose
         else:
             allowed = math.inf
+        if esc_excess > 0 and esc_gain > 0:
+            allowed = min(allowed, drive_request * max(0.0, 1.0 - esc_excess / 0.06))  # lift when the rear steps out
         if drive > allowed:
             tc_cut = 1.0 - allowed / drive
             drive = allowed
@@ -486,6 +526,8 @@ def step_car(
         ax = fx / m
         ay = fy / m
         yaw_acc = (a * (fy_f * cos_d + fx_f * sin_d) - b * fy_r) / p.yaw_inertia
+        if esc_excess > 0 and esc_gain > 0 and r * rear_slip_prev < 0:  # oversteer: rotating the way the rear slides
+            yaw_acc += math.copysign(min(esc_gain, esc_gain * esc_excess / 0.06), rear_slip_prev)
 
         vx_new = vx + (ax + vy * r) * h
         vy_new = vy + (ay - vx * r) * h

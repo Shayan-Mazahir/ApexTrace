@@ -1,4 +1,4 @@
-import { Line, OrbitControls, Sky } from '@react-three/drei'
+import { Environment, Lightformer, Line, OrbitControls, Sky } from '@react-three/drei'
 import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useMemo, useRef, type ElementRef } from 'react'
 import { BufferAttribute, BufferGeometry, Color, DoubleSide, Vector3, type Group, type PerspectiveCamera } from 'three'
@@ -95,12 +95,12 @@ function CameraRig({ view, profile, shown }: { view: SceneView; profile: TrackPr
     scratch.look.set(p.x + fx * EYE_LOOK_AHEAD, EYE_LOOK_HEIGHT, p.y + fz * EYE_LOOK_AHEAD)
     cam.lookAt(scratch.look)
     const fov = 72 + Math.min(p.speed, 88) * 0.1 // widen a little with speed
-    if (Math.abs(cam.fov - fov) > 0.05 || cam.near !== 0.25 || cam.far !== 4000) {
+    if (Math.abs(cam.fov - fov) > 0.05 || cam.near !== 0.25 || cam.far !== 7000) {
       cam.fov += (fov - cam.fov) * Math.min(1, dt * 3)
       // The halo is ~0.34 m from the eye. Going much nearer than this costs the
       // depth precision that separates the asphalt (2 cm) from the grass below.
       cam.near = 0.25
-      cam.far = 4000
+      cam.far = 7000
       cam.updateProjectionMatrix()
     }
   })
@@ -118,10 +118,10 @@ function CameraRig({ view, profile, shown }: { view: SceneView; profile: TrackPr
     scratch.look.set(p.x + fx * 10, 0.9, p.y + fz * 10)
     cam.lookAt(scratch.look)
     const fov = 58 + Math.min(p.speed, 88) * 0.14 // widen with speed
-    if (Math.abs(cam.fov - fov) > 0.05 || cam.far !== 4000) {
+    if (Math.abs(cam.fov - fov) > 0.05 || cam.far !== 7000) {
       cam.fov += (fov - cam.fov) * Math.min(1, dt * 3)
       cam.near = 0.3
-      cam.far = 4000
+      cam.far = 7000
       cam.updateProjectionMatrix()
     }
   })
@@ -201,6 +201,41 @@ function Trail({ points, color, opacity }: { points: [number, number][]; color: 
   return <Line points={points.map(([x, z]) => [x, 0.15, z] as [number, number, number])} color={color} lineWidth={2} transparent opacity={opacity} />
 }
 
+// Distant ridge line: a ring of low-poly hills fading into the fog, so the
+// horizon has depth instead of ending at a flat plane.
+function Hills({ profile }: { profile: TrackProfile }) {
+  const hills = useMemo(() => {
+    let cx = 0
+    let cz = 0
+    for (const [x, z] of profile.centerline) {
+      cx += x
+      cz += z
+    }
+    cx /= profile.centerline.length
+    cz /= profile.centerline.length
+    let reach = 0
+    for (const [x, z] of profile.centerline) reach = Math.max(reach, Math.hypot(x - cx, z - cz))
+    let seed = 11
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
+    return Array.from({ length: 46 }, (_, i) => {
+      const a = (i / 46) * Math.PI * 2 + rnd() * 0.08
+      const r = reach + 1500 + rnd() * 500
+      const h = 90 + rnd() * 240
+      return { x: cx + Math.cos(a) * r, z: cz + Math.sin(a) * r, h, w: h * (2.4 + rnd() * 1.6), tone: rnd() }
+    })
+  }, [profile])
+  return (
+    <group>
+      {hills.map((hill, i) => (
+        <mesh key={i} position={[hill.x, hill.h / 2 - 6, hill.z]} scale={[hill.w, hill.h, hill.w]}>
+          <coneGeometry args={[0.5, 1, 7]} />
+          <meshLambertMaterial color={hill.tone > 0.5 ? '#5b7d68' : '#6b8a73'} />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
 interface SceneProps {
   trackProfile: TrackProfile | null
   vehicleState: CarPose | null
@@ -224,10 +259,18 @@ export function Scene({ trackProfile, vehicleState, trail, previousLapTrail, vie
   return (
     <>
       <color attach="background" args={[SKY_HORIZON]} />
-      {!overview && <fog attach="fog" args={[SKY_HORIZON, 250, 1400]} />}
-      <Sky distance={3000} sunPosition={[400, 220, 300]} turbidity={6} rayleigh={1.2} mieCoefficient={0.004} />
-      <hemisphereLight args={['#dfeaf5', '#4d5a3c', 0.85]} />
-      <directionalLight position={[300, 400, 200]} intensity={1.6} />
+      {!overview && <fog attach="fog" args={[SKY_HORIZON, 350, 2900]} />}
+      <Sky distance={4500} sunPosition={[500, 150, 280]} turbidity={5} rayleigh={1.6} mieCoefficient={0.006} mieDirectionalG={0.85} />
+      {/* offline studio-style reflections (no HDRI download): sky dome, sun strip and ground bounce */}
+      <Environment resolution={128} frames={1}>
+        <Lightformer form="rect" intensity={0.9} color="#dfeeff" position={[0, 8, 0]} rotation-x={Math.PI / 2} scale={[30, 30, 1]} />
+        <Lightformer form="rect" intensity={1.8} color="#fff1dc" position={[12, 5, 6]} scale={[10, 4, 1]} />
+        <Lightformer form="rect" intensity={0.5} color="#9fb4c8" position={[-12, 3, -4]} scale={[14, 5, 1]} />
+        <Lightformer form="rect" intensity={0.25} color="#5d6a45" position={[0, -6, 0]} rotation-x={-Math.PI / 2} scale={[30, 30, 1]} />
+      </Environment>
+      <hemisphereLight args={['#cfe2f5', '#55613f', 0.45]} />
+      <directionalLight position={[500, 300, 280]} intensity={1.6} color="#fff1dc" />
+      {trackProfile && !overview && <Hills profile={trackProfile} />}
       {trackProfile && <TrackScenery profile={trackProfile} />}
       {trackProfile && showRacingLine && <RacingLine profile={trackProfile} />}
       <Trail points={previousLapTrail} color="#9ca3af" opacity={0.5} />

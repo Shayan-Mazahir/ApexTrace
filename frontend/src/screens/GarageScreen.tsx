@@ -16,6 +16,7 @@ import {
 import { GarageCar } from '../garage/GarageCar'
 import { ResultsTable } from '../garage/ResultsTable'
 import { PairedPanel } from '../garage/PairedPanel'
+import { GarageGuide } from '../garage/GarageGuide'
 import { UpgradeCard } from '../garage/UpgradeCard'
 import { UPGRADE_IDS } from '../types/schemas'
 import './GarageScreen.css'
@@ -39,6 +40,7 @@ export function GarageScreen() {
     <div className="garage-screen">
       <header className="garage-screen__header">
         <h1>Upgrade garage</h1>
+        <GarageGuide />
         <p>
           Four events left. Can you improve this car&apos;s warning system without spending money already
           committed to the season? All figures are editable demo assumptions for a fictional team.
