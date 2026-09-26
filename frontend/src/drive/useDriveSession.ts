@@ -53,6 +53,15 @@ export function useDriveSession(normalizedControls: NormalizedControls) {
 
   const endSession = useCallback(() => setDriverSession(null), [setDriverSession])
 
+  // The server no longer knows this session (e.g. the backend restarted):
+  // drop it so Start works straight away, and say what happened.
+  useEffect(() => {
+    if (stream.connection === 'closed' && driverSession) {
+      setDriverSession(null)
+      reportError('Session lost — the backend restarted. Press Start for a new run.')
+    }
+  }, [stream.connection, driverSession, setDriverSession, reportError])
+
   const togglePause = useCallback(() => {
     const next = !running
     if (send({ type: next ? 'resume' : 'pause' })) setRunning(next)

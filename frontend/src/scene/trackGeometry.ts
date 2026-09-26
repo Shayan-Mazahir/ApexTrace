@@ -1,0 +1,168 @@
+import type { TrackProfile } from '../types/schemas'
+
+export type Pt = [number, number]
+
+// Unit normal at each sample, pointing to the LEFT edge of the road.
+export function leftNormals(profile: TrackProfile): Pt[] {
+  return profile.centerline.map(([cx, cy], i) => {
+    const [lx, ly] = profile.left_edge[i]
+    const len = Math.hypot(lx - cx, ly - cy) || 1
+    return [(lx - cx) / len, (ly - cy) / len]
+  })
+}
+
+export function offset(points: Pt[], normals: Pt[], distance: number, side: 1 | -1): Pt[] {
+  return points.map(([x, y], i) => [x + normals[i][0] * distance * side, y + normals[i][1] * distance * side])
+}
+
+export interface StripGeometry {
+  positions: Float32Array
+  colors: Float32Array
+  indices: number[]
+}
+
+type Rgb = [number, number, number]
+
+export function hexToRgb(hex: string): Rgb {
+  const v = parseInt(hex.replace('#', ''), 16)
+  return [((v >> 16) & 255) / 255, ((v >> 8) & 255) / 255, (v & 255) / 255]
+}
+
+// A flat ribbon between two polylines at height y. `colorAt(i)` colours the
+// quad starting at sample i; `include(i)` skips quads (e.g. kerbs only at
+// corners).
+export function flatStrip(
+  a: Pt[],
+  b: Pt[],
+  y: number,
+  colorAt: (i: number) => Rgb,
+  include: (i: number) => boolean = () => true,
+): StripGeometry {
+  const positions: number[] = []
+  const colors: number[] = []
+  const indices: number[] = []
+  for (let i = 0; i < a.length - 1; i++) {
+    if (!include(i)) continue
+    const c = colorAt(i)
+    const base = positions.length / 3
+    for (const [x, z] of [a[i], b[i], a[i + 1], b[i + 1]]) {
+      positions.push(x, y, z)
+      colors.push(...c)
+    }
+    indices.push(base, base + 1, base + 2, base + 1, base + 3, base + 2)
+  }
+  return { positions: new Float32Array(positions), colors: new Float32Array(colors), indices }
+}
+
+// A vertical wall along a polyline, from y0 to y1.
+export function wallStrip(
+  line: Pt[],
+  y0: number,
+  y1: number,
+  colorAt: (i: number) => Rgb,
+  include: (i: number) => boolean = () => true,
+): StripGeometry {
+  const positions: number[] = []
+  const colors: number[] = []
+  const indices: number[] = []
+  for (let i = 0; i < line.length - 1; i++) {
+    if (!include(i)) continue
+    const c = colorAt(i)
+    const base = positions.length / 3
+    const [x0, z0] = line[i]
+    const [x1, z1] = line[i + 1]
+    for (const [x, y, z] of [[x0, y0, z0], [x0, y1, z0], [x1, y0, z1], [x1, y1, z1]]) {
+      positions.push(x, y, z)
+      colors.push(...c)
+    }
+    indices.push(base, base + 1, base + 2, base + 1, base + 3, base + 2)
+  }
+  return { positions: new Float32Array(positions), colors: new Float32Array(colors), indices }
+}
+
+// Samples inside (or within `pad` metres of) a hazard zone — where kerbs go.
+export function cornerMask(profile: TrackProfile, pad = 20): boolean[] {
+  const n = profile.centerline.length
+  const step = profile.total_length / Math.max(n - 1, 1)
+  return profile.centerline.map((_, i) => {
+    const d = i * step
+    return profile.hazard_zones.some((h) => d >= h.start_distance - pad && d <= h.end_distance + pad)
+  })
+}
+
+// Deterministic pseudo-random in [0, 1) (mulberry32).
+export function rng(seed: number): () => number {
+  let a = seed >>> 0
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0
+    let t = a
+    t = Math.imul(t ^ (t >>> 15), t | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+export interface Prop {
+  x: number
+  z: number
+  scale: number
+  height: number
+  rotation: number
+}
+
+// Scenery (trees / buildings) scattered beside the circuit but never on or
+// too near the road: every candidate is checked against the whole centerline.
+export function scatterProps(
+  profile: TrackProfile,
+  opts: { count: number; minGap: number; maxGap: number; clearance: number; seed: number; minHeight: number; maxHeight: number },
+): Prop[] {
+  const random = rng(opts.seed)
+  const line = profile.centerline
+  const normals = leftNormals(profile)
+  const props: Prop[] = []
+  const stride = Math.max(1, Math.floor((line.length - 1) / opts.count))
+  for (let i = 0; i < line.length - 1; i += stride) {
+    for (const side of [1, -1] as const) {
+      const gap = opts.minGap + random() * (opts.maxGap - opts.minGap)
+      const x = line[i][0] + normals[i][0] * side * gap
+      const z = line[i][1] + normals[i][1] * side * gap
+      let tooClose = false
+      for (let k = 0; k < line.length; k += 2) {
+        if (Math.hypot(line[k][0] - x, line[k][1] - z) < opts.clearance) {
+          tooClose = true
+          break
+        }
+      }
+      if (tooClose) continue
+      props.push({
+        x,
+        z,
+        scale: 0.7 + random() * 0.6,
+        height: opts.minHeight + random() * (opts.maxHeight - opts.minHeight),
+        rotation: random() * Math.PI,
+      })
+    }
+  }
+  return props
+}
+
+export function bounds(line: Pt[]) {
+  let minX = Infinity
+  let maxX = -Infinity
+  let minZ = Infinity
+  let maxZ = -Infinity
+  for (const [x, z] of line) {
+    minX = Math.min(minX, x)
+    maxX = Math.max(maxX, x)
+    minZ = Math.min(minZ, z)
+    maxZ = Math.max(maxZ, z)
+  }
+  return { minX, maxX, minZ, maxZ, cx: (minX + maxX) / 2, cz: (minZ + maxZ) / 2 }
+}
+
+export function formatLapTime(seconds: number | null | undefined): string {
+  if (seconds === null || seconds === undefined || !Number.isFinite(seconds)) return '—'
+  const m = Math.floor(seconds / 60)
+  const s = seconds - m * 60
+  return `${m}:${s.toFixed(3).padStart(6, '0')}`
+}

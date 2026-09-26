@@ -7,6 +7,8 @@ from app.placeholder_sim import (
     DemoVehicleState,
     next_hazard_zone,
     sector_at,
+    initial_state,
+    loop_size,
     signed_clearance,
     required_warning_distance,
     step,
@@ -19,6 +21,8 @@ def test_tracks_are_closed_loops_with_sectors_and_hazards():
     for profile in TRACK_PRESETS.values():
         assert len(profile.centerline) >= 10
         assert profile.centerline[0] == profile.centerline[-1] == (0.0, 0.0)
+        gaps = [math.dist(a, b) for a, b in zip(profile.centerline, profile.centerline[1:])]
+        assert max(gaps) - min(gaps) < 0.08  # even along the curve (chords shrink ~1% in hairpins)
         assert len(profile.left_edge) == len(profile.centerline)
         assert len(profile.right_edge) == len(profile.centerline)
         assert len(profile.sectors) == 3
@@ -32,7 +36,7 @@ def test_narrow_hazard_zone_reduces_track_width():
     profile = TRACK_PRESETS["baku"]
     narrow = next(hz for hz in profile.hazard_zones if hz.kind == "narrow")
     mid_distance = (narrow.start_distance + narrow.end_distance) / 2
-    idx = min(range(len(profile.centerline)), key=lambda i: abs(_distance_at(profile, i) - mid_distance))
+    idx = round(mid_distance / (profile.total_length / loop_size(profile.centerline)))
     half_width_here = math.hypot(
         profile.left_edge[idx][0] - profile.centerline[idx][0],
         profile.left_edge[idx][1] - profile.centerline[idx][1],
@@ -123,25 +127,38 @@ def test_zero_control_does_not_turn():
     assert next_state.heading == state.heading
 
 
-def test_frozen_state_does_not_advance_once_lap_complete():
+def test_leaving_the_track_is_recorded_but_does_not_freeze_the_car():
     profile = TRACK_PRESETS["monza"]
-    state = DemoVehicleState(lap_complete=True, x=5.0)
-    next_state = step(state, steering=1.0, throttle=1.0, brake=0.0, dt=0.1, profile=profile)
-    assert next_state == state
+    start = initial_state(profile)
+    # shove the car well off to the side of the start straight, moving fast
+    off = DemoVehicleState(
+        x=start.x - math.sin(start.heading) * 20,
+        y=start.y + math.cos(start.heading) * 20,
+        heading=start.heading,
+        speed=60.0,
+    )
+    after = step(off, 0.0, 0.0, 0.0, 0.1, profile)
+    assert after.off_track and after.track_exit and after.track_exits == 1
+    assert after.speed > 0 and (after.x, after.y) != (off.x, off.y)  # still moving
+    # runoff scrubs speed much faster than on-track coasting
+    on = step(start.__class__(**{**start.__dict__, "speed": 60.0}), 0.0, 0.0, 0.0, 0.1, profile)
+    later = after
+    for _ in range(10):
+        later = step(later, 0.0, 0.0, 0.0, 0.1, profile)
+    assert later.speed < on.speed - 10
 
-
-def test_frozen_state_does_not_advance_once_off_track():
+def test_track_exit_is_sticky_and_exits_are_counted_once_per_excursion():
     profile = TRACK_PRESETS["monza"]
-    state = DemoVehicleState(track_exit=True, x=5.0)
-    next_state = step(state, steering=1.0, throttle=1.0, brake=0.0, dt=0.1, profile=profile)
-    assert next_state == state
-
+    state = DemoVehicleState(off_track=True, track_exit=True, track_exits=1, speed=10.0,
+                             x=0.0, y=30.0, heading=initial_state(profile).heading)
+    nxt = step(state, 0.0, 0.0, 0.0, 0.05, profile)
+    assert nxt.track_exit and nxt.track_exits == 1  # still the same excursion
 
 def test_driving_straight_through_a_curving_corner_eventually_exits():
     # No steering input ever, so the car can't follow the corner's curve —
     # it should drift off the track rather than reach the finish.
     profile = TRACK_PRESETS["baku"]
-    state = DemoVehicleState()
+    state = initial_state(profile)
     for _ in range(2000):
         state = step(state, steering=0.0, throttle=1.0, brake=0.0, dt=0.05, profile=profile)
         if state.lap_complete or state.track_exit:
@@ -172,50 +189,55 @@ def _wrap_angle(angle: float) -> float:
     return (angle + math.pi) % (2 * math.pi) - math.pi
 
 
-def test_lookahead_steering_can_complete_a_full_lap_at_a_safe_speed():
-    # A generic pure-pursuit controller holding a speed below every corner's
-    # limit: proves geometry and integrator agree well enough for a sensible
-    # policy to finish a full lap on both presets.
-    for profile in TRACK_PRESETS.values():
-        state = DemoVehicleState()
-        for _ in range(20000):
-            target = _lookahead_point(state.x, state.y, profile.centerline, lookahead=6.0)
-            desired_heading = math.atan2(target[1] - state.y, target[0] - state.x)
-            heading_error = _wrap_angle(desired_heading - state.heading)
-            steering = max(-1.0, min(1.0, heading_error * 2.0))
-            throttle = 0.6 if state.speed < 12.0 else 0.0
-            state = step(state, steering=steering, throttle=throttle, brake=0.0, dt=0.05, profile=profile)
-            if state.lap_complete or state.track_exit:
-                break
-        assert state.lap_complete, f"{profile.id} did not complete a lap: {state}"
-        assert not state.track_exit
+def _pure_pursuit(state, profile, lookahead_m=10.0):
+    n = loop_size(profile.centerline)
+    ahead = max(1, math.ceil(lookahead_m / (profile.total_length / n)))
+    tx, ty = profile.centerline[(state.nearest_point_index + ahead) % n]
+    dx, dy = tx - state.x, ty - state.y
+    alpha = _wrap_angle(math.atan2(dy, dx) - state.heading)
+    wanted = 2 * math.sin(alpha) / max(math.hypot(dx, dy), 1.0)
+    from app.placeholder_sim import G_LAT, MAX_CURVATURE
+    capacity = min(MAX_CURVATURE, G_LAT / max(state.speed**2, 1.0))
+    return max(-1.0, min(1.0, wanted / capacity))
 
+
+def test_pure_pursuit_at_a_safe_speed_completes_clean_laps_and_times_them():
+    # Geometry and integrator agree well enough for a sensible policy to lap
+    # both real layouts, and laps keep counting with lap times recorded.
+    for profile in TRACK_PRESETS.values():
+        state = initial_state(profile)
+        for _ in range(40000):
+            throttle = 0.6 if state.speed < 15.0 else 0.0
+            state = step(state, _pure_pursuit(state, profile), throttle, 0.0, 0.05, profile)
+            if state.laps_completed >= 2 or state.track_exit:
+                break
+        assert not state.track_exit, f"{profile.id}: left the track at {state.distance_along_lap:.0f} m"
+        assert state.laps_completed == 2 and state.lap_complete
+        assert state.last_lap_time and state.best_lap_time
+        assert abs(state.last_lap_time - profile.total_length / 15.0) < 0.25 * profile.total_length / 15.0
 
 def test_corner_speed_limit_is_real():
-    # Same steering and path, but flat out at a hazard corner: it can't be taken.
+    # Same path-following, but carrying far too much speed into the tightest
+    # corner: the car cannot make it; at a safe speed it can.
     profile = TRACK_PRESETS["baku"]
-    turn1 = next(h for h in profile.hazard_zones if h.id == "turn1")
+    corner = min(profile.hazard_zones, key=lambda h: h.corner_speed)
+    n = loop_size(profile.centerline)
+    step_m = profile.total_length / n
 
     def drive_through(speed: float) -> DemoVehicleState:
-        state = DemoVehicleState(
-            x=turn1.start_distance - 20,
-            speed=speed,
-            nearest_point_index=int((turn1.start_distance - 20) / 4),
-            distance_along_lap=turn1.start_distance - 20,
-        )
-        for _ in range(200):
-            target = _lookahead_point(state.x, state.y, profile.centerline, lookahead=6.0)
-            err = _wrap_angle(math.atan2(target[1] - state.y, target[0] - state.x) - state.heading)
-            hold = speed if speed < 25 else 40
-            throttle = 0.5 if state.speed < hold else 0.0
-            state = step(state, max(-1, min(1, err * 2)), throttle, 0.0, 0.05, profile)
-            if state.track_exit or state.distance_along_lap > turn1.end_distance + 15:
+        i0 = round((corner.start_distance - 60) / step_m) % n
+        (x0, y0), (x1, y1) = profile.centerline[i0], profile.centerline[(i0 + 1) % n]
+        state = DemoVehicleState(x=x0, y=y0, heading=math.atan2(y1 - y0, x1 - x0), speed=speed,
+                                 nearest_point_index=i0, distance_along_lap=i0 * step_m)
+        for _ in range(400):
+            state = step(state, _pure_pursuit(state, profile, 5 + 0.25 * state.speed),
+                         0.3 if state.speed < speed else 0.0, 0.0, 0.05, profile)
+            if state.track_exit or state.distance_along_lap > corner.end_distance + 30:
                 break
         return state
 
-    assert not drive_through(turn1.corner_speed * 0.9).track_exit
-    assert drive_through(38.0).track_exit
-
+    assert not drive_through(corner.corner_speed * 0.85).track_exit
+    assert drive_through(min(85.0, corner.corner_speed * 2.5)).track_exit
 
 def test_grip_loss_lowers_the_speed_a_corner_can_be_taken_at():
     profile = TRACK_PRESETS["baku"]
@@ -223,6 +245,42 @@ def test_grip_loss_lowers_the_speed_a_corner_can_be_taken_at():
     full = step(state, 1.0, 0.0, 0.0, 0.05, profile, grip=1.0)
     wet = step(state, 1.0, 0.0, 0.0, 0.05, profile, grip=0.65)
     assert abs(wet.heading) < abs(full.heading)
+
+
+def test_full_braking_reduces_cornering_grip():
+    profile = TRACK_PRESETS["monza"]
+    state = DemoVehicleState(speed=40.0)
+    coasting = step(state, 1.0, 0.0, 0.0, 0.05, profile)
+    braking = step(state, 1.0, 0.0, 1.0, 0.05, profile)
+    assert abs(braking.heading) < abs(coasting.heading)
+
+
+def test_grip_loss_also_limits_braking():
+    profile = TRACK_PRESETS["monza"]
+    state = DemoVehicleState(speed=60.0)
+    dry = step(state, 0.0, 0.0, 1.0, 0.1, profile, grip=1.0)
+    wet = step(state, 0.0, 0.0, 1.0, 0.1, profile, grip=0.65)
+    assert wet.speed > dry.speed
+
+
+def test_start_state_sits_on_the_line_pointing_down_the_track():
+    for profile in TRACK_PRESETS.values():
+        s0 = initial_state(profile)
+        (x0, y0), (x1, y1) = profile.centerline[0], profile.centerline[1]
+        assert (s0.x, s0.y) == profile.start_finish
+        assert abs(_wrap_angle(s0.heading - math.atan2(y1 - y0, x1 - x0))) < 1e-9
+        assert signed_clearance(s0.x, s0.y, profile) > 0
+
+
+def test_real_layout_lengths_and_named_corners():
+    assert TRACK_PRESETS["baku"].total_length == pytest.approx(6003)
+    assert TRACK_PRESETS["monza"].total_length == pytest.approx(5793)
+    labels = " ".join(h.label for h in TRACK_PRESETS["monza"].hazard_zones)
+    for corner in ("Rettifilo", "Roggia", "Lesmo", "Ascari", "Parabolica"):
+        assert corner in labels
+    baku = TRACK_PRESETS["baku"]
+    castle = next(h for h in baku.hazard_zones if h.kind == "narrow")
+    assert "Turn 8" in castle.label
 
 
 def test_brake_wear_reduces_deceleration():

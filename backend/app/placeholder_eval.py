@@ -22,9 +22,12 @@ from dataclasses import dataclass
 
 from app.budget import enumerate_configs
 from app.placeholder_sim import (
-    SAMPLE_STEP,
+    G_LAT,
+    MAX_CURVATURE,
     TRACK_PRESETS,
     DemoVehicleState,
+    initial_state,
+    loop_size,
 )
 from app.schemas import (
     Acceptance,
@@ -44,7 +47,7 @@ from app.schemas import (
 )
 from app.session_state import TICK_DT, Session
 
-SUITE_VERSION = "suite-v2"
+SUITE_VERSION = "suite-v3"
 ACCEPTANCE = Acceptance(max_track_exits=0, min_clearance_m=0.5, require_lap_complete=True)
 MAX_TICKS = 6000  # 300 s at 20 Hz — a lap that takes longer counts as not completed
 HOLD_AFTER_M = 25.0
@@ -77,7 +80,7 @@ def _test(
         faults=faults,
         onset_distance=round(window[0] * profile.total_length, 1),
         end_distance=round(window[1] * profile.total_length, 1),
-        cruise_speed=round(rng.uniform(34.0, 38.0), 1),
+        cruise_speed=round(rng.uniform(80.0, 88.0), 1),
         reaction_s=round(rng.uniform(0.25, 0.40), 2),
         lateral_offset=round(rng.uniform(-0.25, 0.25) * profile.track_width / 2, 3),
     )
@@ -143,7 +146,8 @@ class ScriptedDriver:
 
     def __init__(self, profile, cruise: float, reaction_s: float) -> None:
         self.centerline = profile.centerline
-        self.n = len(self.centerline)
+        self.n = loop_size(self.centerline)
+        self.step = profile.total_length / self.n
         self.hazards = {h.id: h for h in profile.hazard_zones}
         self.cruise = cruise
         self.reaction_s = reaction_s
@@ -169,12 +173,16 @@ class ScriptedDriver:
 
         target = self.advised * TARGET_MARGIN if self.latched else self.cruise
 
-        lookahead_points = max(1, math.ceil((6.0 + 0.15 * vehicle.speed) / SAMPLE_STEP))
-        tx, ty = self.centerline[(vehicle.nearest_point_index + lookahead_points) % self.n]
-        error = (math.atan2(ty - vehicle.y, tx - vehicle.x) - vehicle.heading + math.pi) % (
-            2 * math.pi
-        ) - math.pi
-        steering = max(-1.0, min(1.0, error * 2.0))
+        # Pure pursuit: steer along the arc that reaches a point ~0.25 s ahead
+        # on the centerline, as a fraction of what nominal grip allows.
+        lookahead_m = 5.0 + 0.25 * vehicle.speed
+        ahead = max(1, math.ceil(lookahead_m / self.step))
+        tx, ty = self.centerline[(vehicle.nearest_point_index + ahead) % self.n]
+        dx, dy = tx - vehicle.x, ty - vehicle.y
+        alpha = (math.atan2(dy, dx) - vehicle.heading + math.pi) % (2 * math.pi) - math.pi
+        wanted_curvature = 2 * math.sin(alpha) / max(math.hypot(dx, dy), 1.0)
+        capacity = min(MAX_CURVATURE, G_LAT / max(vehicle.speed**2, 1.0))
+        steering = max(-1.0, min(1.0, wanted_curvature / capacity))
 
         speed_error = target - vehicle.speed
         if speed_error < -0.3:
@@ -212,7 +220,7 @@ def run_test(test: SuiteTestInfo, upgrades: UpgradeConfig, record: bool = False)
         upgrades=upgrades,
         scenario=scenario,
     )
-    session.vehicle = DemoVehicleState(y=test.lateral_offset)
+    session.vehicle = initial_state(profile, test.lateral_offset)
     driver = ScriptedDriver(profile, test.cruise_speed, test.reaction_s)
 
     min_clearance = math.inf

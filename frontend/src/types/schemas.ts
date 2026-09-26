@@ -100,6 +100,13 @@ export interface VehicleStateMessage {
   warning_reason: string | null
   track_exit: boolean
   lap_complete: boolean
+  off_track: boolean
+  track_exits: number
+  lap: number
+  laps_completed: number
+  lap_time_s: number
+  last_lap_s: number | null
+  best_lap_s: number | null
 }
 
 export interface FaultState {

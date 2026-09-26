@@ -1,3 +1,5 @@
+import math
+
 import json
 
 from app.placeholder_sim import TRACK_PRESETS, DemoVehicleState
@@ -149,12 +151,20 @@ def test_fault_state_is_only_emitted_on_change():
 
 
 def approach_session(delay_ms: float) -> Session:
-    session = make_session("baku")  # turn1 hazard starts at 250m
+    """Baku, 250 m before the first braking corner, at 80 m/s."""
+    session = make_session("baku")
+    profile = session.track_profile
+    hazard = profile.hazard_zones[0]
+    n = len(profile.centerline) - 1
+    step_m = profile.total_length / n
+    i0 = round((hazard.start_distance - 250) / step_m)
+    (x0, y0), (x1, y1) = profile.centerline[i0], profile.centerline[i0 + 1]
     session.manual_faults = FaultState(telemetry_delay_ms=delay_ms)
     session.vehicle = DemoVehicleState(
-        x=190.0, y=0.0, speed=30.0, nearest_point_index=47, distance_along_lap=188.0
+        x=x0, y=y0, heading=math.atan2(y1 - y0, x1 - x0), speed=80.0,
+        nearest_point_index=i0, distance_along_lap=i0 * step_m,
     )
-    session.control["throttle"] = 0.3
+    session.control["throttle"] = 0.6
     return session
 
 
@@ -168,9 +178,11 @@ def first_warning_tick(session: Session) -> tuple[int, dict]:
 
 def test_warning_event_has_reason_zone_and_sequence():
     tick, event = first_warning_tick(approach_session(0))
+    first_hazard = TRACK_PRESETS["baku"].hazard_zones[0]
     assert event["seq"] == 1
-    assert event["hazard_id"] == "turn1"
-    assert "Turn 1" in event["reason"]
+    assert event["hazard_id"] == first_hazard.id
+    assert first_hazard.label in event["reason"]
+    assert 0 < event["advised_speed"] < 80
 
 
 def test_injected_delay_makes_the_warning_arrive_late():

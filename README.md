@@ -1,7 +1,7 @@
 # LimitLab — test the limit, fund the fix
 
-A motorsport safety-testing prototype. A driver drives a simplified full lap
-(Monza or Baku, procedural low-poly), an engineer injects bounded faults into
+A motorsport safety-testing prototype. A driver drives full laps of
+Monza or Baku (real layouts, simplified, low-poly 3D), an engineer injects bounded faults into
 a corner-entry **BRAKE warning system** from a second device, and a budget
 screen helps a fictional small team decide which upgrade to fund — by
 re-running the same fixed test suite and checking what the season budget can
@@ -58,8 +58,8 @@ Keyboard fallback: **W / ↑** throttle, **S / ↓ / Space** brake, **A / ←** 
 ## Tests
 
 ```bash
-cd backend  && source venv/bin/activate && python -m pytest      # 83 tests
-cd frontend && npm test                                          # 46 unit tests
+cd backend  && source venv/bin/activate && python -m pytest      # 87 tests
+cd frontend && npm test                                          # 52 unit tests
 cd frontend && npm run e2e                                       # 23 real-Chrome checks (25 with E2E_OUTAGE=1)
 ```
 

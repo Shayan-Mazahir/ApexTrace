@@ -178,4 +178,4 @@ def test_reconnecting_driver_resumes_the_same_session():
         assert info["type"] == "session_info" and info["run_id"] == created["run_id"]
         resumed = recv_until(ws, "vehicle_state")
         assert resumed["seq"] >= first["seq"]
-        assert resumed["x"] >= first["x"]
+        assert resumed["distance_along_lap"] >= first["distance_along_lap"]

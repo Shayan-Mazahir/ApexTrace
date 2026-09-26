@@ -12,6 +12,7 @@ from pydantic import ValidationError
 from app.budget import local_fallback_age_ms, persistent_brake_wear, warning_delay_scale
 from app.placeholder_sim import (
     DemoVehicleState,
+    initial_state,
     distance_to_hazard,
     next_hazard_zone,
     sector_at,
@@ -55,7 +56,7 @@ class Session:
     seed: int = 1
     upgrades: UpgradeConfig = field(default_factory=UpgradeConfig)
     run_id: str = field(default_factory=new_run_id)
-    vehicle: DemoVehicleState = field(default_factory=DemoVehicleState)
+    vehicle: DemoVehicleState | None = None  # None -> on the start line
     control: dict[str, float] = field(
         default_factory=lambda: {"steering": 0.0, "throttle": 0.0, "brake": 0.0}
     )
@@ -76,6 +77,10 @@ class Session:
     warning_hazard_id: str | None = None
     fault_signature: tuple | None = None
     loop_task: Any = None
+
+    def __post_init__(self) -> None:
+        if self.vehicle is None:
+            self.vehicle = initial_state(self.track_profile)
 
     def touch(self, now: float | None = None) -> None:
         self.last_active = time.monotonic() if now is None else now
@@ -127,7 +132,7 @@ class Session:
         self.outbox.append(self.session_info())
 
     def reset_run(self) -> None:
-        self.vehicle = DemoVehicleState()
+        self.vehicle = initial_state(self.track_profile)
         self.running = True
         self.run_id = new_run_id()
         self.history.clear()
@@ -281,6 +286,13 @@ class Session:
             "warning_reason": warning_reason(delayed_distance, profile, delayed_speed, grip_estimate),
             "track_exit": vehicle.track_exit,
             "lap_complete": vehicle.lap_complete,
+            "off_track": vehicle.off_track,
+            "track_exits": vehicle.track_exits,
+            "lap": vehicle.laps_completed + 1,
+            "laps_completed": vehicle.laps_completed,
+            "lap_time_s": vehicle.lap_time,
+            "last_lap_s": vehicle.last_lap_time,
+            "best_lap_s": vehicle.best_lap_time,
         }
 
 

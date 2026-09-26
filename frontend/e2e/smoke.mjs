@@ -136,6 +136,10 @@ async function assertRendered(page, selector, label) {
   if (colours < MIN_COLOURS) throw new Error(`${label} looks blank (${colours} distinct colours)`)
 }
 
+const waitConnected = (page, timeout = 15000) =>
+  page.waitForSelector('.drive-screen[data-connection="connected"] .drive-screen__brand', { timeout })
+const sessionCode = (page) => page.$eval('.drive-screen__brand code', (e) => e.textContent)
+
 const shot = (page, name) => page.screenshot({ path: path.join(SHOTS, `${name}.png`) })
 
 const browser = await puppeteer.launch({
@@ -284,17 +288,17 @@ try {
   let sessionId = ''
 
   await step('drive: start creates a session and streams telemetry', async () => {
-    await clickButton(drive, 'Start', { exact: true })
-    await waitText(drive, 'Session connected')
-    sessionId = await drive.$eval('.drive-screen__session-id strong', (e) => e.textContent)
+    await clickButton(drive, 'Start session')
+    await waitConnected(drive)
+    sessionId = await sessionCode(drive)
     assert(/^[0-9a-f]{8}$/.test(sessionId), `session id "${sessionId}"`)
     await drive.keyboard.down('w')
     await sleep(2500)
-    const speed = await drive.$eval('.drive-hud__speed', (e) => parseFloat(e.textContent))
+    const speed = await drive.$eval('.f1-hud__speed strong', (e) => parseFloat(e.textContent))
     await drive.keyboard.up('w')
-    assert(speed > 2, `speed after holding W: ${speed}`)
-    const hud = await drive.$eval('.drive-hud', (e) => e.innerText)
-    assert(hud.includes('Lap') && hud.includes('Sector') && hud.includes('Next hazard'), `hud: ${hud}`)
+    assert(speed > 7, `speed (km/h) after holding W: ${speed}`)
+    const hud = await drive.$eval('.f1-hud', (e) => e.innerText)
+    assert(/lap/i.test(hud) && /S1/.test(hud) && /Next/.test(hud) && /km\/h/.test(hud), `hud: ${hud}`)
   })
 
   await step('drive: renders track, HUD and controls (screenshot)', async () => {
@@ -312,7 +316,7 @@ try {
     await waitText(engineer, sessionId)
     const info = await engineer.$eval('.run-info', (e) => e.innerText)
     assert(/Seed/.test(info) && /Run ID/.test(info), `run info: ${info}`)
-    await waitText(drive, 'Engineer station connected')
+    await waitText(drive, 'Engineer connected')
   })
 
   await step('engineer: injected delay reaches the driver and is labelled simulated', async () => {
@@ -343,16 +347,16 @@ try {
 
   await step('drive: shows engineer disconnected after the engineer leaves', async () => {
     await engineer.close()
-    await waitText(drive, 'Engineer station disconnected', 8000)
+    await waitText(drive, 'Engineer disconnected', 8000)
   })
 
   await step('recovery: a dropped socket resumes the same session (server stayed up)', async () => {
-    const runBefore = await drive.$eval('.drive-screen__session-id', (e) => e.textContent)
+    const runBefore = await sessionCode(drive)
     const before = await drive.evaluate(() => window.__sockets.length)
     await drive.evaluate(() => window.__sockets.at(-1).close())
     await drive.waitForFunction((n) => window.__sockets.length > n && window.__sockets.at(-1).readyState === 1, { timeout: 10000, polling: 250 }, before)
-    await waitText(drive, 'Session connected')
-    const runAfter = await drive.$eval('.drive-screen__session-id', (e) => e.textContent)
+    await waitConnected(drive)
+    const runAfter = await sessionCode(drive)
     assert(runBefore.includes(sessionId) && runAfter.includes(sessionId), 'session id changed across the reconnect')
     // telemetry flows again on the new socket
     const seen = await drive.evaluate(() => new Promise((resolve) => {
@@ -370,10 +374,10 @@ try {
 
   await step('baku: a second track loads and drives through the same simulator', async () => {
     await clickButton(drive, 'End session')
-    await clickButton(drive, 'Baku', { exact: true })
-    await clickButton(drive, 'Start', { exact: true })
-    await waitText(drive, 'Session connected')
-    bakuSession = await drive.$eval('.drive-screen__session-id strong', (e) => e.textContent)
+    await clickButton(drive, 'Baku City Circuit')
+    await clickButton(drive, 'Start session')
+    await waitConnected(drive)
+    bakuSession = await sessionCode(drive)
     assert(bakuSession !== sessionId, 'expected a new session id')
     await drive.keyboard.down('w')
     await sleep(2000)
@@ -413,7 +417,8 @@ try {
       execSync('lsof -ti tcp:8000 -sTCP:LISTEN | xargs kill -9')
       await waitText(drive, 'Reconnecting', 10000)
       restartBackend()
-      await waitText(drive, 'Session ended', 20000) // in-memory sessions don't survive a restart
+      await waitText(drive, 'Session lost', 20000) // in-memory sessions don't survive a restart
+      await waitText(drive, 'Choose your circuit') // and Start is offered again
     })
 
     await step('recovery: with the backend down, Compare still plays the backup recording', async () => {
@@ -469,7 +474,7 @@ try {
       await sleep(400)
       assert((await location()) === expected[i][1], `${expected[i][0]} landed on ${await location()}`)
       if (i === 1) {
-        await waitText(demo, 'Session connected', 15000)
+        await waitConnected(demo)
         await sleep(3000) // hidden engineer joins and launches the saved scenario
         assert(demoFrames.some((f) => f.includes('"scenario_id":"monza_high_speed_braking"')), 'demo engineer never launched the scenario')
       }

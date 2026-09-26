@@ -122,6 +122,13 @@ class VehicleStateMessage(BaseModel):
     warning_reason: str | None
     track_exit: bool
     lap_complete: bool
+    off_track: bool
+    track_exits: int
+    lap: int
+    laps_completed: int
+    lap_time_s: float
+    last_lap_s: float | None
+    best_lap_s: float | None
 
 
 class FaultState(BaseModel):
