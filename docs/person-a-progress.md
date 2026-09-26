@@ -70,6 +70,22 @@ side by side:
   metrics were re-run with `python -m app.ml.evaluate_tcn` (PR-AUC 0.906 ->
   0.905; clearance MAE 0.315 -> 0.402 m because castle clearances are now true).
 
+## 2026 car physics and driver features (on `version1`)
+
+- `backend/app/f1_car.py`: dynamic bicycle model (tyre slip, friction circle,
+  speed-dependent aero with Z/X active aero, load transfer, 400 kW ICE + 8-speed
+  gearbox, 350 kW MGU-K with 290-355 km/h fade, 4 MJ battery). 0-100 km/h ~2.6 s,
+  top speed ~325 (343 with X-mode).
+- Car setup: traction control, ABS, auto/manual gearbox, DRS mode, battery mode;
+  reverse gear; shift/DRS/reverse/battery buttons sent as running press totals.
+- Lap validity uses the whole-car track-limit rule; session best lap survives resets.
+- Simulator-style dash, input telemetry overlay, 2026 car model.
+- Person B's scripted driver steers/feeds throttle through the car model; the
+  fade+stale preset was recalibrated (brake effectiveness 0.7 -> 0.9).
+- Person B's TCN observer retrained on the new physics (`python -m app.ml.dataset`
+  then `python -m app.ml.train_tcn`): held-out suite PR-AUC 0.955 (0.51 on the
+  old weights), test PR-AUC 0.939. Person B's SAC adversary was not retrained.
+
 ## Status: all Section 4 steps done
 
 | Step | State | Evidence |
