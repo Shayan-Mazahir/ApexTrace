@@ -1,10 +1,11 @@
 # LimitLab
 
 Motorsport safety-testing prototype: a driver runs a wheel/keyboard-controlled
-car through a simplified corner while an engineer injects bounded faults into
+car around a simplified lap while an engineer injects bounded faults into
 a corner-entry warning system. See [ARCHITECTURE.md](ARCHITECTURE.md) for the
 system split and the simulator/AI design.
 
+Each scenario is one flying lap of a simplified Monza or Baku layout.
 Current state: the backend simulator, fault injection, safety warning system,
 automated test runner, replays, upgrade comparison, TCN failure forecaster and
 SAC scenario adversary are implemented and exposed over HTTP/WebSocket. The
@@ -68,7 +69,8 @@ pytest
 # end-to-end walkthrough: baseline vs upgrades, replays, AI search -> simulator
 python scripts/demo.py
 
-# 1. generate simulator-labelled training data and a held-out set (different seed)
+# 1. generate simulator-labelled training data and a held-out set (different seed);
+#    5000 laps take ~4 minutes on 8 cores
 python scripts/generate_data.py --num-runs 5000 --seed 42 --output data/training.json
 python scripts/generate_data.py --num-runs 1500 --seed 7  --output data/test.json
 
@@ -76,7 +78,7 @@ python scripts/generate_data.py --num-runs 1500 --seed 7  --output data/test.jso
 python scripts/train_tcn.py --data data/training.json --output models/tcn
 python scripts/evaluate_tcn.py --model models/tcn --data data/test.json
 
-# 3. train the SAC scenario adversary (every step is a real simulator run)
+# 3. train the SAC scenario adversary (every step is a real simulator lap)
 python scripts/train_sac.py --steps 3072 --output models/sac
 
 # 4. AI-selected vs random testing under the same simulation budget

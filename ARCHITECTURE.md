@@ -47,37 +47,50 @@ Layers: `api/` -> `services/` -> `sim/simulator.py` -> vehicle / safety / faults
 
 | Module | Role |
 | --- | --- |
-| `track.py` | Straight -> constant-radius corner -> straight, sampled every 0.5 m. `get_curvature`, `is_inside_track`, `distance_to_boundary`, `get_current_corner`, braking zones. |
+| `track.py` | Closed lap of straights and constant-radius arcs, sampled every ~0.5 m; two designated straights are solved so the loop closes exactly. `get_curvature`, `is_inside_track`, `distance_to_boundary`, `get_current_corner`, `next_corner`, `corners_ahead`, per-section width, braking zones, radio-shadow zones. `s` wraps at the lap length. |
 | `vehicle.py` | Point mass with a friction circle: total accel <= grip x 24 m/s^2. Steering commands path curvature; demand beyond remaining grip makes the car run wide. Brakes scale with `brake_effectiveness`. |
-| `safety.py` | The prototype under test. Uses measured speed/position and *estimated* grip to output SAFE / CAUTION / BRAKE_NOW plus an advised corner speed. Assumes nominal brakes and does not compensate for telemetry age (deliberate blind spots). |
+| `safety.py` | The prototype under test. Uses measured speed/position and *estimated* grip to check the current corner and every corner starting within 1 km, and outputs the most urgent SAFE / CAUTION / BRAKE_NOW with the corner name and advised speed (ties go to the tighter corner, e.g. the second half of a chicane). Assumes nominal brakes and does not compensate for telemetry age (deliberate blind spots). |
 | `faults.py` | Telemetry delay buffer (simulated time, no sleeping), bounded Gaussian sensor noise, Gilbert-Elliott burst packet loss. Each fault has its own seeded RNG stream. |
-| `driver.py` | Scripted test driver: holds entry speed, brakes to the advised speed only after perceiving BRAKE_NOW (reaction delay), follows the centerline. Not a model of human behaviour. |
-| `simulator.py` | 100 Hz loop; `step(control)` accepts external input (wheel) or uses the scripted driver. Records `VehicleState` frames. |
+| `driver.py` | Scripted test driver: full throttle on straights; brakes to a corner's advised speed only after perceiving BRAKE_NOW for it (reaction delay); holds entry speed through corners it got no warning for; carries speed through linked corners (<60 m apart, i.e. chicanes); trail-brakes within the friction circle it feels. Not a model of human behaviour. |
+| `simulator.py` | 100 Hz loop over one flying lap (starts at the line at `entry_speed`); `step(control)` accepts external input (wheel) or uses the scripted driver. Records `VehicleState` frames, per-corner entry/warning data, lap progress and lap time. |
 | `runner.py` | `run_scenario`, `run_batch` (process pool). Same scenario + seed -> identical result. |
 | `upgrades.py` | Configurations that change simulator inputs, then re-run. |
 | `replay.py` | Replay = track geometry + frames + events + result; save/load JSON. |
 | `evaluation.py` | `evaluate_configuration`, `compare_configurations` on an identical scenario set. |
 | `scenario_space.py` | Shared parameter bounds for data generation and every search strategy. |
 
-Tracks (simplified test environments, not real circuit layouts):
+Tracks are full closed laps that follow the real circuits' corner sequence
+(names, directions, rough radii) but are simplified test environments, not
+accurate reproductions:
 
-- **monza**: 12 m wide, 450 m approach, R60 right-hander (curvature 1/90..1/40). High-speed approach and heavy braking.
-- **baku**: 8 m wide, 250 m approach, R25 left-hander (1/40..1/18), plus a radio-shadow zone (s 120-250 m) where packet loss is tripled. Narrow, lower speed, staleness testing.
+- **monza** (clockwise, ~4.4 km, 12 m, 11 corners): main straight -> Rettifilo
+  chicane (T1/T2) -> Curva Grande -> Roggia chicane -> Lesmo 1/2 -> Ascari
+  (T8-T10) -> back straight -> Parabolica. High speed, heavy braking into chicanes.
+  A healthy car laps in ~82 s simulated time.
+- **baku** (anticlockwise, ~4.3 km, 10 m, 13 corners): 90-degree city corners
+  T1-T6, the castle section T8-T12 narrowed to 7.5 m and inside a radio-shadow
+  zone (packet loss x3), then the long flat-out seafront run back to the line.
+  A healthy car laps in ~103 s.
 
 ### Scenario
 
-`Scenario` in `schemas.py`: `scenario_id, seed, track, entry_speed (m/s), actual_grip,
-estimated_grip, corner_curvature (1/m or null = track default), telemetry_delay_ms,
-sensor_noise (0..1), packet_loss (0..0.9), driver_reaction_delay (s), warning_margin
-(fractional extra braking distance), brake_effectiveness (1.0 = baseline)`.
+`Scenario` in `schemas.py` is one flying lap: `scenario_id, seed, track, entry_speed
+(m/s at the start line), actual_grip, estimated_grip, telemetry_delay_ms, sensor_noise
+(0..1), packet_loss (0..0.9), driver_reaction_delay (s), warning_margin (fractional
+extra braking distance), brake_effectiveness (1.0 = baseline)`. Faults apply for the
+whole lap.
 
 ### Failure definition
 
-A run fails when the car's centre crosses a track edge (`boundary_distance < 0`).
-The result also reports `minimum_boundary_distance`, `overspeed_at_entry`,
-`warning_lead_time`, `warning_too_late` (the first BRAKE_NOW came too late for
-full braking with the car's *actual* brakes/grip/reaction to reach the true
-safe speed) and `stale_telemetry_fraction`. Counts are reported as
+A lap fails when the car's centre crosses a track edge (`boundary_distance < 0`)
+anywhere; `failure_corner` names the corner being driven (or last exited).
+Otherwise the lap completes and reports `lap_time`. Per corner the result
+reports entry speed, the true safe speed, the advised speed, overspeed,
+warning lead time and `warning_too_late` (braking was needed but the first
+BRAKE_NOW for that corner came too late for full braking with the car's
+*actual* brakes/grip/reaction to reach the true safe speed). Lap-level:
+`minimum_boundary_distance`, `corners_with_late_warning`,
+`stale_telemetry_fraction`. Counts are reported as
 "stress-test failures", never as real-world probabilities.
 
 ### Fault system
@@ -102,18 +115,29 @@ safe speed) and `stale_telemetry_fraction`. Counts are reported as
 
 None of the upgrades addresses grip-estimation error, so grip-mismatch
 failures persist in every configuration (see `scenarios/monza_grip_mismatch.json`).
+Each preset in `scenarios/` fails at a specific corner in baseline and shows
+which upgrade (if any) fixes it.
+
+Random faults are drawn per simulator tick from the scenario seed, so every
+configuration sees the same fault sequence in time. When an upgrade changes
+the car's pace, a loss burst or noise spike can land at a different corner,
+so a few scenarios pass in baseline but fail after an upgrade.
+`ConfigurationComparison.new_failures_vs_baseline` lists these rather than
+hiding them.
 
 ## AI (backend/app/ai)
 
 `data -> model -> training -> inference -> scenario search -> selection`.
 
 - **Dataset** (`dataset.py`, `features.py`): scenarios sampled uniformly from
-  the scenario space and run in the simulator (baseline). Each record holds the
-  first 2 s of telemetry at 20 Hz (12 channels the monitoring side can see)
-  plus the scenario parameters as constant channels, and the simulator's
-  ground-truth `failed` label for the full run.
-- **TCN** (`tcn.py`, `training.py`, `inference.py`): 4 residual blocks of
-  dilated causal convolutions (32 channels), logit from the last step. Output
+  the scenario space and run in the simulator for a full lap (baseline). Each
+  record holds the first 12 s of the lap at 10 Hz (13 channels the monitoring
+  side can see, covering the first braking zones) plus the scenario parameters
+  as constant channels, and the simulator's ground-truth `failed` label for
+  the whole lap.
+- **TCN** (`tcn.py`, `training.py`, `inference.py`): 5 residual blocks of
+  dilated causal convolutions (32 channels, receptive field 125 steps), logit
+  from the last step. Output
   is the model's estimate that the *simulator* run will fail, with MC-dropout
   uncertainty. It never replaces a simulator run. Held-out metrics are in
   `backend/models/tcn/evaluation.json` (produced by `scripts/evaluate_tcn.py`).
@@ -129,7 +153,7 @@ failures persist in every configuration (see `scenarios/monza_grip_mismatch.json
 - **Fallback**: `make_strategy("sac")` returns TPE if no SAC checkpoint exists
   or it fails to load; random search needs nothing. The simulator does not
   depend on any trained model.
-- **Selection** (`selection.py`): candidates (adversarial + random) get a 2 s
+- **Selection** (`selection.py`): candidates (adversarial + random) get a 12 s
   prefix rollout, TCN probability + uncertainty, and novelty against tested
   scenarios. Near-duplicates are dropped, then the top k are run in the full
   simulator. Only the simulator declares failures.
@@ -144,7 +168,7 @@ failures persist in every configuration (see `scenarios/monza_grip_mismatch.json
 | Method | Path | Returns |
 | --- | --- | --- |
 | GET | `/health` | `HealthStatus` |
-| GET | `/tracks`, `/tracks/{name}?corner_curvature=` | `TrackGeometry` |
+| GET | `/tracks`, `/tracks/{name}` | `TrackGeometry` (closed lap: centerline, boundaries, corners, zones) |
 | GET | `/configurations` | `ConfigurationInfo[]` |
 | GET | `/scenario/presets` | `ScenarioPreset[]` (from `scenarios/`) |
 | POST | `/scenario/generate` | `Scenario[]` sampled from the bounded space |
