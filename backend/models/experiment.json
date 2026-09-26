@@ -1,0 +1,401 @@
+{
+  "setup": {
+    "budget_full_simulations": 50,
+    "seeds": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "configuration": "baseline",
+    "bounds": "app/sim/scenario_space.py DEFAULT_BOUNDS + track entry-speed/curvature ranges",
+    "mean_full_run_sim_seconds": 9.292016,
+    "note": "Offline training cost is not included in the budget: the TCN used its training-set simulations and SAC its training simulations (see models/*/training_metadata.json). Screening cost is the simulated prefix time for every TCN-screened candidate.",
+    "wall_seconds": 40.5
+  },
+  "summary": {
+    "random": {
+      "stress_test_failures": {
+        "mean": 9.0,
+        "std": 1.6733200530681511,
+        "min": 7,
+        "max": 12,
+        "runs_without_value": 0
+      },
+      "distinct_failure_conditions": {
+        "mean": 8.8,
+        "std": 1.7204650534085253,
+        "min": 7,
+        "max": 12,
+        "runs_without_value": 0
+      },
+      "tests_until_first_failure": {
+        "mean": 6.4,
+        "std": 5.535341001239219,
+        "min": 1,
+        "max": 16,
+        "runs_without_value": 0
+      },
+      "screening_full_sim_equivalents": 0.0
+    },
+    "tpe": {
+      "stress_test_failures": {
+        "mean": 22.4,
+        "std": 6.2801273872430325,
+        "min": 15,
+        "max": 32,
+        "runs_without_value": 0
+      },
+      "distinct_failure_conditions": {
+        "mean": 8.4,
+        "std": 2.4166091947189146,
+        "min": 5,
+        "max": 12,
+        "runs_without_value": 0
+      },
+      "tests_until_first_failure": {
+        "mean": 6.8,
+        "std": 3.249615361854384,
+        "min": 2,
+        "max": 12,
+        "runs_without_value": 0
+      },
+      "screening_full_sim_equivalents": 0.0
+    },
+    "sac": {
+      "stress_test_failures": {
+        "mean": 43.0,
+        "std": 2.6076809620810595,
+        "min": 38,
+        "max": 45,
+        "runs_without_value": 0
+      },
+      "distinct_failure_conditions": {
+        "mean": 30.2,
+        "std": 1.469693845669907,
+        "min": 29,
+        "max": 33,
+        "runs_without_value": 0
+      },
+      "tests_until_first_failure": {
+        "mean": 1.6,
+        "std": 0.8,
+        "min": 1,
+        "max": 3,
+        "runs_without_value": 0
+      },
+      "screening_full_sim_equivalents": 0.0
+    },
+    "sac+tcn_selection": {
+      "stress_test_failures": {
+        "mean": 46.6,
+        "std": 1.3564659966250536,
+        "min": 45,
+        "max": 48,
+        "runs_without_value": 0
+      },
+      "distinct_failure_conditions": {
+        "mean": 32.4,
+        "std": 2.0591260281974,
+        "min": 30,
+        "max": 36,
+        "runs_without_value": 0
+      },
+      "tests_until_first_failure": {
+        "mean": 1.0,
+        "std": 0.0,
+        "min": 1,
+        "max": 1,
+        "runs_without_value": 0
+      },
+      "screening_full_sim_equivalents": 43.047708914836136
+    },
+    "random+tcn_selection": {
+      "stress_test_failures": {
+        "mean": 32.2,
+        "std": 1.9390719429665315,
+        "min": 29,
+        "max": 34,
+        "runs_without_value": 0
+      },
+      "distinct_failure_conditions": {
+        "mean": 26.6,
+        "std": 2.4166091947189146,
+        "min": 22,
+        "max": 29,
+        "runs_without_value": 0
+      },
+      "tests_until_first_failure": {
+        "mean": 1.0,
+        "std": 0.0,
+        "min": 1,
+        "max": 1,
+        "runs_without_value": 0
+      },
+      "screening_full_sim_equivalents": 43.047708914836136
+    }
+  },
+  "runs": {
+    "random": [
+      {
+        "seed": 0,
+        "simulations": 50,
+        "stress_test_failures": 12,
+        "tests_until_first_failure": 1,
+        "distinct_failure_conditions": 12,
+        "screening_sim_seconds": 0.0,
+        "candidates_screened": 0,
+        "notes": []
+      },
+      {
+        "seed": 1,
+        "simulations": 50,
+        "stress_test_failures": 9,
+        "tests_until_first_failure": 16,
+        "distinct_failure_conditions": 9,
+        "screening_sim_seconds": 0.0,
+        "candidates_screened": 0,
+        "notes": []
+      },
+      {
+        "seed": 2,
+        "simulations": 50,
+        "stress_test_failures": 8,
+        "tests_until_first_failure": 9,
+        "distinct_failure_conditions": 8,
+        "screening_sim_seconds": 0.0,
+        "candidates_screened": 0,
+        "notes": []
+      },
+      {
+        "seed": 3,
+        "simulations": 50,
+        "stress_test_failures": 7,
+        "tests_until_first_failure": 2,
+        "distinct_failure_conditions": 7,
+        "screening_sim_seconds": 0.0,
+        "candidates_screened": 0,
+        "notes": []
+      },
+      {
+        "seed": 4,
+        "simulations": 50,
+        "stress_test_failures": 9,
+        "tests_until_first_failure": 4,
+        "distinct_failure_conditions": 8,
+        "screening_sim_seconds": 0.0,
+        "candidates_screened": 0,
+        "notes": []
+      }
+    ],
+    "tpe": [
+      {
+        "seed": 0,
+        "simulations": 50,
+        "stress_test_failures": 32,
+        "tests_until_first_failure": 6,
+        "distinct_failure_conditions": 12,
+        "screening_sim_seconds": 0.0,
+        "candidates_screened": 0,
+        "notes": []
+      },
+      {
+        "seed": 1,
+        "simulations": 50,
+        "stress_test_failures": 16,
+        "tests_until_first_failure": 8,
+        "distinct_failure_conditions": 5,
+        "screening_sim_seconds": 0.0,
+        "candidates_screened": 0,
+        "notes": []
+      },
+      {
+        "seed": 2,
+        "simulations": 50,
+        "stress_test_failures": 25,
+        "tests_until_first_failure": 2,
+        "distinct_failure_conditions": 7,
+        "screening_sim_seconds": 0.0,
+        "candidates_screened": 0,
+        "notes": []
+      },
+      {
+        "seed": 3,
+        "simulations": 50,
+        "stress_test_failures": 15,
+        "tests_until_first_failure": 6,
+        "distinct_failure_conditions": 10,
+        "screening_sim_seconds": 0.0,
+        "candidates_screened": 0,
+        "notes": []
+      },
+      {
+        "seed": 4,
+        "simulations": 50,
+        "stress_test_failures": 24,
+        "tests_until_first_failure": 12,
+        "distinct_failure_conditions": 8,
+        "screening_sim_seconds": 0.0,
+        "candidates_screened": 0,
+        "notes": []
+      }
+    ],
+    "sac": [
+      {
+        "seed": 0,
+        "simulations": 50,
+        "stress_test_failures": 44,
+        "tests_until_first_failure": 1,
+        "distinct_failure_conditions": 30,
+        "screening_sim_seconds": 0.0,
+        "candidates_screened": 0,
+        "notes": []
+      },
+      {
+        "seed": 1,
+        "simulations": 50,
+        "stress_test_failures": 43,
+        "tests_until_first_failure": 2,
+        "distinct_failure_conditions": 30,
+        "screening_sim_seconds": 0.0,
+        "candidates_screened": 0,
+        "notes": []
+      },
+      {
+        "seed": 2,
+        "simulations": 50,
+        "stress_test_failures": 38,
+        "tests_until_first_failure": 3,
+        "distinct_failure_conditions": 29,
+        "screening_sim_seconds": 0.0,
+        "candidates_screened": 0,
+        "notes": []
+      },
+      {
+        "seed": 3,
+        "simulations": 50,
+        "stress_test_failures": 45,
+        "tests_until_first_failure": 1,
+        "distinct_failure_conditions": 33,
+        "screening_sim_seconds": 0.0,
+        "candidates_screened": 0,
+        "notes": []
+      },
+      {
+        "seed": 4,
+        "simulations": 50,
+        "stress_test_failures": 45,
+        "tests_until_first_failure": 1,
+        "distinct_failure_conditions": 29,
+        "screening_sim_seconds": 0.0,
+        "candidates_screened": 0,
+        "notes": []
+      }
+    ],
+    "sac+tcn_selection": [
+      {
+        "seed": 0,
+        "simulations": 50,
+        "stress_test_failures": 45,
+        "tests_until_first_failure": 1,
+        "distinct_failure_conditions": 32,
+        "screening_sim_seconds": 400.0,
+        "candidates_screened": 200,
+        "notes": []
+      },
+      {
+        "seed": 1,
+        "simulations": 50,
+        "stress_test_failures": 48,
+        "tests_until_first_failure": 1,
+        "distinct_failure_conditions": 36,
+        "screening_sim_seconds": 400.0,
+        "candidates_screened": 200,
+        "notes": []
+      },
+      {
+        "seed": 2,
+        "simulations": 50,
+        "stress_test_failures": 47,
+        "tests_until_first_failure": 1,
+        "distinct_failure_conditions": 30,
+        "screening_sim_seconds": 400.0,
+        "candidates_screened": 200,
+        "notes": []
+      },
+      {
+        "seed": 3,
+        "simulations": 50,
+        "stress_test_failures": 45,
+        "tests_until_first_failure": 1,
+        "distinct_failure_conditions": 33,
+        "screening_sim_seconds": 400.0,
+        "candidates_screened": 200,
+        "notes": []
+      },
+      {
+        "seed": 4,
+        "simulations": 50,
+        "stress_test_failures": 48,
+        "tests_until_first_failure": 1,
+        "distinct_failure_conditions": 31,
+        "screening_sim_seconds": 400.0,
+        "candidates_screened": 200,
+        "notes": []
+      }
+    ],
+    "random+tcn_selection": [
+      {
+        "seed": 0,
+        "simulations": 50,
+        "stress_test_failures": 34,
+        "tests_until_first_failure": 1,
+        "distinct_failure_conditions": 27,
+        "screening_sim_seconds": 400.0,
+        "candidates_screened": 200,
+        "notes": []
+      },
+      {
+        "seed": 1,
+        "simulations": 50,
+        "stress_test_failures": 33,
+        "tests_until_first_failure": 1,
+        "distinct_failure_conditions": 29,
+        "screening_sim_seconds": 400.0,
+        "candidates_screened": 200,
+        "notes": []
+      },
+      {
+        "seed": 2,
+        "simulations": 50,
+        "stress_test_failures": 29,
+        "tests_until_first_failure": 1,
+        "distinct_failure_conditions": 22,
+        "screening_sim_seconds": 400.0,
+        "candidates_screened": 200,
+        "notes": []
+      },
+      {
+        "seed": 3,
+        "simulations": 50,
+        "stress_test_failures": 31,
+        "tests_until_first_failure": 1,
+        "distinct_failure_conditions": 27,
+        "screening_sim_seconds": 400.0,
+        "candidates_screened": 200,
+        "notes": []
+      },
+      {
+        "seed": 4,
+        "simulations": 50,
+        "stress_test_failures": 34,
+        "tests_until_first_failure": 1,
+        "distinct_failure_conditions": 28,
+        "screening_sim_seconds": 400.0,
+        "candidates_screened": 200,
+        "notes": []
+      }
+    ]
+  }
+}
