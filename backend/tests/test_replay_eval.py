@@ -20,7 +20,18 @@ def test_replay_contains_reconstruction_fields():
         assert hasattr(f, field)
     kinds = [e.kind for e in rp.events]
     assert "brake_now_shown" in kinds and "left_track" in kinds and kinds[-1] == "finished"
-    assert len(rp.track.centerline) == len(rp.track.left_boundary) > 100
+    assert "lap_completed" not in kinds
+    assert next(e for e in rp.events if e.kind == "left_track").detail == rp.result.failure_corner
+    assert len(rp.track.centerline) == len(rp.track.left_boundary) > 1000
+    assert rp.track.closed
+
+
+def test_completed_lap_replay_has_every_corner():
+    rp = build_replay(Scenario(track="baku", entry_speed=75), CN.BASELINE)
+    entries = [e.detail.split(" speed")[0] for e in rp.events if e.kind == "corner_entry"]
+    assert entries == [c.name for c in rp.track.corners]
+    assert any(e.kind == "lap_completed" for e in rp.events)
+    assert rp.sample_hz == 20
 
 
 def test_replay_is_deterministic_and_roundtrips(tmp_path):
@@ -40,8 +51,9 @@ def test_baseline_vs_upgraded_replay_differ():
 
 def test_track_geometry():
     g = get_track_geometry("baku")
-    assert g.width == 8.0 and g.corners[0].direction == "left"
-    assert g.telemetry_shadow_zones
+    assert g.width == 10.0 and g.min_width == 7.5 and g.corners[0].direction == "left"
+    assert any(c.width == 7.5 for c in g.corners)
+    assert g.telemetry_shadow_zones and g.length > 3000
 
 
 def test_evaluate_and_compare_use_identical_scenarios():

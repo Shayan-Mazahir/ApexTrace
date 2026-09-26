@@ -14,7 +14,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 TrackName = Literal["monza", "baku"]
 
@@ -48,35 +48,24 @@ class ConfigurationName(str, Enum):
 
 
 class Scenario(BaseModel):
-    """One reproducible stress test. The same scenario (incl. seed) always gives the same result."""
+    """One reproducible stress test: a single flying lap of the chosen track.
+
+    The same scenario (incl. seed) always gives the same result. Fault
+    parameters apply for the whole lap.
+    """
 
     scenario_id: str = Field(default="scenario", min_length=1, max_length=128)
     seed: int = Field(default=0, ge=0, le=2**31 - 1)
     track: TrackName = "monza"
-    entry_speed: float = Field(default=80.0, ge=10.0, le=95.0, description="m/s at start of approach")
+    entry_speed: float = Field(default=80.0, ge=10.0, le=95.0, description="m/s when crossing the start line (flying lap)")
     actual_grip: float = Field(default=1.0, ge=0.3, le=1.3, description="true surface grip (hidden from the safety system)")
     estimated_grip: float = Field(default=1.0, ge=0.3, le=1.3, description="grip the safety system believes")
-    corner_curvature: float | None = Field(
-        default=None, gt=0, description="1/m; None = track default. Must lie in the track's range."
-    )
     telemetry_delay_ms: float = Field(default=0.0, ge=0.0, le=1000.0)
     sensor_noise: float = Field(default=0.0, ge=0.0, le=1.0, description="0 = clean, 1 = max bounded noise")
     packet_loss: float = Field(default=0.0, ge=0.0, le=0.9, description="long-run fraction of telemetry packets lost")
     driver_reaction_delay: float = Field(default=0.3, ge=0.0, le=2.0, description="seconds")
     warning_margin: float = Field(default=0.1, ge=0.0, le=1.0, description="fractional extra braking distance")
     brake_effectiveness: float = Field(default=1.0, ge=0.2, le=1.0, description="1.0 = baseline, <1 degraded")
-
-    @model_validator(mode="after")
-    def _curvature_in_track_range(self) -> "Scenario":
-        from app.sim.track import PROFILES
-
-        if self.corner_curvature is not None:
-            lo, hi = PROFILES[self.track].curvature_range
-            if not (lo - 1e-9 <= self.corner_curvature <= hi + 1e-9):
-                raise ValueError(
-                    f"corner_curvature {self.corner_curvature:.5f} outside {self.track} range [{lo:.5f}, {hi:.5f}]"
-                )
-        return self
 
 
 # --------------------------------------------------------------------------- #
@@ -90,7 +79,8 @@ class VehicleState(BaseModel):
     timestamp: float
     x: float
     y: float
-    s: float = Field(description="distance along centerline")
+    s: float = Field(description="distance along centerline from the start line (wraps at lap length)")
+    lap_progress: float = Field(description="metres driven this lap")
     lateral_offset: float = Field(description="m from centerline, + = left")
     speed: float
     heading: float
@@ -104,26 +94,44 @@ class VehicleState(BaseModel):
     estimated_grip: float
     boundary_distance: float = Field(description="m to nearest edge; negative = off track")
     on_track: bool
+    next_corner: str = Field(description="corner the car is in, or the next one ahead")
     # Safety system / fault state at this tick.
     warning: WarningLevel = Field(description="warning currently displayed to the driver")
     warning_source: WarningSource
+    warning_corner: str | None = Field(description="corner the displayed warning refers to")
     advised_speed: float | None = Field(description="corner speed the safety system recommends")
     measured_speed: float | None = Field(description="speed as seen by the safety system (delayed/noisy)")
     telemetry_age_ms: float | None = Field(description="age of the telemetry packet the warning used")
     packet_dropped: bool = Field(description="this tick's telemetry packet was lost")
 
 
+class CornerMetrics(BaseModel):
+    """Per-corner outcome for corners the car reached this lap."""
+
+    name: str
+    entry_speed: float
+    approach_max_speed: float = Field(description="highest speed in the corner's braking zone")
+    safe_speed: float = Field(description="max corner speed under ACTUAL grip (ground truth)")
+    advised_speed: float = Field(description="corner speed the safety system targets, from ESTIMATED grip")
+    overspeed_at_entry: float = Field(description="entry_speed - safe_speed")
+    warning_timestamp: float | None = Field(description="first BRAKE_NOW shown for this corner")
+    warning_lead_time: float | None = Field(description="s from that BRAKE_NOW to corner entry")
+    warning_too_late: bool = Field(
+        description="braking was needed but no BRAKE_NOW came early enough for full braking "
+        "(actual brakes/grip/reaction) to reach the safe speed"
+    )
+
+
 class SimulationMetrics(BaseModel):
-    corner_entry_speed: float | None
-    safe_corner_speed: float = Field(description="max corner speed under ACTUAL grip (ground truth)")
-    advised_corner_speed: float = Field(description="corner speed the safety system targets, from ESTIMATED grip")
-    overspeed_at_entry: float | None = Field(description="corner_entry_speed - safe_corner_speed")
+    lap_completed: bool
+    lap_time: float | None = Field(description="seconds, only when the lap was completed")
+    lap_distance: float = Field(description="metres driven before the run ended")
+    corners: list[CornerMetrics]
+    max_overspeed_at_entry: float | None
+    corners_with_late_warning: int
+    warning_too_late: bool = Field(description="at least one corner had a late or missing warning")
     max_lateral_error: float
     max_grip_usage: float
-    warning_lead_time: float | None = Field(description="s from first BRAKE_NOW shown to corner entry")
-    warning_too_late: bool = Field(
-        description="no BRAKE_NOW was shown early enough for full braking (actual brakes/grip) to reach the safe speed"
-    )
     stale_telemetry_fraction: float
     packets_dropped: int
     sim_time: float
@@ -138,6 +146,8 @@ class SimulationResult(BaseModel):
     failed: bool
     left_track: bool
     failure_reason: Literal["left_track"] | None
+    failure_corner: str | None = Field(description="corner being driven (or last one exited) when the car left the track")
+    failure_s: float | None
     warning_triggered: bool = Field(description="a BRAKE_NOW warning was displayed at some point")
     warning_timestamp: float | None = Field(description="first BRAKE_NOW displayed")
     failure_timestamp: float | None
@@ -158,6 +168,7 @@ class CornerInfo(BaseModel):
     curvature: float = Field(description="signed 1/m, + = left")
     radius: float
     direction: Literal["left", "right"]
+    width: float
 
 
 class BrakingZoneInfo(BaseModel):
@@ -170,9 +181,10 @@ class TrackGeometry(BaseModel):
     name: TrackName
     display_name: str
     purpose: str
-    width: float
+    width: float = Field(description="nominal width; narrower sections are reflected in the boundaries")
+    min_width: float
     length: float
-    corner_curvature: float
+    closed: bool = Field(description="True: the centerline loops back to its first point")
     centerline: list[tuple[float, float]]
     left_boundary: list[tuple[float, float]]
     right_boundary: list[tuple[float, float]]
@@ -183,7 +195,7 @@ class TrackGeometry(BaseModel):
 
 class ReplayEvent(BaseModel):
     timestamp: float
-    kind: Literal["caution_shown", "brake_now_shown", "corner_entry", "left_track", "finished"]
+    kind: Literal["caution_shown", "brake_now_shown", "corner_entry", "left_track", "lap_completed", "finished"]
     detail: str | None = None
 
 
@@ -210,7 +222,8 @@ class ScenarioOutcome(BaseModel):
     failed: bool
     minimum_boundary_distance: float
     warning_too_late: bool
-    corner_entry_speed: float | None
+    failure_corner: str | None
+    lap_time: float | None
 
 
 class ConfigurationEvaluation(BaseModel):
@@ -270,7 +283,7 @@ class BatchResult(BaseModel):
 class ReplayRequest(BaseModel):
     scenario: Scenario
     configuration: ConfigurationName = ConfigurationName.BASELINE
-    sample_hz: float = Field(default=50.0, gt=0, le=100.0)
+    sample_hz: float = Field(default=20.0, gt=0, le=100.0)
 
 
 class GenerateScenariosRequest(BaseModel):
@@ -302,7 +315,7 @@ class LiveStart(BaseModel):
     configuration: ConfigurationName = ConfigurationName.BASELINE
     mode: Literal["scripted", "manual"] = "scripted"
     rate_hz: float = Field(default=50.0, gt=0, le=100.0, description="state messages per second of sim time")
-    speedup: float = Field(default=1.0, gt=0, le=20.0, description="sim seconds per wall-clock second")
+    speedup: float = Field(default=1.0, gt=0, le=100.0, description="sim seconds per wall-clock second")
 
 
 class LiveControl(BaseModel):

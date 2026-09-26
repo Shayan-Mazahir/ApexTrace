@@ -24,19 +24,19 @@ class ParamBound:
     high: float
 
 
-# Track-independent bounds. entry_speed and corner_curvature come from the track profile.
+# Track-independent bounds. entry_speed comes from the track profile.
 DEFAULT_BOUNDS: tuple[ParamBound, ...] = (
     ParamBound("actual_grip", 0.6, 1.1),
-    ParamBound("grip_error", -0.1, 0.2),  # estimated_grip - actual_grip
-    ParamBound("telemetry_delay_ms", 0.0, 300.0),
+    ParamBound("grip_error", -0.1, 0.12),  # estimated_grip - actual_grip
+    ParamBound("telemetry_delay_ms", 0.0, 250.0),
     ParamBound("sensor_noise", 0.0, 1.0),
-    ParamBound("packet_loss", 0.0, 0.4),
-    ParamBound("driver_reaction_delay", 0.1, 0.8),
+    ParamBound("packet_loss", 0.0, 0.25),
+    ParamBound("driver_reaction_delay", 0.1, 0.5),
     ParamBound("warning_margin", 0.0, 0.5),
-    ParamBound("brake_effectiveness", 0.5, 1.0),
+    ParamBound("brake_effectiveness", 0.65, 1.0),
 )
 
-PARAM_NAMES: tuple[str, ...] = ("entry_speed", "corner_curvature") + tuple(b.name for b in DEFAULT_BOUNDS)
+PARAM_NAMES: tuple[str, ...] = ("entry_speed",) + tuple(b.name for b in DEFAULT_BOUNDS)
 DIM = len(PARAM_NAMES)
 
 
@@ -47,11 +47,7 @@ class ScenarioSpace:
 
     def track_bounds(self, track: TrackName) -> list[ParamBound]:
         p = PROFILES[track]
-        return [
-            ParamBound("entry_speed", *p.entry_speed_range),
-            ParamBound("corner_curvature", *p.curvature_range),
-            *self.bounds,
-        ]
+        return [ParamBound("entry_speed", *p.entry_speed_range), *self.bounds]
 
     def to_scenario(self, track: TrackName, unit: np.ndarray, scenario_id: str, seed: int) -> Scenario:
         """Map a point in [0,1]^DIM to a Scenario. Values are clipped into bounds."""
@@ -65,8 +61,6 @@ class ScenarioSpace:
         """Inverse of ``to_scenario`` (used for diversity distances)."""
         vals = scenario.model_dump()
         vals["grip_error"] = scenario.estimated_grip - scenario.actual_grip
-        if vals["corner_curvature"] is None:
-            vals["corner_curvature"] = PROFILES[scenario.track].default_curvature
         out = []
         for b in self.track_bounds(scenario.track):
             span = b.high - b.low
@@ -82,14 +76,15 @@ class ScenarioSpace:
         return out
 
 
-def failure_signature(s: Scenario) -> tuple:
-    """Coarse description of which stress factors are active.
+def failure_signature(s: Scenario, failure_corner: str | None = None) -> tuple:
+    """Coarse description of where the car failed and which stress factors were active.
 
-    Used to count *distinct* failure conditions: two failures with the same
-    signature are treated as the same kind of weakness.
+    Used to count *distinct* failure conditions: two failures at the same
+    corner with the same active factors are treated as the same weakness.
     """
     return (
         s.track,
+        failure_corner,
         s.estimated_grip - s.actual_grip > 0.1,
         s.telemetry_delay_ms >= 150,
         s.packet_loss >= 0.2,

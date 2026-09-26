@@ -26,7 +26,8 @@ def evaluate_configuration(
             failed=r.failed,
             minimum_boundary_distance=r.minimum_boundary_distance,
             warning_too_late=r.metrics.warning_too_late,
-            corner_entry_speed=r.metrics.corner_entry_speed,
+            failure_corner=r.failure_corner,
+            lap_time=r.metrics.lap_time,
         )
         for r in results
     ]

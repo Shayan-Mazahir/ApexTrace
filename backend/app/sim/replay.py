@@ -43,50 +43,51 @@ def track_geometry(track: Track, step: float = GEOMETRY_STEP) -> TrackGeometry:
         display_name=track.profile.display_name,
         purpose=track.profile.purpose,
         width=track.width,
+        min_width=float(track.widths.min()),
         length=track.length,
-        corner_curvature=track.corner_curvature,
+        closed=True,
         centerline=pts(track.xy),
         left_boundary=pts(left),
         right_boundary=pts(right),
         corners=[
             CornerInfo(name=c.name, s_entry=c.s_entry, s_exit=c.s_exit, curvature=c.curvature,
-                       radius=c.radius, direction=c.direction)
+                       radius=c.radius, direction=c.direction, width=c.width)
             for c in track.corners
         ],
         braking_zones=[BrakingZoneInfo(corner=z.corner, s_start=z.s_start, s_end=z.s_end) for z in track.braking_zones],
-        telemetry_shadow_zones=list(track.profile.telemetry_shadow_zones),
+        telemetry_shadow_zones=[(round(a, 3), round(b, 3)) for a, b in track.shadow_zones],
     )
 
 
-def get_track_geometry(name: str, corner_curvature: float | None = None) -> TrackGeometry:
-    return track_geometry(get_track(name, corner_curvature))
+def get_track_geometry(name: str) -> TrackGeometry:
+    return track_geometry(get_track(name))
 
 
 def build_replay(
     scenario: Scenario,
     configuration: ConfigurationName = ConfigurationName.BASELINE,
-    sample_hz: float = 50.0,
+    sample_hz: float = 20.0,
 ) -> Replay:
     sim = Simulator(scenario, configuration, record=True)
     result = sim.run(include_telemetry=False)
     frames = sim.telemetry()
 
     events: list[ReplayEvent] = []
-    prev = WarningLevel.SAFE
-    entry_logged = False
+    prev = (WarningLevel.SAFE, None)
     for f in frames:
-        if f.warning is not prev:
-            if f.warning is WarningLevel.CAUTION:
-                events.append(ReplayEvent(timestamp=f.timestamp, kind="caution_shown"))
-            elif f.warning is WarningLevel.BRAKE_NOW:
-                events.append(ReplayEvent(timestamp=f.timestamp, kind="brake_now_shown",
-                                          detail=f"source={f.warning_source.value}"))
-            prev = f.warning
-        if not entry_logged and f.s >= sim.corner.s_entry:
-            events.append(ReplayEvent(timestamp=f.timestamp, kind="corner_entry", detail=f"speed={f.speed:.1f} m/s"))
-            entry_logged = True
+        if (f.warning, f.warning_corner) != prev and f.warning is not WarningLevel.SAFE:
+            kind = "caution_shown" if f.warning is WarningLevel.CAUTION else "brake_now_shown"
+            events.append(ReplayEvent(timestamp=f.timestamp, kind=kind,
+                                      detail=f"{f.warning_corner} (source={f.warning_source.value})"))
+        prev = (f.warning, f.warning_corner)
+    for c in result.metrics.corners:
+        events.append(ReplayEvent(timestamp=sim.track_state.corners[c.name].entry_time, kind="corner_entry",
+                                  detail=f"{c.name} speed={c.entry_speed:.1f} m/s"))
     if result.failure_timestamp is not None:
-        events.append(ReplayEvent(timestamp=result.failure_timestamp, kind="left_track"))
+        events.append(ReplayEvent(timestamp=result.failure_timestamp, kind="left_track", detail=result.failure_corner))
+    if result.metrics.lap_completed:
+        events.append(ReplayEvent(timestamp=result.metrics.lap_time, kind="lap_completed",
+                                  detail=f"lap time {result.metrics.lap_time:.2f} s"))
     events.append(ReplayEvent(timestamp=frames[-1].timestamp, kind="finished"))
     events.sort(key=lambda e: e.timestamp)
 

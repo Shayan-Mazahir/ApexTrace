@@ -28,8 +28,8 @@ def test_tracks():
     assert r.status_code == 200
     tracks = [TrackGeometry.model_validate(t) for t in r.json()]
     assert {t.name for t in tracks} == {"monza", "baku"}
-    assert client.get("/tracks/baku", params={"corner_curvature": 0.05}).status_code == 200
-    assert client.get("/tracks/baku", params={"corner_curvature": 0.5}).status_code == 422
+    baku = TrackGeometry.model_validate(client.get("/tracks/baku").json())
+    assert baku.closed and len(baku.corners) >= 10
     assert client.get("/tracks/spa").status_code == 422
 
 
@@ -51,7 +51,7 @@ def test_run_valid_scenario():
     {"entry_speed": -5},
     {"actual_grip": 5},
     {"track": "spa"},
-    {"track": "baku", "corner_curvature": 0.5},
+    {"driver_reaction_delay": 5},
     {"telemetry_delay_ms": -1},
 ])
 def test_invalid_scenario_rejected(bad):
@@ -93,8 +93,8 @@ def test_compare_rejects_duplicate_ids():
 
 
 def test_websocket_scripted_stream():
-    start = {"type": "start", "scenario": {**WORN, "track": "baku", "entry_speed": 40},
-             "rate_hz": 20, "speedup": 20}
+    start = {"type": "start", "scenario": {"track": "baku", "entry_speed": 75},
+             "rate_hz": 5, "speedup": 100}
     with client.websocket_connect("/ws/simulation") as ws:
         ws.send_json(start)
         assert ws.receive_json()["type"] == "track"
@@ -105,8 +105,8 @@ def test_websocket_scripted_stream():
             if m["type"] == "result":
                 break
     states = [m["state"] for m in msgs if m["type"] == "state"]
-    assert len(states) > 20
-    assert {"x", "y", "speed", "heading", "warning", "brake"} <= set(states[0])
+    assert len(states) > 400  # a ~100 s lap at 5 Hz
+    assert {"x", "y", "speed", "heading", "warning", "brake", "lap_progress", "next_corner"} <= set(states[0])
     assert SimulationResult.model_validate(msgs[-1]["result"]).success
 
 

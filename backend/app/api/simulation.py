@@ -6,7 +6,7 @@ simulations do not block the event loop.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException
 
 from app.schemas import (
     BatchRequest,
@@ -37,11 +37,8 @@ def list_tracks() -> list[TrackGeometry]:
 
 
 @router.get("/tracks/{name}", response_model=TrackGeometry, tags=["tracks"])
-def get_track(name: TrackName, corner_curvature: float | None = Query(default=None, gt=0)) -> TrackGeometry:
-    try:
-        return svc.track(name, corner_curvature)
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e)) from e
+def get_track(name: TrackName) -> TrackGeometry:
+    return svc.track(name)
 
 
 @router.get("/configurations", response_model=list[ConfigurationInfo], tags=["configuration"])

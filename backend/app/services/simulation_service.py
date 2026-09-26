@@ -41,8 +41,8 @@ def list_tracks() -> list[TrackGeometry]:
     return [get_track_geometry(name) for name in PROFILES]
 
 
-def track(name: TrackName, corner_curvature: float | None = None) -> TrackGeometry:
-    return get_track_geometry(name, corner_curvature)
+def track(name: TrackName) -> TrackGeometry:
+    return get_track_geometry(name)
 
 
 def list_configurations() -> list[ConfigurationInfo]:
