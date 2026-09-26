@@ -22,6 +22,7 @@ from app.placeholder_sim import (
     state_at_distance,
     step,
 )
+from app.f1_car import DEFAULT_SETUP, NO_REQUESTS, CarSetup, DriverRequests
 from app.schemas import TrackProfile, UpgradeConfig
 from app.stress.pipeline import (
     Actuators,
@@ -50,6 +51,7 @@ class RunConfig:
     policy: WarningPolicyConfig = field(default_factory=WarningPolicyConfig)
     vehicle: VehicleConfig = field(default_factory=VehicleConfig)
     seed: int = 1
+    setup: CarSetup = DEFAULT_SETUP  # driver assists; scripted evaluations use the defaults
 
     def effective_policy(self) -> WarningPolicyConfig:
         return self.policy.model_copy(update={"local_fallback": self.policy.local_fallback or self.upgrades.local_fallback})
@@ -112,7 +114,8 @@ class StressRun:
 
     # -- one tick ------------------------------------------------------------
 
-    def tick(self, steering: float, throttle: float, brake: float, dt: float = TICK_DT, advance: bool = True) -> list[dict[str, Any]]:
+    def tick(self, steering: float, throttle: float, brake: float, dt: float = TICK_DT, advance: bool = True,
+             requests: DriverRequests = NO_REQUESTS) -> list[dict[str, Any]]:
         """Advance the run by dt. Returns new events (fault / warning)."""
         cfg, profile = self.config, self.config.profile
         new_events: list[dict[str, Any]] = []
@@ -133,7 +136,8 @@ class StressRun:
             steer_eff, brake_eff = self.actuators.apply(t, steering, brake, e)
             self.applied = (steer_eff, brake_eff)
             self.vehicle = step(v, steer_eff, throttle, brake_eff, dt, profile,
-                                grip=e.grip, brake_wear=cfg.brake_wear() * e.brake_fade)
+                                grip=e.grip, brake_wear=cfg.brake_wear() * e.brake_fade,
+                                setup=cfg.setup, requests=requests)
             v = self.vehicle
             self.sensors.estimate(e.grip, dt, e)
 

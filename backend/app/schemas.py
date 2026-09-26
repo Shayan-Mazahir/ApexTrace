@@ -83,11 +83,22 @@ class UpgradeConfig(BaseModel):
     local_fallback: bool = False
 
 
+class CarSetupConfig(BaseModel):
+    """Driver assists and modes for the 2026 car (app/f1_car.py)."""
+
+    traction_control: Literal["off", "medium", "full"] = "full"
+    abs: bool = True
+    gearbox: Literal["automatic", "manual"] = "automatic"
+    drs_mode: Literal["off", "auto", "manual"] = "auto"
+    ers_mode: Literal["harvest", "balanced", "overtake"] = "balanced"
+
+
 class SessionCreateRequest(BaseModel):
     track: TrackId = "monza"
     role: SessionRole = "driver"
     seed: int | None = None
     upgrades: UpgradeConfig = Field(default_factory=UpgradeConfig)
+    setup: CarSetupConfig = Field(default_factory=CarSetupConfig)
 
 
 class SessionCreateResponse(BaseModel):
@@ -120,6 +131,18 @@ class ControlInputMessage(BaseModel):
     steering: float = Field(allow_inf_nan=False)
     throttle: float = Field(allow_inf_nan=False)
     brake: float = Field(allow_inf_nan=False)
+    # Running totals of button presses since the page opened. The server acts
+    # on the increase since the last message, so a dropped packet can't lose
+    # or repeat a gear change.
+    shift_up_count: int = Field(default=0, ge=0)
+    shift_down_count: int = Field(default=0, ge=0)
+    drs_toggle_count: int = Field(default=0, ge=0)
+    reverse_toggle_count: int = Field(default=0, ge=0)
+
+
+class CarSetupMessage(BaseModel):
+    type: Literal["car_setup"] = "car_setup"
+    setup: CarSetupConfig
 
 
 class VehicleStateMessage(BaseModel):
@@ -151,6 +174,22 @@ class VehicleStateMessage(BaseModel):
     lap_time_s: float
     last_lap_s: float | None
     best_lap_s: float | None
+    session_best_lap_s: float | None = None  # best valid lap this session (survives resets)
+    lap_valid: bool = True  # current lap still within track limits
+    last_lap_valid: bool | None = None
+    # car / power unit
+    gear: int = 0  # -1 = reverse
+    rpm: float = 0.0
+    battery_pct: float = 100.0
+    ers_deploy_kw: float = 0.0
+    drs_open: bool = False
+    drs_available: bool = False
+    tc_active: bool = False
+    wheelspin: bool = False
+    lockup: bool = False
+    g_lat: float = 0.0
+    g_long: float = 0.0
+    setup: CarSetupConfig = Field(default_factory=CarSetupConfig)
 
 
 class PauseMessage(BaseModel):
@@ -195,6 +234,7 @@ class CancelFaultMessage(BaseModel):
 ClientMessage = Annotated[
     Union[
         ControlInputMessage,
+        CarSetupMessage,
         PauseMessage,
         ResumeMessage,
         ResetMessage,
@@ -208,7 +248,7 @@ ClientMessage = Annotated[
 ]
 CLIENT_MESSAGE_ADAPTER: TypeAdapter = TypeAdapter(ClientMessage)
 
-DRIVER_MESSAGE_TYPES = {"control_input", "pause", "resume", "reset", "pong"}
+DRIVER_MESSAGE_TYPES = {"control_input", "car_setup", "pause", "resume", "reset", "pong"}
 ENGINEER_MESSAGE_TYPES = {
     "pause",
     "resume",

@@ -8,10 +8,12 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from app.f1_car import CAR, NO_REQUESTS, CarSetup, DriverRequests
 from app.placeholder_sim import DemoVehicleState
 from app.schemas import (
     CLIENT_MESSAGE_ADAPTER,
     DRIVER_MESSAGE_TYPES,
+    CarSetupConfig,
     ENGINEER_MESSAGE_TYPES,
     SessionRole,
     TrackProfile,
@@ -47,6 +49,12 @@ class Session:
     control: dict[str, float] = field(
         default_factory=lambda: {"steering": 0.0, "throttle": 0.0, "brake": 0.0}
     )
+    setup: CarSetupConfig = field(default_factory=CarSetupConfig)
+    # button presses: last running totals seen from the driver, and the
+    # increase not yet handed to the physics
+    button_totals: dict[str, int] = field(default_factory=dict)
+    pending_buttons: dict[str, int] = field(default_factory=dict)
+    session_best_lap: float | None = None
     running: bool = True
     last_control_received_at: float | None = None
     clients: dict[Any, SessionRole] = field(default_factory=dict)
@@ -70,6 +78,7 @@ class Session:
             scenario=self.scenario,
             upgrades=self.upgrades,
             seed=self.scenario.seed if self.scenario else self.seed,
+            setup=CarSetup(**self.setup.model_dump()),
         ))
         for spec in self.manual_faults:
             self.run.add_fault(spec)
@@ -157,7 +166,14 @@ class Session:
         """Advance one simulation step; returns messages to broadcast."""
         now = time.monotonic() if now is None else now
         c = self.control
-        events = self.run.tick(c["steering"], c["throttle"], c["brake"], dt, advance=self.running)
+        b, self.pending_buttons = self.pending_buttons, {}
+        requests = DriverRequests(shift_up=b.get("shift_up", 0), shift_down=b.get("shift_down", 0),
+                                  drs_toggle=b.get("drs_toggle", 0), reverse_toggle=b.get("reverse_toggle", 0))
+        events = self.run.tick(c["steering"], c["throttle"], c["brake"], dt, advance=self.running,
+                               requests=requests if self.running else NO_REQUESTS)
+        best = self.run.vehicle.best_lap_time
+        if best is not None and (self.session_best_lap is None or best < self.session_best_lap):
+            self.session_best_lap = best
         messages, self.outbox = self.outbox, []
         messages.extend(events)
 
@@ -206,6 +222,21 @@ class Session:
             "lap_time_s": vehicle.lap_time,
             "last_lap_s": vehicle.last_lap_time,
             "best_lap_s": vehicle.best_lap_time,
+            "session_best_lap_s": self.session_best_lap,
+            "lap_valid": vehicle.lap_clean,
+            "last_lap_valid": vehicle.last_lap_valid,
+            "gear": vehicle.gear,
+            "rpm": vehicle.rpm,
+            "battery_pct": 100.0 * vehicle.battery / CAR.battery_capacity,
+            "ers_deploy_kw": vehicle.ers_deploy_kw,
+            "drs_open": vehicle.drs_open,
+            "drs_available": vehicle.drs_available,
+            "tc_active": vehicle.tc_cut > 0.03,
+            "wheelspin": vehicle.wheelspin,
+            "lockup": vehicle.front_lock or vehicle.rear_lock,
+            "g_lat": vehicle.ay / 9.81,
+            "g_long": vehicle.ax / 9.81,
+            "setup": self.setup.model_dump(),
             **tel,
         }
 
@@ -223,6 +254,16 @@ def apply_message(session: Session, role: SessionRole, message: Any) -> list[dic
         session.control["throttle"] = max(0.0, min(1.0, message.throttle))
         session.control["brake"] = max(0.0, min(1.0, message.brake))
         session.last_control_received_at = time.monotonic()
+        for key in ("shift_up", "shift_down", "drs_toggle", "reverse_toggle"):
+            total = getattr(message, f"{key}_count")
+            seen = session.button_totals.get(key)
+            # first message (or a page reload that restarted the count) only sets the baseline
+            if seen is not None and total > seen:
+                session.pending_buttons[key] = session.pending_buttons.get(key, 0) + min(total - seen, 3)
+            session.button_totals[key] = total
+    elif message.type == "car_setup":
+        session.setup = message.setup
+        session.run.config.setup = CarSetup(**message.setup.model_dump())
     elif message.type == "pause":
         session.running = False
     elif message.type == "resume":

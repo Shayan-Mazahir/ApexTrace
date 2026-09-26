@@ -14,7 +14,8 @@ A planar "bicycle" model (one front and one rear axle) with:
   gearbox, plus a 350 kW MGU-K that fades from 290 to 355 km/h (337 km/h in
   overtake mode) and runs on a 4 MJ battery that recharges under braking;
 * driver aids: traction control levels, ABS, automatic or manual gearbox,
-  automatic/manual/off active aero, battery deployment mode.
+  automatic/manual/off active aero, battery deployment mode;
+* a reverse gear (selectable when nearly stopped, capped at ~22 km/h).
 
 Numbers follow public 2026 figures (mass, wheelbase, power split, MGU-K
 rampdown) and typical published aero/tyre values; they are a plausible
@@ -80,6 +81,10 @@ class CarParams:
     downshift_rpm: float = 7_000.0
     # steering
     max_road_wheel_angle: float = 0.38  # rad (~22 deg) at low speed
+    # reverse
+    reverse_force: float = 6_000.0  # N at full throttle
+    reverse_max_speed: float = 22 / 3.6
+    reverse_engage_speed: float = 1.5  # m/s: gear change to/from R only below this
     steer_slip_allowance: float = 0.12  # rad beyond the steady-state angle at full lock
 
     @property
@@ -115,6 +120,7 @@ class DriverRequests:
     shift_up: int = 0
     shift_down: int = 0
     drs_toggle: int = 0
+    reverse_toggle: int = 0  # engage/leave reverse (only when nearly stopped)
 
 
 NO_REQUESTS = DriverRequests()
@@ -125,7 +131,7 @@ class CarState:
     vx: float = 0.0  # forward speed, body frame (m/s)
     vy: float = 0.0  # lateral speed, body frame, + = left
     yaw_rate: float = 0.0  # rad/s, + = left
-    gear: int = 0  # 0 = not yet selected (picked from speed on the first step)
+    gear: int = 0  # 0 = not yet selected (picked from speed on the first step); -1 = reverse
     rpm: float = 4_000.0
     battery: float = 4.0e6  # J
     drs_open: bool = False
@@ -268,11 +274,22 @@ def _tyre_lateral(slip: float, peak_force: float, p: CarParams) -> float:
 # ------------------------------------------------------------------ gearbox & aero control
 
 
+REVERSE = -1
+
+
 def _update_gear(state: CarState, setup: CarSetup, requests: DriverRequests, throttle: float, brake: float,
                  p: CarParams) -> int:
     speed = max(state.vx, 0.0)
     gear = state.gear or gear_for_speed(speed, p)
+    slow = abs(state.vx) < p.reverse_engage_speed
+    if requests.reverse_toggle % 2 == 1 and slow:
+        return 1 if gear == REVERSE else REVERSE
+    if gear == REVERSE:
+        # manual: shifting up from R selects 1st once stopped
+        return 1 if setup.gearbox == "manual" and requests.shift_up > 0 and slow else REVERSE
     if setup.gearbox == "manual":
+        if gear == 1 and requests.shift_down > 0 and requests.shift_up == 0 and slow:
+            return REVERSE
         gear = min(p.gears, gear + requests.shift_up)
         for _ in range(requests.shift_down):
             # over-rev protection: refuse a downshift that would pass the limiter
@@ -303,6 +320,30 @@ def _update_drs(state: CarState, setup: CarSetup, requests: DriverRequests, allo
 
 
 # ------------------------------------------------------------------ integration
+
+
+def _step_reverse(s: CarState, heading: float, steering: float, throttle: float, brake: float, dt: float,
+                  grip: float, brake_scale: float, p: CarParams) -> tuple[CarState, float, float, float]:
+    """Reversing is always slow, so a kinematic model is enough: throttle drives
+    backwards up to reverse_max_speed, the brake stops the car."""
+    vx = s.vx
+    drive = throttle * p.reverse_force * (1.0 if -vx < p.reverse_max_speed else 0.0)
+    stop = brake * min(p.brake_force_max * brake_scale, grip * p.mu_long * p.mass * G) + 300.0
+    force = -drive + (stop if vx < 0 else -stop if vx > 0 else 0.0)
+    ax = force / p.mass
+    vx_new = vx + ax * dt
+    if (vx < 0 <= vx_new and drive == 0) or (vx > 0 >= vx_new):
+        vx_new = 0.0  # brakes/rolling resistance stop the car, they don't reverse its direction
+    vx_new = max(-p.reverse_max_speed, vx_new)
+    delta = steering * p.max_road_wheel_angle
+    r = vx_new * math.tan(delta) / p.wheelbase
+    mid = heading + r * dt / 2
+    dx = vx_new * math.cos(mid) * dt
+    dy = vx_new * math.sin(mid) * dt
+    return (replace(s, vx=vx_new, vy=0.0, yaw_rate=r, rpm=p.idle_rpm + 4_000 * throttle, ax=ax, ay=vx_new * r,
+                    tc_cut=0.0, wheelspin=False, front_lock=False, rear_lock=False, ers_deploy_kw=0.0),
+            heading + r * dt, dx, dy)
+
 
 SUBSTEP = 0.004  # s; tyre forces are stiff, so integrate finer than the 20 Hz session tick
 
@@ -335,6 +376,9 @@ def step_car(
     brake = max(0.0, min(1.0, brake))
 
     gear = _update_gear(state, setup, requests, throttle, brake, p)
+    if gear == REVERSE:
+        return _step_reverse(replace(state, gear=gear, drs_open=False, drs_available=False),
+                             heading, steering, throttle, brake, dt, grip, brake_scale, p)
     drs_open, drs_available = _update_drs(state, setup, requests, drs_allowed, throttle, brake, steering)
     s = replace(state, gear=gear, drs_open=drs_open, drs_available=drs_available)
 
