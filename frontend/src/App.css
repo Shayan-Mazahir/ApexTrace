@@ -1,0 +1,18 @@
+#app-root {
+  width: 100vw;
+  height: 100vh;
+  background: #1a1a1a;
+}
+
+#status-bar {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 10;
+  color: #ffffff;
+  font-family: monospace;
+  font-size: 14px;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 6px 10px;
+  border-radius: 4px;
+}
