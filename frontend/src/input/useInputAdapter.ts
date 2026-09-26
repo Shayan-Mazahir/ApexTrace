@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createGamepadAdapter, discoverGamepadIndex } from './adapters/GamepadAdapter'
 import { createHardwareAdapter } from './adapters/HardwareAdapter'
 import { createKeyboardAdapter } from './adapters/KeyboardAdapter'
-import { BUTTON_IDS, type ButtonId, type InputAdapter, type RawInputSample } from './InputAdapter'
+import { BUTTON_IDS, type ButtonId, type DeviceFeedback, type InputAdapter, type RawInputSample } from './InputAdapter'
 import { normalizePedal, normalizeSteering } from './normalize'
 import { useCalibration } from './useCalibration'
 
@@ -15,6 +15,7 @@ export interface NormalizedControls {
 const IDLE_SAMPLE: RawInputSample = { steeringRaw: 0, throttleRaw: 0, brakeRaw: 0 }
 
 export type ButtonCounts = Record<ButtonId, number>
+export type GameState = Omit<DeviceFeedback, 'active'>
 const ZERO_COUNTS = (): ButtonCounts => ({ shiftUp: 0, shiftDown: 0, drs: 0, reverse: 0, ersCycle: 0, reset: 0 })
 
 // Prefers a connected gamepad/wheel, then the ESP32 wheel over the bridge,
@@ -26,6 +27,7 @@ export function useInputAdapter() {
   const [source, setSource] = useState('Keyboard')
   const [raw, setRaw] = useState<RawInputSample>(IDLE_SAMPLE)
   const adapterRef = useRef<InputAdapter | null>(null)
+  const hardwareRef = useRef<InputAdapter | null>(null)
   // Running totals of button presses (rising edges). Keyboard buttons stay
   // live alongside a wheel/pad so shifts always work.
   const buttonCounts = useRef<ButtonCounts>(ZERO_COUNTS())
@@ -50,6 +52,7 @@ export function useInputAdapter() {
     }
 
     hardware = createHardwareAdapter(pickAdapter)
+    hardwareRef.current = hardware
 
     pickAdapter()
     window.addEventListener('gamepadconnected', pickAdapter)
@@ -86,7 +89,15 @@ export function useInputAdapter() {
       window.removeEventListener('gamepaddisconnected', pickAdapter)
       keyboard.dispose?.()
       hardware?.dispose?.()
+      hardwareRef.current = null
     }
+  }, [])
+
+  // The game's state, forwarded to the ESP32 wheel's screen. `active` is added
+  // here because only this hook knows which input is actually driving.
+  const reportGameState = useCallback((game: GameState) => {
+    const hardware = hardwareRef.current
+    hardware?.setFeedback?.({ ...game, active: hardware !== null && adapterRef.current === hardware })
   }, [])
 
   const normalized: NormalizedControls = {
@@ -101,6 +112,7 @@ export function useInputAdapter() {
     normalized,
     buttonCounts,
     presses,
+    reportGameState,
     calibration,
     setCenter: () => setCenter(raw.steeringRaw),
     setDeadzone,

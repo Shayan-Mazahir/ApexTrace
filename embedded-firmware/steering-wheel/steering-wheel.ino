@@ -8,13 +8,26 @@
   Pressing the joystick down (its SW pin) resets the car to the grid, the same
   as the "Reset to grid" button on the Drive screen.
 
+  The 1.69" screen shows steering, throttle/brake, the link to the game, the
+  live BRAKE warning and the send rate (see dashboard.h). The game-side half
+  of that arrives back from bridge.py on the same USB serial as a line:
+
+    #S <clients> <session> <active> <warning> <speed_kmh>
+
   Wiring (Elegoo ESP32):
     MPU #1 (left):  VCC->3V3, GND->GND, SCL->D22, SDA->D21, AD0->GND   (0x68)
     MPU #2 (right): VCC->3V3, GND->GND, SCL->D22, SDA->D21, AD0->3V3  (0x69)
     HW-504:         GND->GND, VCC->3V3, VRx->D34, VRy->D35, SW->D25
+    Screen:         GND->GND, VCC->3V3, SCL->D18, SDA->D23, RES->D4, DC->D2,
+                    CS->D5, BLK->3V3
+
+  Libraries (Library Manager): "Adafruit ST7735 and ST7789 Library" and
+  "Adafruit GFX Library".
 */
 
 #include <Wire.h>
+
+#include "dashboard.h"
 
 const int MPU_LEFT_ADDR  = 0x68;
 const int MPU_RIGHT_ADDR = 0x69;
@@ -26,6 +39,58 @@ const int PIN_SW  = 25; // joystick pressed down  -> reset the car to the grid
 const int JOY_CENTER = 2048;
 
 uint32_t sequence = 0;
+
+DashboardState dash;
+
+// Send-rate measurement for the screen: packets counted over ~1 s windows.
+uint32_t rateWindowStartMs = 0;
+uint32_t rateWindowCount = 0;
+
+// Status lines from bridge.py arrive on the same serial port we print to.
+char bridgeLine[48];
+size_t bridgeLineLen = 0;
+
+void handleBridgeLine(const char* line) {
+  int clients, session, active, warning, speedKmh;
+  if (sscanf(line, "#S %d %d %d %d %d", &clients, &session, &active, &warning, &speedKmh) != 5) {
+    return;  // not a status line (or a torn one): ignore
+  }
+  dash.bridgeSeenMs = millis();
+  if (dash.bridgeSeenMs == 0) dash.bridgeSeenMs = 1;  // 0 means "never seen"
+  dash.gameClients = (uint8_t)constrain(clients, 0, 255);
+  dash.session = (uint8_t)constrain(session, 0, 2);
+  dash.active = active != 0;
+  dash.warning = (WarningState)constrain(warning, 0, 2);
+  dash.speedKmh = (int16_t)constrain(speedKmh, -1, 999);
+}
+
+// Non-blocking: takes whatever has arrived and returns straight away.
+void pollBridge() {
+  while (Serial.available() > 0) {
+    char c = (char)Serial.read();
+    if (c == '\n') {
+      bridgeLine[bridgeLineLen] = '\0';
+      handleBridgeLine(bridgeLine);
+      bridgeLineLen = 0;
+    } else if (c != '\r') {
+      if (bridgeLineLen < sizeof bridgeLine - 1) {
+        bridgeLine[bridgeLineLen++] = c;
+      } else {
+        bridgeLineLen = 0;  // overlong garbage: drop it; the next newline resyncs
+      }
+    }
+  }
+}
+
+void countSent(uint32_t nowMs) {
+  rateWindowCount++;
+  uint32_t elapsed = nowMs - rateWindowStartMs;
+  if (elapsed >= 1000) {
+    dash.sendRateHz = rateWindowCount * 1000.0f / elapsed;
+    rateWindowStartMs = nowMs;
+    rateWindowCount = 0;
+  }
+}
 
 void mpuWrite(uint8_t addr, uint8_t reg, uint8_t value) {
   Wire.beginTransmission(addr);
@@ -62,9 +127,14 @@ void setup() {
   // The HW-504's switch closes to GND, so it needs the internal pull-up:
   // released reads HIGH, pressed reads LOW.
   pinMode(PIN_SW, INPUT_PULLUP);
+
+  rateWindowStartMs = millis();
+  dashboardBegin();
 }
 
 void loop() {
+  pollBridge();
+
   float leftY  = accelG(readAccelY(MPU_LEFT_ADDR));
   float rightY = accelG(readAccelY(MPU_RIGHT_ADDR));
   float steeringRaw = (leftY + rightY) / 2.0;
@@ -80,12 +150,19 @@ void loop() {
   sequence++;
 
   Serial.printf(
-    "{\"source\": \"esp32\", \"sequence\": %u, \"timestamp\": %lu, "
+    "{\"source\": \"esp32\", \"sequence\": %lu, \"timestamp\": %lu, "
     "\"steeringRaw\": %.3f, \"throttleRaw\": %.3f, \"brakeRaw\": %.3f, "
     "\"resetPressed\": %s}\n",
-    sequence, millis(), steeringRaw, throttleRaw, brakeRaw,
+    (unsigned long)sequence, (unsigned long)millis(), steeringRaw, throttleRaw, brakeRaw,
     resetPressed ? "true" : "false"
   );
+
+  countSent(millis());
+  dash.steeringRaw = steeringRaw;
+  dash.throttleRaw = throttleRaw;
+  dash.brakeRaw = brakeRaw;
+  dash.sequence = sequence;
+  dashboardPublish(dash);
 
   delay(20); // ~50Hz
 }

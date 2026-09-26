@@ -1,4 +1,4 @@
-import type { ButtonId, InputAdapter, RawInputSample } from '../InputAdapter'
+import type { ButtonId, DeviceFeedback, InputAdapter, RawInputSample } from '../InputAdapter'
 import { clamp } from '../normalize'
 import { nextBackoffMs } from '../../stream/reconnect'
 
@@ -53,6 +53,23 @@ const AVAILABILITY_POLL_MS = 100
 // contact bounce and small gaps in the 50 Hz stream stay one press, not two.
 export const RESET_RELEASE_DEBOUNCE_MS = 100
 
+const NO_FEEDBACK: DeviceFeedback = { active: false, session: 'none', warning: 'clear', speedKmh: null }
+
+// The fields worth sending the instant they change (a BRAKE warning must not
+// wait for the next heartbeat); speed rides along on the 10 Hz heartbeat.
+const feedbackKey = (f: DeviceFeedback) => `${f.active}|${f.session}|${f.warning}`
+
+// Wire format bridge.py expects; snake_case like the rest of its protocol.
+export function feedbackMessage(f: DeviceFeedback): string {
+  return JSON.stringify({
+    type: 'feedback',
+    active: f.active,
+    session: f.session,
+    warning: f.warning,
+    speed_kmh: f.speedKmh === null ? null : Math.round(f.speedKmh),
+  })
+}
+
 function pedal(raw: number): number {
   if (!Number.isFinite(raw)) return 0
   const magnitude = clamp(raw, 0, 1)
@@ -85,6 +102,16 @@ export function createHardwareAdapter(onAvailabilityChange?: () => void): InputA
   let socket: WebSocket | null = null
   let retry: ReturnType<typeof setTimeout> | undefined
   let disposed = false
+  let feedback = NO_FEEDBACK
+  let sentKey: string | null = null
+
+  // Also the browser's heartbeat to the bridge: sent while the socket is open
+  // whether or not the ESP32's own data is currently fresh.
+  const sendFeedback = () => {
+    if (socket?.readyState !== WebSocket.OPEN) return
+    socket.send(feedbackMessage(feedback))
+    sentKey = feedbackKey(feedback)
+  }
 
   const fresh = () => performance.now() - lastMessageAt < STALE_AFTER_MS
 
@@ -101,8 +128,12 @@ export function createHardwareAdapter(onAvailabilityChange?: () => void): InputA
     onAvailabilityChange?.()
   }
 
-  // Watches for the *stale* edge too, which no socket event reports.
-  const watchdog = setInterval(refresh, AVAILABILITY_POLL_MS)
+  // Watches for the *stale* edge too, which no socket event reports, and
+  // doubles as the 10 Hz feedback heartbeat.
+  const watchdog = setInterval(() => {
+    refresh()
+    sendFeedback()
+  }, AVAILABILITY_POLL_MS)
 
   function connect() {
     if (disposed) return
@@ -112,6 +143,7 @@ export function createHardwareAdapter(onAvailabilityChange?: () => void): InputA
     ws.onopen = () => {
       if (disposed || socket !== ws) return
       attempt = 0
+      sendFeedback()  // the wheel's screen shouldn't wait a heartbeat to learn the state
     }
 
     ws.onmessage = (event: MessageEvent<string>) => {
@@ -162,6 +194,10 @@ export function createHardwareAdapter(onAvailabilityChange?: () => void): InputA
       // Only `reset` exists on this wheel. Stale data never holds it down.
       if (!available) return []
       return performance.now() - resetSeenAt < RESET_RELEASE_DEBOUNCE_MS ? ['reset'] : []
+    },
+    setFeedback(next: DeviceFeedback) {
+      feedback = next
+      if (feedbackKey(next) !== sentKey) sendFeedback()
     },
     dispose() {
       disposed = true

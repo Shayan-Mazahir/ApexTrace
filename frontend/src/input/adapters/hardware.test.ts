@@ -17,10 +17,20 @@ class FakeSocket {
   onerror: (() => void) | null = null
   closed = false
   url: string
+  sent: string[] = []
 
   constructor(url: string) {
     this.url = url
     FakeSocket.instances.push(this)
+  }
+
+  send(data: string) {
+    this.sent.push(data)
+  }
+
+  // feedback messages sent back to the bridge, parsed
+  feedback() {
+    return this.sent.map((m) => JSON.parse(m) as Record<string, unknown>)
   }
 
   close() {
@@ -193,6 +203,62 @@ describe('ESP32 hardware adapter', () => {
     const second = h.adapter.poll()
     expect(second).not.toBe(first) // not one mutated object handed out twice
     expect(first.steeringRaw).not.toBe(second.steeringRaw)
+  })
+
+  describe('feedback to the wheel screen', () => {
+    const live = { active: true, session: 'connected', warning: 'clear', speedKmh: 283 } as const
+
+    it('reports the state as soon as the bridge connects', () => {
+      const h = harness()
+      expect(h.socket.feedback()).toEqual([
+        { type: 'feedback', active: false, session: 'none', warning: 'clear', speed_kmh: null },
+      ])
+    })
+
+    it('sends nothing while the bridge socket is not open', () => {
+      createHardwareAdapter().setFeedback?.(live)
+      const socket = FakeSocket.instances.at(-1)!
+      vi.advanceTimersByTime(1000)
+      expect(socket.sent).toEqual([]) // never opened: no bridge to talk to
+    })
+
+    it('sends a BRAKE warning immediately, not on the next heartbeat', () => {
+      const h = harness()
+      h.adapter.setFeedback?.(live)
+      const before = h.socket.sent.length
+      h.adapter.setFeedback?.({ ...live, warning: 'brake' })
+      expect(h.socket.sent.length).toBe(before + 1) // synchronously, no timer involved
+      expect(h.socket.feedback().at(-1)).toMatchObject({ warning: 'brake', active: true, session: 'connected' })
+    })
+
+    it('lets speed ride the 10 Hz heartbeat instead of sending on every change', () => {
+      const h = harness()
+      h.adapter.setFeedback?.(live)
+      const before = h.socket.sent.length
+      h.adapter.setFeedback?.({ ...live, speedKmh: 284.4 })
+      h.adapter.setFeedback?.({ ...live, speedKmh: 285.6 })
+      expect(h.socket.sent.length).toBe(before) // speed alone: nothing sent yet
+
+      vi.advanceTimersByTime(100)
+      expect(h.socket.feedback().at(-1)).toMatchObject({ speed_kmh: 286 }) // rounded, latest value
+    })
+
+    it('keeps a 10 Hz heartbeat while the bridge is connected', () => {
+      const h = harness()
+      h.adapter.setFeedback?.(live)
+      const before = h.socket.sent.length
+      vi.advanceTimersByTime(1000)
+      expect(h.socket.sent.length - before).toBe(10)
+    })
+
+    it('stops talking once the bridge goes away', () => {
+      const h = harness()
+      h.socket.drop()
+      const before = h.socket.sent.length
+      h.adapter.setFeedback?.({ ...live, warning: 'brake' })
+      vi.advanceTimersByTime(300) // shorter than the first reconnect backoff
+      expect(h.socket.sent.length).toBe(before)
+    })
   })
 
   it('reconnects when the bridge restarts, and dispose() stops everything', () => {

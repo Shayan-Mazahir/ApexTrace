@@ -13,7 +13,7 @@ import { RunStateBanner } from '../drive/RunStateBanner'
 import { TelemetryPanel } from '../drive/TelemetryPanel'
 import { TrackPicker } from '../drive/TrackPicker'
 import { useDriveSession } from '../drive/useDriveSession'
-import { useInputAdapter } from '../input/useInputAdapter'
+import { useInputAdapter, type GameState } from '../input/useInputAdapter'
 import { Scene, type SceneView } from '../scene/Scene'
 import { UPGRADE_IDS, type TrackId, type TrackProfile, type UpgradeConfig } from '../types/schemas'
 import { useGarage } from '../app/GarageContext'
@@ -77,6 +77,23 @@ export function DriveScreen() {
         ? { label: 'Engineer disconnected', tone: 'danger' }
         : null
   const v = session.vehicleState
+
+  // Tell the ESP32 wheel's screen what the game is doing: its connection
+  // banner, BRAKE light and speed. `input.source` is a dependency so the
+  // "is this wheel the one driving?" flag is re-sent whenever the input in use
+  // changes (e.g. a gamepad is plugged in).
+  const gameSession: GameState['session'] =
+    connectionState === 'idle' || connectionState === 'closed' ? 'none' : connectionState
+  const gameWarning: GameState['warning'] = session.warning.active
+    ? 'brake'
+    : session.warning.stale
+      ? 'stale'
+      : 'clear'
+  const speedKmh = v ? Math.round(Math.abs(v.speed) * 3.6) : null // |v|: reverse is negative
+  const { reportGameState, source: inputSource } = input
+  useEffect(() => {
+    reportGameState({ session: gameSession, warning: gameWarning, speedKmh })
+  }, [reportGameState, gameSession, gameWarning, speedKmh, inputSource])
 
   return (
     <div className="drive-screen" data-connection={connectionState}>

@@ -78,6 +78,24 @@ the hardware can be checked on its own. The Drive screen picks the wheel up
 automatically (Controls panel: `Input: ESP32 wheel`); a plugged-in gamepad
 takes priority. On Linux, reading the port needs the `dialout` group.
 
+**Wheel screen** (1.69" 240x280 ST7789V2, 4-wire SPI): GND→GND, VCC→3V3,
+SCL→D18, SDA→D23, RES→D4, DC→D2, CS→D5, BLK→3V3. Needs the *Adafruit ST7735
+and ST7789* and *Adafruit GFX* libraries; `testing/display_test` is a quick
+bring-up sketch for the screen alone. It shows steering (a centre-zero bar and
+the raw g value), throttle and brake, the live BRAKE / STALE warning or the
+speed, and the actual send rate and packet number. The game's side of that
+reaches the ESP32 back through the bridge. The top banner says where the chain
+is broken:
+
+| Banner | Meaning | Fix |
+| --- | --- | --- |
+| LIVE | in a session, driving with this wheel | — |
+| NO BRIDGE | nothing from `bridge.py` for 1.5 s | start the bridge (and close the Serial Monitor) |
+| NO GAME | bridge up, no Drive screen connected | open `#drive` on the laptop |
+| NO SESSION | Drive screen open, no session | press Start |
+| CONNECTING | session (re)connecting to the backend | check the backend is running |
+| WHEEL NOT IN USE | in a session, but another input is driving | unplug the gamepad, or check the wheel's data reaches the browser |
+
 **Car setup** (track picker or the dock during a run; applies immediately):
 traction control Off/Medium/Full, ABS On/Off, automatic or manual
 transmission, DRS Off/Auto/Manual, and battery power Harvest/Balanced/Overtake.

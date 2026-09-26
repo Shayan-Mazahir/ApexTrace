@@ -14,6 +14,16 @@ export interface RawInputSample {
 export type ButtonId = 'shiftUp' | 'shiftDown' | 'drs' | 'reverse' | 'ersCycle' | 'reset'
 export const BUTTON_IDS: ButtonId[] = ['shiftUp', 'shiftDown', 'drs', 'reverse', 'ersCycle', 'reset']
 
+// What the game tells an input device about itself, for devices that can show
+// it (the ESP32 wheel's screen). Sent back over the device's own link;
+// devices without one simply don't implement setFeedback.
+export interface DeviceFeedback {
+  active: boolean // the car is being driven with THIS device
+  session: 'none' | 'connecting' | 'reconnecting' | 'connected'
+  warning: 'clear' | 'brake' | 'stale'
+  speedKmh: number | null
+}
+
 export interface InputAdapter {
   id: string
   label: string
@@ -24,5 +34,7 @@ export interface InputAdapter {
   // running totals of presses counted from device events (keyboard), so a
   // tap shorter than a frame is never missed
   buttonPresses?(): Record<ButtonId, number>
+  // latest game state for the device to display; the adapter decides when to send it
+  setFeedback?(feedback: DeviceFeedback): void
   dispose?(): void
 }
