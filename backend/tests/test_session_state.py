@@ -2,7 +2,7 @@ import json
 
 from app.placeholder_sim import TRACK_PRESETS, DemoVehicleState
 from app.scenarios import SCENARIOS
-from app.schemas import FaultState
+from app.schemas import FaultState, UpgradeConfig
 from app.session_state import TICK_DT, Session, handle_raw_message
 from app.sessions import SESSIONS, cleanup_stale_sessions
 
@@ -180,13 +180,26 @@ def test_injected_delay_makes_the_warning_arrive_late():
     assert event["seq"] == 1
 
 
-def test_delayed_distance_uses_the_sample_from_delay_ago():
+def test_delayed_sample_uses_the_reading_from_delay_ago():
     session = make_session()
-    session.history.extend([(0.0, 100.0), (0.1, 110.0), (0.2, 120.0)])
-    session.vehicle = DemoVehicleState(distance_along_lap=120.0)
-    assert session._delayed_distance(now=0.2, delay_ms=0) == 120.0
-    assert session._delayed_distance(now=0.2, delay_ms=150) == 100.0
-    assert session._delayed_distance(now=0.2, delay_ms=50) == 110.0
+    session.history.extend(
+        [(0.0, 100.0, 10.0, 1.0), (0.1, 110.0, 11.0, 1.0), (0.2, 120.0, 12.0, 1.0)]
+    )
+    session.vehicle = DemoVehicleState(distance_along_lap=120.0, speed=12.0)
+    assert session._delayed_sample(now=0.2, delay_ms=0)[:2] == (120.0, 12.0)
+    assert session._delayed_sample(now=0.2, delay_ms=150)[:2] == (100.0, 10.0)
+    assert session._delayed_sample(now=0.2, delay_ms=50)[:2] == (110.0, 11.0)
+
+
+def test_grip_estimate_trails_true_grip_by_the_lag():
+    session = make_session()
+    # grip drops to 0.7 at t=1.0 and stays there
+    for i in range(0, 41):
+        t = i * 0.1
+        session.history.append((t, 0.0, 0.0, 1.0 if t < 1.0 else 0.7))
+    session.vehicle = DemoVehicleState()
+    assert session._delayed_sample(now=1.5, delay_ms=0)[2] == 1.0  # not learned yet
+    assert session._delayed_sample(now=2.5, delay_ms=0)[2] == 0.7  # learned after the lag
 
 
 def test_vehicle_state_reports_injected_delay_separately_from_packet_age():
@@ -217,3 +230,35 @@ def test_cleanup_removes_only_idle_disconnected_sessions():
     assert removed == ["idle"]
     assert set(SESSIONS) == {"busy", "fresh"}
     SESSIONS.clear()
+
+
+# --- upgrades ------------------------------------------------------------
+
+
+def test_upgrade_effects_on_the_warning_path():
+    faults = FaultState(telemetry_delay_ms=300)
+    base = make_session()
+    assert base.warning_path(faults) == (300.0, False)
+
+    comms = Session(session_id="t", track_profile=TRACK_PRESETS["baku"],
+                    upgrades=UpgradeConfig(comms_improvement=True))
+    assert comms.warning_path(faults) == (300.0 * 0.4, False)
+
+    fallback = Session(session_id="t", track_profile=TRACK_PRESETS["baku"],
+                       upgrades=UpgradeConfig(local_fallback=True))
+    assert fallback.warning_path(faults) == (0.0, True)
+    # fresh remote data (below the age threshold): fallback stays out of the way
+    assert fallback.warning_path(FaultState(telemetry_delay_ms=100)) == (100.0, False)
+
+
+def test_brake_servicing_restores_braking():
+    def speed_after_braking(upgrades: UpgradeConfig) -> float:
+        session = Session(session_id="t", track_profile=TRACK_PRESETS["monza"], upgrades=upgrades)
+        session.vehicle = DemoVehicleState(speed=30.0)
+        session.control["brake"] = 1.0
+        session.tick(now=session.start_time + TICK_DT)
+        return session.vehicle.speed
+
+    assert speed_after_braking(UpgradeConfig(brake_servicing=True)) < speed_after_braking(
+        UpgradeConfig()
+    )

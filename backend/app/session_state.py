@@ -9,6 +9,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from app.budget import local_fallback_age_ms, persistent_brake_wear, warning_delay_scale
 from app.placeholder_sim import (
     DemoVehicleState,
     distance_to_hazard,
@@ -18,6 +19,8 @@ from app.placeholder_sim import (
     step,
     warning_hazard,
     warning_reason,
+    GRIP_ESTIMATE_LAG_S,
+    advised_corner_speed,
 )
 from app.scenarios import SCENARIOS
 from app.schemas import (
@@ -28,6 +31,7 @@ from app.schemas import (
     ScenarioConfig,
     SessionRole,
     TrackProfile,
+    UpgradeConfig,
 )
 
 TICK_HZ = 20
@@ -49,6 +53,7 @@ class Session:
     session_id: str
     track_profile: TrackProfile
     seed: int = 1
+    upgrades: UpgradeConfig = field(default_factory=UpgradeConfig)
     run_id: str = field(default_factory=new_run_id)
     vehicle: DemoVehicleState = field(default_factory=DemoVehicleState)
     control: dict[str, float] = field(
@@ -63,7 +68,7 @@ class Session:
     last_active: float = field(default_factory=time.monotonic)
     start_time: float = field(default_factory=time.monotonic)
     outbox: list[dict[str, Any]] = field(default_factory=list)
-    history: deque[tuple[float, float]] = field(
+    history: deque[tuple[float, float, float, float]] = field(
         default_factory=lambda: deque(maxlen=int(HISTORY_SECONDS * TICK_HZ))
     )
     warning_seq: int = 0
@@ -101,6 +106,7 @@ class Session:
             "seed": self.seed,
             "track": self.track_profile.id,
             "scenario_id": self.scenario.id if self.scenario else None,
+            "upgrades": self.upgrades.model_dump(),
             "driver_connected": "driver" in self.clients.values(),
             "engineer_connected": "engineer" in self.clients.values(),
             "engineer_ever_connected": self.engineer_ever_connected,
@@ -132,17 +138,41 @@ class Session:
         self.seed = scenario.seed
         self.reset_run()
 
-    def _delayed_distance(self, now: float, delay_ms: float) -> float:
-        current = self.vehicle.distance_along_lap
-        if delay_ms <= 0 or not self.history:
-            return current
-        target = now - delay_ms / 1000
-        distance = self.history[0][1]
-        for t, d in self.history:
+    def _sample_at(self, target: float) -> tuple[float, float, float]:
+        """(distance, speed, grip) from the newest history entry at or before
+        `target`; the oldest entry if `target` predates the history."""
+        if not self.history:
+            return (
+                self.vehicle.distance_along_lap,
+                self.vehicle.speed,
+                self.effective_faults().grip_multiplier,
+            )
+        sample = self.history[0][1:]
+        for t, distance, speed, grip in self.history:
             if t > target:
                 break
-            distance = d
-        return distance
+            sample = (distance, speed, grip)
+        return sample
+
+    def _delayed_sample(self, now: float, delay_ms: float) -> tuple[float, float, float]:
+        """(distance, speed, estimated grip) as the warning path sees them:
+        `delay_ms` old, with the grip estimate trailing by another lag."""
+        if delay_ms <= 0:
+            distance, speed, _ = self._sample_at(now)
+        else:
+            distance, speed, _ = self._sample_at(now - delay_ms / 1000)
+        _, _, grip_estimate = self._sample_at(now - delay_ms / 1000 - GRIP_ESTIMATE_LAG_S)
+        return distance, speed, grip_estimate
+
+    def warning_path(self, faults: FaultState) -> tuple[float, bool]:
+        """(delay in ms actually on the warning path, local fallback active).
+        The comms upgrade scales the injected delay; the local fallback
+        bypasses the remote path once its data is older than the threshold."""
+        delay_ms = faults.telemetry_delay_ms * warning_delay_scale(self.upgrades)
+        threshold = local_fallback_age_ms(self.upgrades)
+        if threshold is not None and delay_ms > threshold:
+            return 0.0, True
+        return delay_ms, False
 
     def tick(self, now: float | None = None, dt: float = TICK_DT) -> list[dict[str, Any]]:
         """Advance one simulation step; returns messages to broadcast."""
@@ -157,9 +187,9 @@ class Session:
                 dt,
                 self.track_profile,
                 grip=faults.grip_multiplier,
-                brake_wear=faults.brake_wear,
+                brake_wear=persistent_brake_wear(self.upgrades) * faults.brake_wear,
             )
-        self.history.append((now, self.vehicle.distance_along_lap))
+        self.history.append((now, self.vehicle.distance_along_lap, self.vehicle.speed, faults.grip_multiplier))
 
         messages, self.outbox = self.outbox, []
 
@@ -170,8 +200,9 @@ class Session:
             self.fault_signature = signature
             messages.append(self.fault_state_message())
 
-        delayed_distance = self._delayed_distance(now, faults.telemetry_delay_ms)
-        hazard = warning_hazard(delayed_distance, self.track_profile)
+        path_delay_ms, fallback_active = self.warning_path(faults)
+        delayed_distance, delayed_speed, grip_estimate = self._delayed_sample(now, path_delay_ms)
+        hazard = warning_hazard(delayed_distance, self.track_profile, delayed_speed, grip_estimate)
         hazard_id = hazard.id if hazard else None
         active = hazard is not None
         if active != self.warning_active or hazard_id != self.warning_hazard_id:
@@ -186,15 +217,33 @@ class Session:
                     "reason": f"Approaching {hazard.label}" if hazard else None,
                     "hazard_zone": hazard.label if hazard else None,
                     "hazard_id": hazard_id,
+                    "advised_speed": advised_corner_speed(hazard, grip_estimate) if hazard else None,
                     "source_t": now - self.start_time,
                 }
             )
 
-        messages.append(self._vehicle_state_message(now, faults, delayed_distance))
+        messages.append(
+            self._vehicle_state_message(
+                now,
+                faults,
+                delayed_distance,
+                delayed_speed,
+                grip_estimate,
+                path_delay_ms,
+                fallback_active,
+            )
+        )
         return messages
 
     def _vehicle_state_message(
-        self, now: float, faults: FaultState, delayed_distance: float
+        self,
+        now: float,
+        faults: FaultState,
+        delayed_distance: float,
+        delayed_speed: float,
+        grip_estimate: float,
+        path_delay_ms: float,
+        fallback_active: bool,
     ) -> dict[str, Any]:
         vehicle = self.vehicle
         profile = self.track_profile
@@ -222,10 +271,14 @@ class Session:
             "next_hazard_distance": distance_to_hazard(vehicle.distance_along_lap, hazard, profile)
             if hazard
             else None,
-            "signed_clearance": signed_clearance(vehicle.x, vehicle.y, profile),
+            "signed_clearance": signed_clearance(
+                vehicle.x, vehicle.y, profile, hint=vehicle.nearest_point_index
+            ),
             "packet_age_ms": packet_age_ms,
             "injected_delay_ms": faults.telemetry_delay_ms,
-            "warning_reason": warning_reason(delayed_distance, profile),
+            "warning_path_delay_ms": path_delay_ms,
+            "local_fallback_active": fallback_active,
+            "warning_reason": warning_reason(delayed_distance, profile, delayed_speed, grip_estimate),
             "track_exit": vehicle.track_exit,
             "lap_complete": vehicle.lap_complete,
         }

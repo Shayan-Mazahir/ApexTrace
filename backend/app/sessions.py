@@ -72,7 +72,12 @@ def create_session(body: SessionCreateRequest) -> SessionCreateResponse:
     track_profile = TRACK_PRESETS[body.track]
     session_id = uuid.uuid4().hex[:8]
     seed = body.seed if body.seed is not None else track_profile.seed
-    session = Session(session_id=session_id, track_profile=track_profile, seed=seed)
+    session = Session(
+        session_id=session_id,
+        track_profile=track_profile,
+        seed=seed,
+        upgrades=body.upgrades,
+    )
     SESSIONS[session_id] = session
     return SessionCreateResponse(
         session_id=session_id,

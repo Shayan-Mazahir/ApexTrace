@@ -29,6 +29,7 @@ class HazardZone(BaseModel):
     start_distance: float
     end_distance: float
     position: tuple[float, float]
+    corner_speed: float
 
 
 class TrackProfile(BaseModel):
@@ -54,10 +55,17 @@ class TrackProfileSummary(BaseModel):
     hazard_zone_count: int
 
 
+class UpgradeConfig(BaseModel):
+    brake_servicing: bool = False
+    comms_improvement: bool = False
+    local_fallback: bool = False
+
+
 class SessionCreateRequest(BaseModel):
     track: TrackId = "monza"
     role: SessionRole = "driver"
     seed: int | None = None
+    upgrades: UpgradeConfig = Field(default_factory=UpgradeConfig)
 
 
 class SessionCreateResponse(BaseModel):
@@ -109,6 +117,8 @@ class VehicleStateMessage(BaseModel):
     signed_clearance: float
     packet_age_ms: float
     injected_delay_ms: float
+    warning_path_delay_ms: float
+    local_fallback_active: bool
     warning_reason: str | None
     track_exit: bool
     lap_complete: bool
@@ -188,3 +198,122 @@ ENGINEER_MESSAGE_TYPES = {
     "launch_scenario",
     "clear_scenario",
 }
+
+
+class UpgradeSpec(BaseModel):
+    id: Literal["brake_servicing", "comms_improvement", "local_fallback"]
+    name: str
+    price_cad: int
+    parameter: str
+    change: str
+    params: dict[str, float]
+
+
+class BudgetDefaults(BaseModel):
+    cash_on_hand: float
+    remaining_commitments: float
+    reserve: float
+
+
+class UpgradeOption(BaseModel):
+    key: str
+    label: str
+    upgrades: UpgradeConfig
+    cost_cad: int
+
+
+class UpgradeCatalog(BaseModel):
+    budget_defaults: BudgetDefaults
+    upgrades: list[UpgradeSpec]
+    configs: list[UpgradeOption]
+
+
+class SuiteTestInfo(BaseModel):
+    id: str
+    track: TrackId
+    name: str
+    seed: int
+    faults: FaultState
+    onset_distance: float
+    end_distance: float
+    cruise_speed: float
+    reaction_s: float
+    lateral_offset: float
+
+
+class Acceptance(BaseModel):
+    max_track_exits: int
+    min_clearance_m: float
+    require_lap_complete: bool
+
+
+class SuiteInfo(BaseModel):
+    version: str
+    acceptance: Acceptance
+    tests: list[SuiteTestInfo]
+
+
+class TestResult(BaseModel):
+    test_id: str
+    track: TrackId
+    passed: bool
+    track_exit: bool
+    completed: bool
+    min_clearance_m: float
+    min_warning_lead_s: float | None
+    warnings_missed: int
+    lap_time_s: float | None
+
+
+class ConfigResult(BaseModel):
+    key: str
+    label: str
+    upgrades: UpgradeConfig
+    cost_cad: int
+    test_count: int
+    track_exits: int
+    min_clearance_m: float
+    min_warning_lead_s: float | None
+    warnings_missed: int
+    passed: bool
+    failed_test_ids: list[str]
+    tests: list[TestResult]
+
+
+class EvaluationResponse(BaseModel):
+    suite: SuiteInfo
+    configs: list[ConfigResult]
+
+
+class ReplayFrame(BaseModel):
+    t: float
+    x: float
+    y: float
+    heading: float
+    speed: float
+    throttle: float
+    brake: float
+    distance: float
+    clearance: float
+    warning_active: bool
+    track_exit: bool
+    lap_complete: bool
+
+
+class ReplayRun(BaseModel):
+    label: str
+    upgrades: UpgradeConfig
+    result: TestResult
+    frames: list[ReplayFrame]
+
+
+class ReplayRequest(BaseModel):
+    test_id: str
+    baseline: UpgradeConfig = Field(default_factory=UpgradeConfig)
+    upgraded: UpgradeConfig
+
+
+class ReplayResponse(BaseModel):
+    test: SuiteTestInfo
+    baseline: ReplayRun
+    upgraded: ReplayRun

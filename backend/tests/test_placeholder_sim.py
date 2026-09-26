@@ -1,12 +1,16 @@
 import math
 
+import pytest
+
 from app.placeholder_sim import (
     TRACK_PRESETS,
     DemoVehicleState,
     next_hazard_zone,
     sector_at,
     signed_clearance,
+    required_warning_distance,
     step,
+    warning_hazard,
     warning_reason,
 )
 
@@ -18,7 +22,7 @@ def test_tracks_are_closed_loops_with_sectors_and_hazards():
         assert len(profile.left_edge) == len(profile.centerline)
         assert len(profile.right_edge) == len(profile.centerline)
         assert len(profile.sectors) == 3
-        assert profile.sectors[-1].end_distance == profile.total_length
+        assert profile.sectors[-1].end_distance == pytest.approx(profile.total_length)
         assert len(profile.hazard_zones) > 0
         for hazard in profile.hazard_zones:
             assert 0 <= hazard.start_distance < hazard.end_distance <= profile.total_length
@@ -78,7 +82,7 @@ def test_warning_reason_none_when_far_from_any_hazard():
     hazard = next_hazard_zone(0.0, profile)
     assert hazard is not None
     far_before_hazard = (hazard.start_distance - 200) % profile.total_length
-    assert warning_reason(far_before_hazard, profile) is None
+    assert warning_reason(far_before_hazard, profile, speed=30.0) is None
 
 
 def test_warning_reason_set_when_close_to_a_hazard():
@@ -86,7 +90,7 @@ def test_warning_reason_set_when_close_to_a_hazard():
     hazard = next_hazard_zone(0.0, profile)
     assert hazard is not None
     just_before_hazard = (hazard.start_distance - 10) % profile.total_length
-    reason = warning_reason(just_before_hazard, profile)
+    reason = warning_reason(just_before_hazard, profile, speed=30.0)
     assert reason is not None
     assert hazard.label in reason
 
@@ -168,11 +172,10 @@ def _wrap_angle(angle: float) -> float:
     return (angle + math.pi) % (2 * math.pi) - math.pi
 
 
-def test_lookahead_steering_can_complete_a_full_lap():
-    # A generic pure-pursuit-style controller (steer toward a point some
-    # distance ahead on the centerline), not a track-specific hack — proves
-    # the geometry and integrator agree well enough for *some* sensible
-    # policy to actually finish a full lap, on both presets.
+def test_lookahead_steering_can_complete_a_full_lap_at_a_safe_speed():
+    # A generic pure-pursuit controller holding a speed below every corner's
+    # limit: proves geometry and integrator agree well enough for a sensible
+    # policy to finish a full lap on both presets.
     for profile in TRACK_PRESETS.values():
         state = DemoVehicleState()
         for _ in range(20000):
@@ -180,8 +183,81 @@ def test_lookahead_steering_can_complete_a_full_lap():
             desired_heading = math.atan2(target[1] - state.y, target[0] - state.x)
             heading_error = _wrap_angle(desired_heading - state.heading)
             steering = max(-1.0, min(1.0, heading_error * 2.0))
-            state = step(state, steering=steering, throttle=0.5, brake=0.0, dt=0.05, profile=profile)
+            throttle = 0.6 if state.speed < 12.0 else 0.0
+            state = step(state, steering=steering, throttle=throttle, brake=0.0, dt=0.05, profile=profile)
             if state.lap_complete or state.track_exit:
                 break
         assert state.lap_complete, f"{profile.id} did not complete a lap: {state}"
         assert not state.track_exit
+
+
+def test_corner_speed_limit_is_real():
+    # Same steering and path, but flat out at a hazard corner: it can't be taken.
+    profile = TRACK_PRESETS["baku"]
+    turn1 = next(h for h in profile.hazard_zones if h.id == "turn1")
+
+    def drive_through(speed: float) -> DemoVehicleState:
+        state = DemoVehicleState(
+            x=turn1.start_distance - 20,
+            speed=speed,
+            nearest_point_index=int((turn1.start_distance - 20) / 4),
+            distance_along_lap=turn1.start_distance - 20,
+        )
+        for _ in range(200):
+            target = _lookahead_point(state.x, state.y, profile.centerline, lookahead=6.0)
+            err = _wrap_angle(math.atan2(target[1] - state.y, target[0] - state.x) - state.heading)
+            hold = speed if speed < 25 else 40
+            throttle = 0.5 if state.speed < hold else 0.0
+            state = step(state, max(-1, min(1, err * 2)), throttle, 0.0, 0.05, profile)
+            if state.track_exit or state.distance_along_lap > turn1.end_distance + 15:
+                break
+        return state
+
+    assert not drive_through(turn1.corner_speed * 0.9).track_exit
+    assert drive_through(38.0).track_exit
+
+
+def test_grip_loss_lowers_the_speed_a_corner_can_be_taken_at():
+    profile = TRACK_PRESETS["baku"]
+    state = DemoVehicleState(speed=19.0, heading=0.0)
+    full = step(state, 1.0, 0.0, 0.0, 0.05, profile, grip=1.0)
+    wet = step(state, 1.0, 0.0, 0.0, 0.05, profile, grip=0.65)
+    assert abs(wet.heading) < abs(full.heading)
+
+
+def test_brake_wear_reduces_deceleration():
+    profile = TRACK_PRESETS["monza"]
+    state = DemoVehicleState(speed=30.0)
+    good = step(state, 0.0, 0.0, 1.0, 0.1, profile, brake_wear=1.0)
+    worn = step(state, 0.0, 0.0, 1.0, 0.1, profile, brake_wear=0.75)
+    assert worn.speed > good.speed
+
+
+def test_warning_only_when_braking_is_needed():
+    profile = TRACK_PRESETS["monza"]
+    hazard = profile.hazard_zones[0]
+    close = hazard.start_distance - 10
+    assert warning_hazard(close, profile, speed=hazard.corner_speed * 0.9) is None
+    assert warning_hazard(close, profile, speed=hazard.corner_speed * 1.5) is hazard
+
+
+def test_required_warning_distance_grows_with_speed():
+    hazard = TRACK_PRESETS["baku"].hazard_zones[0]
+    slow = required_warning_distance(hazard.corner_speed * 1.1, hazard)
+    fast = required_warning_distance(38.0, hazard)
+    assert fast > slow > 0
+
+
+def test_windowed_nearest_matches_full_scan_along_a_lap():
+    from app.placeholder_sim import nearest_index
+
+    profile = TRACK_PRESETS["monza"]
+    centerline = profile.centerline
+    hint = 0
+    for i in range(0, len(centerline), 3):
+        x, y = centerline[i][0] + 1.0, centerline[i][1] - 1.0
+        full = nearest_index(x, y, centerline)
+        hint = nearest_index(x, y, centerline, hint=max(0, i - 2))
+        assert math.hypot(x - centerline[hint][0], y - centerline[hint][1]) == math.hypot(
+            x - centerline[full][0], y - centerline[full][1]
+        )

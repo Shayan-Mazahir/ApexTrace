@@ -20,6 +20,19 @@ from app.schemas import HazardKind, HazardZone, Sector, TrackId, TrackProfile
 
 SAMPLE_STEP = 4.0  # meters between sampled centerline points, demo only
 
+MAX_SPEED = 40.0
+ACCEL = 8.0
+BRAKE_DECEL = 14.0
+DRAG = 2.0
+# Bicycle-model-ish: yaw rate = steering * curvature * speed. Curvature is
+# capped by the steering lock (MAX_CURVATURE) and by grip: lateral accel
+# v^2 * curvature can't exceed grip * G_LAT. So a corner has a real speed
+# limit, and braking (or not) before it decides whether the car stays on.
+MAX_CURVATURE = 0.1  # 1 / min turn radius (10m)
+G_LAT = 30.0  # m/s^2 at grip 1.0 — toy value, includes "downforce"
+NARROW_STRAIGHT_SPEED = 25.0  # advisory limit through narrow sections
+FINISH_RADIUS = 6.0
+
 
 @dataclass
 class HazardSpec:
@@ -44,16 +57,49 @@ class ArcSeg:
 Segment = StraightSeg | ArcSeg
 
 
+CLOSING_RADIUS = 40.0
+
+
+def _arc_end(
+    x: float, y: float, heading: float, radius: float, degrees: float, sample_step: float
+) -> tuple[float, float, float]:
+    """Where the walker below ends up after an arc (same integration)."""
+    arc_radians = math.radians(degrees)
+    arc_length = abs(arc_radians) * radius
+    n = max(1, round(arc_length / sample_step))
+    step = arc_length / n
+    for _ in range(n):
+        heading += arc_radians / n
+        x += math.cos(heading) * step
+        y += math.sin(heading) * step
+    return x, y, heading
+
+
+def _closing_turn_degrees(x: float, y: float, heading: float, sample_step: float) -> float:
+    """Turn (at CLOSING_RADIUS) that leaves the car pointing at the start
+    point, so the closing straight begins without a heading kink."""
+    theta = 0.0
+    for _ in range(40):
+        ex, ey, eh = _arc_end(x, y, heading, CLOSING_RADIUS, math.degrees(theta), sample_step)
+        wanted = math.atan2(-ey, -ex)
+        new_theta = (wanted - heading + math.pi) % (2 * math.pi) - math.pi
+        if abs(new_theta - theta) < 1e-6:
+            break
+        theta = new_theta
+    return math.degrees(theta)
+
+
 def _walk_segments(
     segments: list[Segment], sample_step: float = SAMPLE_STEP
-) -> tuple[list[tuple[float, float]], list[float], list[tuple[float, float, HazardSpec]]]:
+) -> tuple[list[tuple[float, float]], list[float], list[tuple[float, float, HazardSpec, float]]]:
     points: list[tuple[float, float]] = [(0.0, 0.0)]
     distances: list[float] = [0.0]
     x = y = heading = 0.0
     distance = 0.0
-    hazard_ranges: list[tuple[float, float, HazardSpec]] = []
+    hazard_ranges: list[tuple[float, float, HazardSpec, float]] = []
 
-    for seg in segments:
+    def emit(seg: Segment) -> None:
+        nonlocal x, y, heading, distance
         seg_start = distance
         if isinstance(seg, StraightSeg):
             n = max(1, round(seg.length / sample_step))
@@ -78,14 +124,30 @@ def _walk_segments(
                 points.append((x, y))
                 distances.append(distance)
         if seg.hazard:
-            hazard_ranges.append((seg_start, distance, seg.hazard))
+            if isinstance(seg, ArcSeg):
+                corner_speed = min(MAX_SPEED, math.sqrt(G_LAT * seg.radius))
+            else:
+                corner_speed = NARROW_STRAIGHT_SPEED
+            hazard_ranges.append((seg_start, distance, seg.hazard, corner_speed))
 
-    # Close the loop with a straight back to the start point, regardless of
-    # final heading — guarantees exact position closure for a low-poly demo.
-    dx, dy = -x, -y
-    closing_length = math.hypot(dx, dy)
+    for seg in segments:
+        emit(seg)
+
+    # Close the loop: a solved turn that points the car at the start point
+    # (tagged as a hazard, since it is a real corner), then a straight home.
+    closing_degrees = _closing_turn_degrees(x, y, heading, sample_step)
+    if abs(closing_degrees) > 1.0:
+        emit(
+            ArcSeg(
+                CLOSING_RADIUS,
+                closing_degrees,
+                HazardSpec("final_corner", "sweeper", "Final corner"),
+            )
+        )
+
+    closing_length = math.hypot(x, y)
     if closing_length > 0.01:
-        close_heading = math.atan2(dy, dx)
+        close_heading = math.atan2(-y, -x)
         n = max(1, round(closing_length / sample_step))
         step = closing_length / n
         for _ in range(n):
@@ -138,7 +200,7 @@ def _build_profile(
     centerline, distances, hazard_ranges = _walk_segments(segments)
     total_length = distances[-1]
 
-    narrow_ranges = [(s, e) for s, e, h in hazard_ranges if h.kind == "narrow"]
+    narrow_ranges = [(s, e) for s, e, h, _ in hazard_ranges if h.kind == "narrow"]
     left_edge, right_edge = _build_edges(centerline, distances, track_width, narrow_ranges)
 
     def position_at(dist: float) -> tuple[float, float]:
@@ -153,8 +215,9 @@ def _build_profile(
             start_distance=start,
             end_distance=end,
             position=position_at(start),
+            corner_speed=corner_speed,
         )
-        for start, end, h in hazard_ranges
+        for start, end, h, corner_speed in hazard_ranges
     ]
 
     sector_length = total_length / sector_count
@@ -229,19 +292,59 @@ TRACK_PRESETS: dict[TrackId, TrackProfile] = {tid: profile for tid, (profile, _)
 TRACK_DISTANCES: dict[TrackId, list[float]] = {tid: dists for tid, (_, dists) in _PRESETS.items()}
 
 
-def nearest_index(x: float, y: float, centerline: list[tuple[float, float]]) -> int:
-    return min(range(len(centerline)), key=lambda i: math.hypot(x - centerline[i][0], y - centerline[i][1]))
+def nearest_index(
+    x: float,
+    y: float,
+    centerline: list[tuple[float, float]],
+    hint: int | None = None,
+    window: int = 30,
+) -> int:
+    """Nearest sampled centerline point. With a hint (last tick's index) only
+    a window around it is searched — the car moves a few meters per tick — and
+    ties prefer the hint so the duplicated start/finish point can't flip the
+    index across the seam. Falls back to a full scan if the car is far away."""
+    n = len(centerline)
+    if hint is not None:
+        best_i, best_key = hint % n, None
+        for offset in range(-window, window + 1):
+            i = (hint + offset) % n
+            d = math.hypot(x - centerline[i][0], y - centerline[i][1])
+            key = (d, abs(offset))
+            if best_key is None or key < best_key:
+                best_i, best_key = i, key
+        if best_key is not None and best_key[0] < 40.0:
+            return best_i
+    return min(range(n), key=lambda i: math.hypot(x - centerline[i][0], y - centerline[i][1]))
 
 
-def signed_clearance(x: float, y: float, profile: TrackProfile) -> float:
+def _distance_to_segment(px: float, py: float, a: tuple[float, float], b: tuple[float, float]) -> float:
+    abx, aby = b[0] - a[0], b[1] - a[1]
+    length_sq = abx * abx + aby * aby
+    if length_sq == 0:
+        return math.hypot(px - a[0], py - a[1])
+    t = max(0.0, min(1.0, ((px - a[0]) * abx + (py - a[1]) * aby) / length_sq))
+    return math.hypot(px - (a[0] + t * abx), py - (a[1] + t * aby))
+
+
+def _clearance_at_index(x: float, y: float, idx: int, profile: TrackProfile) -> float:
+    """Half the track width minus the distance to the centerline *polyline*
+    (the two segments touching the nearest sample), not just the nearest
+    sample point — sample spacing is as large as the clearances we report."""
+    line = profile.centerline
+    n = len(line)
+    here = line[idx]
+    distance = min(
+        _distance_to_segment(x, y, line[(idx - 1) % n], here),
+        _distance_to_segment(x, y, here, line[(idx + 1) % n]),
+    )
+    return profile.track_width / 2 - distance
+
+
+def signed_clearance(x: float, y: float, profile: TrackProfile, hint: int | None = None) -> float:
     """Distance from (x, y) to the track edge, via the nearest sampled
     centerline point: positive means still within the corridor, negative
-    means off track. A crude linear scan — not the real nearest-centerline
-    projection Person A's module will do."""
-    idx = nearest_index(x, y, profile.centerline)
-    px, py = profile.centerline[idx]
-    nearest_distance = math.hypot(x - px, y - py)
-    return profile.track_width / 2 - nearest_distance
+    means off track. Crude — not the real projection Person A's module will do."""
+    return _clearance_at_index(x, y, nearest_index(x, y, profile.centerline, hint), profile)
 
 
 def sector_at(distance_along_lap: float, profile: TrackProfile) -> Sector:
@@ -268,35 +371,57 @@ def distance_to_hazard(distance_along_lap: float, hazard: HazardZone, profile: T
     return (hazard.start_distance - d) % profile.total_length
 
 
-WARNING_DISTANCE = 40.0  # meters, demo-only threshold
+NOMINAL_BRAKE_DECEL = BRAKE_DECEL  # the warning assumes healthy brakes
+# Baseline warning padding. Calibrated once on the *unupgraded* baseline only:
+# the most generous padding at which the baseline still fails some suite test
+# (with padding 8 m it passed everything, so the suite couldn't discriminate).
+# It is a model assumption, not a measured figure.
+REACTION_ALLOWANCE_S = 0.35
+WARNING_MARGIN_M = 10.0
+NEEDS_BRAKING_FACTOR = 1.0
+GRIP_ESTIMATE_LAG_S = 1.0  # the grip estimate trails the true grip by this much
 
 
-def warning_hazard(distance_along_lap: float, profile: TrackProfile) -> HazardZone | None:
-    """The hazard the warning is currently about, if one is close enough."""
+def advised_corner_speed(hazard: HazardZone, grip_estimate: float) -> float:
+    """Corner speed the warning advises: sqrt(mu * g * r) from the *estimated*
+    grip, which trails reality (see GRIP_ESTIMATE_LAG_S)."""
+    return hazard.corner_speed * math.sqrt(max(grip_estimate, 0.05))
+
+
+def required_warning_distance(speed: float, hazard: HazardZone, grip_estimate: float = 1.0) -> float:
+    """Baseline warning rule: estimated braking distance to the corner speed,
+    plus a reaction allowance and a margin. Uses nominal (not actual) brake
+    performance — it cannot see wear."""
+    target = advised_corner_speed(hazard, grip_estimate)
+    braking = max(0.0, speed * speed - target**2) / (2 * NOMINAL_BRAKE_DECEL)
+    return braking + speed * REACTION_ALLOWANCE_S + WARNING_MARGIN_M
+
+
+def warning_hazard(
+    distance_along_lap: float, profile: TrackProfile, speed: float, grip_estimate: float = 1.0
+) -> HazardZone | None:
+    """The hazard the BRAKE warning is about: the next one ahead, if the
+    reported speed needs shedding and it is inside the required distance."""
     hazard = next_hazard_zone(distance_along_lap, profile)
     if hazard is None:
         return None
-    if distance_to_hazard(distance_along_lap, hazard, profile) < WARNING_DISTANCE:
+    if speed <= advised_corner_speed(hazard, grip_estimate) * NEEDS_BRAKING_FACTOR:
+        return None
+    if distance_to_hazard(distance_along_lap, hazard, profile) < required_warning_distance(
+        speed, hazard, grip_estimate
+    ):
         return hazard
     return None
 
 
-def warning_reason(distance_along_lap: float, profile: TrackProfile) -> str | None:
-    hazard = warning_hazard(distance_along_lap, profile)
+def warning_reason(
+    distance_along_lap: float, profile: TrackProfile, speed: float, grip_estimate: float = 1.0
+) -> str | None:
+    hazard = warning_hazard(distance_along_lap, profile, speed, grip_estimate)
     if hazard is None:
         return None
     ahead = distance_to_hazard(distance_along_lap, hazard, profile)
     return f"Approaching {hazard.label} in {ahead:.0f}m"
-
-
-MAX_SPEED = 40.0
-ACCEL = 8.0
-BRAKE_DECEL = 14.0
-DRAG = 2.0
-# Bicycle-model-ish: yaw rate = steering * curvature * speed, so the turn
-# radius at full steering (1 / MAX_CURVATURE) is speed-independent — a
-# tight corner stays achievable at any speed, not just low speed.
-MAX_CURVATURE = 0.1  # 1 / min turn radius (10m), tighter than either preset's tightest corner
 
 
 @dataclass
@@ -327,15 +452,15 @@ def step(
 
     accel = throttle * ACCEL - brake * BRAKE_DECEL * brake_wear - DRAG * (state.speed / MAX_SPEED)
     speed = max(0.0, min(MAX_SPEED, state.speed + accel * dt))
-    yaw_rate = steering * MAX_CURVATURE * grip * speed
+    curvature = min(MAX_CURVATURE, grip * G_LAT / max(speed * speed, 1.0))
+    yaw_rate = steering * curvature * speed
     heading = state.heading + yaw_rate * dt
     x = state.x + math.cos(heading) * speed * dt
     y = state.y + math.sin(heading) * speed * dt
 
-    clearance = signed_clearance(x, y, profile)
-    track_exit = clearance < 0
+    idx = nearest_index(x, y, profile.centerline, hint=state.nearest_point_index)
+    track_exit = _clearance_at_index(x, y, idx, profile) < 0
 
-    idx = nearest_index(x, y, profile.centerline)
     n = len(profile.centerline)
     delta_idx = idx - state.nearest_point_index
     if delta_idx < -n // 2:
