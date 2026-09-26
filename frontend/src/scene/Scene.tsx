@@ -13,6 +13,7 @@ export interface CarPose {
   y: number
   heading: number
   speed?: number
+  drsOpen?: boolean
 }
 
 export type SceneView = 'cockpit' | 'follow' | 'overview'
@@ -25,14 +26,14 @@ const EYE_LOOK_HEIGHT = 0.3
 
 const SKY_HORIZON = '#bcd3e6'
 
-type ShownPose = { x: number; y: number; heading: number; speed: number }
+type ShownPose = { x: number; y: number; heading: number; speed: number; drsOpen: boolean }
 
 // Telemetry arrives at 20 Hz; the car and camera are drawn at display rate,
 // easing toward the latest server pose (a few tens of ms behind it).
 function useSmoothedPose(pose: CarPose) {
   const target = useRef(pose)
   target.current = pose
-  const shown = useRef<ShownPose>({ x: pose.x, y: pose.y, heading: pose.heading, speed: pose.speed ?? 0 })
+  const shown = useRef<ShownPose>({ x: pose.x, y: pose.y, heading: pose.heading, speed: pose.speed ?? 0, drsOpen: false })
   const first = useRef(true)
   useFrame((_, dt) => {
     const t = target.current
@@ -45,6 +46,7 @@ function useSmoothedPose(pose: CarPose) {
     const dh = ((((t.heading - s.heading + Math.PI) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) - Math.PI
     s.heading += dh * k
     s.speed = t.speed ?? 0
+    s.drsOpen = t.drsOpen ?? false
   })
   return shown
 }
@@ -130,9 +132,11 @@ function CameraRig({ view, profile, shown }: { view: SceneView; profile: TrackPr
 function Car({ shown, steering, scale, cockpit }: { shown: React.MutableRefObject<ShownPose>; steering?: React.MutableRefObject<number>; scale: number; cockpit: boolean }) {
   const group = useRef<Group>(null)
   const speed = useRef(0)
+  const aeroOpen = useRef(false)
   useFrame(() => {
     const p = shown.current
     speed.current = p.speed
+    aeroOpen.current = p.drsOpen
     if (group.current) {
       group.current.position.set(p.x, 0.02, p.y)
       group.current.rotation.set(0, -p.heading, 0)
@@ -152,7 +156,7 @@ function Car({ shown, steering, scale, cockpit }: { shown: React.MutableRefObjec
         <planeGeometry args={[5.6, 2.3]} />
         <meshBasicMaterial color="#000" transparent opacity={0.35} depthWrite={false} />
       </mesh>
-      <F1Car speed={speed} steering={steering} hideDriver={cockpit} />
+      <F1Car speed={speed} steering={steering} aeroOpen={aeroOpen} hideDriver={cockpit} />
     </group>
   )
 }
