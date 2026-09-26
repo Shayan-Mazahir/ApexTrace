@@ -40,6 +40,14 @@ export function CalibrationPanel({
         <span>→ {normalized.brake.toFixed(3)}</span>
       </div>
 
+      {raw.resetPressed !== undefined && (
+        <div className="calibration-panel__row">
+          <span>Reset button</span>
+          <span>{raw.resetPressed ? 'pressed' : '—'}</span>
+          <span>→ resets to grid</span>
+        </div>
+      )}
+
       <div className="calibration-panel__row">
         <button type="button" onClick={setCenter}>
           Set steering center

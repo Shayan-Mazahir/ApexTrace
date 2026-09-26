@@ -6,6 +6,10 @@ export interface RawInputSample {
   steeringRaw: number
   throttleRaw: number
   brakeRaw: number
+  // Momentary "reset the car to the grid" button, if the device has one.
+  // Adapters report the button's *current* state; the rising edge is detected
+  // once in useInputAdapter, so a held button resets only once.
+  resetPressed?: boolean
 }
 
 export interface InputAdapter {

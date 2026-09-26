@@ -49,7 +49,9 @@ def read_steering(ser, last_value):
 
     try:
         data = json.loads(line)
-        raw = float(data.get("steering", 0.0))
+        # The firmware field is "steeringRaw" (it matches the frontend's
+        # HardwareInputMessage contract); "steering" was the older name.
+        raw = float(data.get("steeringRaw", data.get("steering", 0.0)))
         scaled = raw / RAW_STEER_RANGE
         return max(-1.0, min(1.0, scaled))
     except (json.JSONDecodeError, ValueError, TypeError):

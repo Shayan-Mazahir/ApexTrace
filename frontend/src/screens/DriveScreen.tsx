@@ -52,6 +52,14 @@ export function DriveScreen() {
   const inSession = session.sessionId !== null
   const view: SceneView = viewOverride ?? (inSession ? 'follow' : 'overview')
 
+  // The wheel's reset button does what "Reset to grid" does. Kept in a ref so
+  // the effect runs on a new press only, not whenever `reset` is re-created.
+  const resetRef = useRef(session.reset)
+  resetRef.current = session.reset
+  useEffect(() => {
+    if (input.resetRequests > 0) resetRef.current()
+  }, [input.resetRequests])
+
   useEffect(() => {
     if (demo.active && demo.step.id === 'drive' && connectionState === 'idle') void start()
   }, [demo.active, demo.step.id, connectionState, start])
