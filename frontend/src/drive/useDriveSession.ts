@@ -3,24 +3,40 @@ import { createSession } from '../api/session'
 import { useActiveSession } from '../app/ActiveSessionContext'
 import { useErrorContext } from '../app/ErrorContext'
 import { useGarage } from '../app/GarageContext'
-import type { NormalizedControls } from '../input/useInputAdapter'
+import type { ButtonCounts, NormalizedControls } from '../input/useInputAdapter'
 import { useSessionStream } from '../stream/useSessionStream'
-import type { TrackId } from '../types/schemas'
+import { DEFAULT_CAR_SETUP, type CarSetupConfig, type ErsMode, type TrackId } from '../types/schemas'
 
 export type ConnectionState = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'closed'
 
 const SEND_INTERVAL_MS = 50 // 20Hz, matches the backend tick rate
+const SETUP_KEY = 'limitlab.carSetup'
+const ERS_ORDER: ErsMode[] = ['harvest', 'balanced', 'overtake']
+
+function loadSetup(): CarSetupConfig {
+  try {
+    const saved = JSON.parse(localStorage.getItem(SETUP_KEY) ?? 'null')
+    return saved ? { ...DEFAULT_CAR_SETUP, ...saved } : DEFAULT_CAR_SETUP
+  } catch {
+    return DEFAULT_CAR_SETUP
+  }
+}
 
 // Creates/attaches the driver's session and streams controls up. All state
 // (position, faults, warnings, lap progress) is server-authoritative — this
 // hook never computes physics locally.
-export function useDriveSession(normalizedControls: NormalizedControls) {
+export function useDriveSession(
+  normalizedControls: NormalizedControls,
+  buttonCounts?: React.MutableRefObject<ButtonCounts>,
+  ersPresses = 0,
+) {
   const { reportError } = useErrorContext()
   const { driverSession, setDriverSession } = useActiveSession()
   const { selection } = useGarage()
   const [selectedTrack, setSelectedTrack] = useState<TrackId>(driverSession?.track ?? 'monza')
   const [creating, setCreating] = useState(false)
   const [running, setRunning] = useState(true)
+  const [setup, setSetupState] = useState<CarSetupConfig>(loadSetup)
 
   const stream = useSessionStream('driver', driverSession?.id ?? null)
   const { send } = stream
@@ -35,7 +51,7 @@ export function useDriveSession(normalizedControls: NormalizedControls) {
     if (creating || (driverSession && stream.connection !== 'closed')) return
     setCreating(true)
     try {
-      const created = await createSession(selectedTrack, 'driver', undefined, selection)
+      const created = await createSession(selectedTrack, 'driver', undefined, selection, setup)
       seqRef.current = 0
       setRunning(true)
       setDriverSession({
@@ -49,7 +65,38 @@ export function useDriveSession(normalizedControls: NormalizedControls) {
     } finally {
       setCreating(false)
     }
-  }, [creating, driverSession, stream.connection, selectedTrack, selection, setDriverSession, reportError])
+  }, [creating, driverSession, stream.connection, selectedTrack, selection, setup, setDriverSession, reportError])
+
+  // Setup changes apply live: saved locally and sent to the running session.
+  const setSetup = useCallback(
+    (next: CarSetupConfig) => {
+      setSetupState(next)
+      try {
+        localStorage.setItem(SETUP_KEY, JSON.stringify(next))
+      } catch {
+        /* storage unavailable: setting still applies to this session */
+      }
+      send({ type: 'car_setup', setup: next })
+    },
+    [send],
+  )
+
+  // Re-send the setup whenever the stream (re)connects, so the server always has it.
+  const setupRef = useRef(setup)
+  setupRef.current = setup
+  useEffect(() => {
+    if (stream.connection === 'connected') send({ type: 'car_setup', setup: setupRef.current })
+  }, [stream.connection, send])
+
+  // Battery-mode button cycles Harvest -> Balanced -> Overtake.
+  const ersSeen = useRef(ersPresses)
+  useEffect(() => {
+    if (ersPresses === ersSeen.current) return
+    ersSeen.current = ersPresses
+    const current = setupRef.current
+    const next = ERS_ORDER[(ERS_ORDER.indexOf(current.ers_mode) + 1) % ERS_ORDER.length]
+    setSetup({ ...current, ers_mode: next })
+  }, [ersPresses, setSetup])
 
   const endSession = useCallback(() => setDriverSession(null), [setDriverSession])
 
@@ -85,12 +132,18 @@ export function useDriveSession(normalizedControls: NormalizedControls) {
         steering: controlsRef.current.steering,
         throttle: controlsRef.current.throttle,
         brake: controlsRef.current.brake,
+        shift_up_count: buttonCounts?.current.shiftUp ?? 0,
+        shift_down_count: buttonCounts?.current.shiftDown ?? 0,
+        drs_toggle_count: buttonCounts?.current.drs ?? 0,
+        reverse_toggle_count: buttonCounts?.current.reverse ?? 0,
       })
     }, SEND_INTERVAL_MS)
     return () => clearInterval(interval)
-  }, [stream.connection, driverSession, send])
+  }, [stream.connection, driverSession, send, buttonCounts])
 
   return {
+    setup,
+    setSetup,
     selectedTrack,
     selectTrack: setSelectedTrack,
     connectionState,

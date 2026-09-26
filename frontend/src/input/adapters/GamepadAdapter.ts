@@ -1,8 +1,16 @@
-import type { InputAdapter, RawInputSample } from '../InputAdapter'
+import type { ButtonId, InputAdapter, RawInputSample } from '../InputAdapter'
 
 const STEERING_AXIS = 0
 const THROTTLE_BUTTON = 7 // right trigger, standard mapping
 const BRAKE_BUTTON = 6 // left trigger, standard mapping
+// Standard mapping: bumpers work as paddles on most wheels and pads.
+export const BUTTON_INDEX: Record<ButtonId, number> = {
+  shiftUp: 5, // RB / right paddle
+  shiftDown: 4, // LB / left paddle
+  drs: 0, // A / cross
+  reverse: 2, // X / square
+  ersCycle: 3, // Y / triangle
+}
 
 export function discoverGamepadIndex(): number | null {
   const pads = navigator.getGamepads?.() ?? []
@@ -25,6 +33,11 @@ export function createGamepadAdapter(index: number): InputAdapter {
         throttleRaw: pad.buttons[THROTTLE_BUTTON]?.value ?? 0,
         brakeRaw: pad.buttons[BRAKE_BUTTON]?.value ?? 0,
       }
+    },
+    pollButtons(): ButtonId[] {
+      const pad = navigator.getGamepads?.()[index]
+      if (!pad) return []
+      return (Object.keys(BUTTON_INDEX) as ButtonId[]).filter((id) => pad.buttons[BUTTON_INDEX[id]]?.pressed)
     },
   }
 }

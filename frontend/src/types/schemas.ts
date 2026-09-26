@@ -67,6 +67,28 @@ export interface SessionJoinResponse {
   track_profile: TrackProfile
 }
 
+// Driver assists and modes of the 2026 car (backend app/f1_car.py).
+export type TractionControl = 'off' | 'medium' | 'full'
+export type Gearbox = 'automatic' | 'manual'
+export type DrsMode = 'off' | 'auto' | 'manual'
+export type ErsMode = 'harvest' | 'balanced' | 'overtake'
+
+export interface CarSetupConfig {
+  traction_control: TractionControl
+  abs: boolean
+  gearbox: Gearbox
+  drs_mode: DrsMode
+  ers_mode: ErsMode
+}
+
+export const DEFAULT_CAR_SETUP: CarSetupConfig = {
+  traction_control: 'full',
+  abs: true,
+  gearbox: 'automatic',
+  drs_mode: 'auto',
+  ers_mode: 'balanced',
+}
+
 export interface ControlInputMessage {
   type: 'control_input'
   seq: number
@@ -77,6 +99,16 @@ export interface ControlInputMessage {
   steering: number
   throttle: number
   brake: number
+  // running totals of button presses; the server acts on the increase
+  shift_up_count?: number
+  shift_down_count?: number
+  drs_toggle_count?: number
+  reverse_toggle_count?: number
+}
+
+export interface CarSetupMessage {
+  type: 'car_setup'
+  setup: CarSetupConfig
 }
 
 export type WarningDisplayState = 'clear' | 'brake' | 'stale' | 'no_data'
@@ -119,6 +151,22 @@ export interface VehicleStateMessage {
   lap_time_s: number
   last_lap_s: number | null
   best_lap_s: number | null
+  session_best_lap_s?: number | null // best valid lap this session, kept across resets
+  lap_valid?: boolean
+  last_lap_valid?: boolean | null
+  // car / power unit
+  gear?: number // -1 = reverse
+  rpm?: number
+  battery_pct?: number
+  ers_deploy_kw?: number
+  drs_open?: boolean
+  drs_available?: boolean
+  tc_active?: boolean
+  wheelspin?: boolean
+  lockup?: boolean
+  g_lat?: number
+  g_long?: number
+  setup?: CarSetupConfig
   // TCN observer (null while warming up or unavailable)
   tcn_risk: number | null
   tcn_clearance: number | null
@@ -322,6 +370,7 @@ export type ClientCommand =
   | { type: 'add_fault'; fault: FaultSpec }
   | { type: 'cancel_fault'; fault_id: string }
   | ControlInputMessage
+  | CarSetupMessage
 
 export type UpgradeId = 'brake_servicing' | 'comms_improvement' | 'local_fallback'
 export const UPGRADE_IDS: UpgradeId[] = ['brake_servicing', 'comms_improvement', 'local_fallback']
