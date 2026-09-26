@@ -351,11 +351,12 @@ def replay(test_id: str, baseline: UpgradeConfig, upgraded: UpgradeConfig):
 
     test = TESTS_BY_ID[test_id]
     runs = []
-    for label, cfg in (("Baseline", baseline), ("Upgraded", upgraded)):
+    for prefix, cfg in (("Baseline", baseline), ("Upgraded", upgraded)):
         output = run_test(test, cfg, record=True)
+        name = config_label(cfg)
         runs.append(
             ReplayRun(
-                label=f"{label}: {config_label(cfg)}",
+                label=name if name.startswith(prefix) else f"{prefix}: {name}",
                 upgrades=cfg,
                 result=output.result,
                 frames=output.frames,

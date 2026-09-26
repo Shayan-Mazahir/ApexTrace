@@ -10,10 +10,10 @@ import type {
   VehicleStateMessage,
 } from '../types/schemas'
 import { appendFaultEvent, type FaultEvent } from './faultTimeline'
-import { nextBackoffMs } from './reconnect'
+import { openSessionConnection, type StreamConnection } from './connection'
 import { applyWarningEvent, INITIAL_WARNING, type WarningState } from './warningState'
 
-export type StreamConnection = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'closed'
+export type { StreamConnection }
 
 const MAX_TRAIL_POINTS = 2000
 
@@ -34,7 +34,7 @@ export function useSessionStream(role: SessionRole, sessionId: string | null) {
   const [previousLapTrail, setPreviousLapTrail] = useState<Point[]>([])
   const [lastMessageAt, setLastMessageAt] = useState<number | null>(null)
 
-  const wsRef = useRef<WebSocket | null>(null)
+  const connectionRef = useRef<ReturnType<typeof openSessionConnection> | null>(null)
   const trailRef = useRef<Point[]>([])
   const runIdRef = useRef<string | null>(null)
   const reportErrorRef = useRef(reportError)
@@ -56,10 +56,6 @@ export function useSessionStream(role: SessionRole, sessionId: string | null) {
       setConnection('idle')
       return
     }
-
-    let disposed = false
-    let attempt = 0
-    let timer: ReturnType<typeof setTimeout> | undefined
 
     const handleMessage = (message: ServerMessage) => {
       setLastMessageAt(Date.now())
@@ -96,54 +92,32 @@ export function useSessionStream(role: SessionRole, sessionId: string | null) {
       }
     }
 
-    const connect = () => {
-      setConnection(attempt === 0 ? 'connecting' : 'reconnecting')
-      const ws = new WebSocket(sessionWebSocketUrl(role, sessionId))
-      wsRef.current = ws
-
-      ws.onopen = () => {
-        attempt = 0
-        setConnection('connected')
-      }
-      ws.onmessage = (event) => {
+    const connection = openSessionConnection({
+      url: sessionWebSocketUrl(role, sessionId),
+      sessionId,
+      createSocket: (url) => new WebSocket(url),
+      sessionExists,
+      onStatus: setConnection,
+      onMessage: (data) => {
         try {
-          handleMessage(JSON.parse(event.data) as ServerMessage)
+          handleMessage(JSON.parse(data) as ServerMessage)
         } catch {
           // a malformed frame from the server must not take the UI down
         }
-      }
-      ws.onclose = () => {
-        if (disposed) return
-        setConnection('reconnecting')
-        // A rejected handshake looks like any other drop to the browser, so
-        // ask the server whether the session still exists before retrying.
-        void sessionExists(sessionId).then((exists) => {
-          if (disposed) return
-          if (exists === false) {
-            setConnection('closed')
-            return
-          }
-          timer = setTimeout(connect, nextBackoffMs(attempt++))
-        })
-      }
-    }
-
-    connect()
+      },
+    })
+    connectionRef.current = connection
 
     return () => {
-      disposed = true
-      clearTimeout(timer)
-      wsRef.current?.close()
-      wsRef.current = null
+      connection.close()
+      connectionRef.current = null
     }
   }, [role, sessionId])
 
-  const send = useCallback((command: ClientCommand): boolean => {
-    const ws = wsRef.current
-    if (!ws || ws.readyState !== WebSocket.OPEN) return false
-    ws.send(JSON.stringify(command))
-    return true
-  }, [])
+  const send = useCallback(
+    (command: ClientCommand): boolean => connectionRef.current?.send(JSON.stringify(command)) ?? false,
+    [],
+  )
 
   return {
     connection,

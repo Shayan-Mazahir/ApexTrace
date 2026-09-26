@@ -61,3 +61,36 @@ yet.)
   Measured packet age and injected delay are reported separately.
 - Saved scenarios live in `scenarios/*.json` and apply their faults over a
   lap-distance window (distance-triggered, so onset is corner-relative).
+
+## Upgrades, evaluation and comparison
+
+- `config/upgrades.json` holds prices, effects and the default budget (declared
+  assumptions). `backend/app/budget.py` loads it, enumerates the 8 combinations
+  and applies effects inside the simulator: brake servicing restores the
+  persistent wear factor (0.75 -> 1.0), comms scales the injected warning delay
+  (x0.4), local fallback bypasses the remote path when its data is older than
+  150 ms (using local speed/position only, never hidden grip).
+- `placeholder_eval.py` runs a fixed 36-test suite through the same `Session`
+  engine as live driving, with one scripted driver that brakes only in response
+  to warnings, so a better warning system can change the braking. Acceptance is
+  declared up front. Results are deterministic and cached; the cache is warmed
+  at start-up.
+- `POST /evaluation/replay` re-runs a test for two configurations and returns
+  10 Hz frames for the synchronized Compare view. `frontend/public/backup-replay.json`
+  is a recording of the same thing, used if the backend is down.
+- Money math (`available = cash - commitments - reserve`, affordability,
+  filtering, recommendation) lives in `frontend/src/garage/budgetMath.ts` and is
+  unit-tested; pass/fail comes from the backend.
+- Cornering is speed-limited (lateral accel = grip x G), the baseline warning
+  advises a corner speed from a *lagged* grip estimate, and clearance is
+  point-to-segment. These live in `placeholder_sim.py` and are Person A's to
+  replace.
+
+## Connection recovery
+
+`frontend/src/stream/connection.ts` is a framework-free reconnecting socket:
+backoff (0.5 s doubling to 5 s), and before each retry a REST probe decides
+whether the session still exists (gone -> stop; server unreachable -> keep
+trying). It is unit-tested with a fake socket and exercised end-to-end in Chrome
+(transient drop resumes the same session; backend outage shows "Reconnecting",
+and a restart ends the lost in-memory session).

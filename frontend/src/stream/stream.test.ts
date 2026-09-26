@@ -12,6 +12,7 @@ const warning = (seq: number, active: boolean, zone = 'Turn 1'): WarningEventMes
   reason: active ? `Approaching ${zone}` : null,
   hazard_zone: active ? zone : null,
   hazard_id: active ? 'turn1' : null,
+  advised_speed: active ? 19 : null,
   source_t: 0,
 })
 

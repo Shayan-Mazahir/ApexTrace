@@ -50,3 +50,7 @@
   height: 100%;
   background: var(--color-orange);
 }
+
+.drive-hud {
+  bottom: calc(var(--space-md) + var(--demo-bar-height, 0px));
+}

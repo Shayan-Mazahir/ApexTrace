@@ -43,3 +43,7 @@
   flex: 1;
   margin-left: var(--space-sm);
 }
+
+.calibration-panel {
+  bottom: calc(var(--space-md) + var(--demo-bar-height, 0px));
+}

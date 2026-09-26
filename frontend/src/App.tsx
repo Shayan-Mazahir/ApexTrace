@@ -1,10 +1,13 @@
 import './App.css'
 import { ActiveSessionProvider } from './app/ActiveSessionContext'
+import { DemoProvider } from './app/DemoContext'
 import { ErrorProvider } from './app/ErrorContext'
+import { GarageProvider } from './app/GarageContext'
 import { ScreenProvider, useScreen } from './app/ScreenContext'
 import { ScreenNav } from './app/ScreenNav'
 import { ConnectionStatus } from './components/ConnectionStatus'
 import { ErrorBanner } from './components/ErrorBanner'
+import { DemoController } from './demo/DemoController'
 import { CompareScreen } from './screens/CompareScreen'
 import { DriveScreen } from './screens/DriveScreen'
 import { EngineerScreen } from './screens/EngineerScreen'
@@ -33,6 +36,7 @@ function AppShell() {
         <ConnectionStatus />
       </div>
       <CurrentScreen />
+      <DemoController />
     </div>
   )
 }
@@ -41,9 +45,13 @@ function App() {
   return (
     <ErrorProvider>
       <ActiveSessionProvider>
-        <ScreenProvider>
-          <AppShell />
-        </ScreenProvider>
+        <GarageProvider>
+          <ScreenProvider>
+            <DemoProvider>
+              <AppShell />
+            </DemoProvider>
+          </ScreenProvider>
+        </GarageProvider>
       </ActiveSessionProvider>
     </ErrorProvider>
   )

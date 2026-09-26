@@ -4,7 +4,9 @@ import type {
   SessionJoinResponse,
   SessionRole,
   TrackId,
+  TrackProfile,
   TrackProfileSummary,
+  UpgradeConfig,
 } from '../types/schemas'
 import { API_BASE_URL } from './config'
 
@@ -20,11 +22,12 @@ export async function createSession(
   track: TrackId,
   role: SessionRole = 'driver',
   seed?: number,
+  upgrades?: UpgradeConfig,
 ): Promise<SessionCreateResponse> {
   const response = await fetch(`${API_BASE_URL}/sessions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ track, role, seed }),
+    body: JSON.stringify({ track, role, seed, upgrades }),
   })
   if (!response.ok) {
     throw new Error(`Failed to create session: ${response.status}`)
@@ -73,4 +76,12 @@ export async function listScenarios(): Promise<ScenarioConfig[]> {
 export function sessionWebSocketUrl(role: SessionRole, sessionId: string): string {
   const base = API_BASE_URL.replace(/^http/, 'ws')
   return `${base}/ws/${role}/${sessionId}`
+}
+
+export async function getTrack(track: TrackId): Promise<TrackProfile> {
+  const response = await fetch(`${API_BASE_URL}/tracks/${track}`)
+  if (!response.ok) {
+    throw new Error(`Failed to load track: ${response.status}`)
+  }
+  return response.json()
 }

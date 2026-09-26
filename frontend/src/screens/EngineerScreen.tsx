@@ -55,7 +55,7 @@ export function EngineerScreen() {
   return (
     <div className="engineer-screen">
       <div className="engineer-screen__view">
-        <Canvas shadows camera={{ position: [400, 500, 400], fov: 50 }}>
+        <Canvas camera={{ position: [400, 500, 400], fov: 50, near: 0.5, far: 6000 }}>
           <Scene
             trackProfile={engineer.trackProfile}
             vehicleState={engineer.vehicleState}

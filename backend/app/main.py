@@ -24,9 +24,16 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="LimitLab API", lifespan=lifespan)
 
+# Local demo only: the page may be served from localhost or from the driver
+# laptop's LAN address (engineer station on a second device).
+LOCAL_ORIGIN_REGEX = (
+    r"http://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+"
+    r"|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?"
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origin_regex=LOCAL_ORIGIN_REGEX,
     allow_methods=["*"],
     allow_headers=["*"],
 )

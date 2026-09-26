@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createSession } from '../api/session'
 import { useActiveSession } from '../app/ActiveSessionContext'
 import { useErrorContext } from '../app/ErrorContext'
+import { useGarage } from '../app/GarageContext'
 import type { NormalizedControls } from '../input/useInputAdapter'
 import { useSessionStream } from '../stream/useSessionStream'
 import type { TrackId } from '../types/schemas'
@@ -16,6 +17,7 @@ const SEND_INTERVAL_MS = 50 // 20Hz, matches the backend tick rate
 export function useDriveSession(normalizedControls: NormalizedControls) {
   const { reportError } = useErrorContext()
   const { driverSession, setDriverSession } = useActiveSession()
+  const { selection } = useGarage()
   const [selectedTrack, setSelectedTrack] = useState<TrackId>(driverSession?.track ?? 'monza')
   const [creating, setCreating] = useState(false)
   const [running, setRunning] = useState(true)
@@ -33,7 +35,7 @@ export function useDriveSession(normalizedControls: NormalizedControls) {
     if (creating || (driverSession && stream.connection !== 'closed')) return
     setCreating(true)
     try {
-      const created = await createSession(selectedTrack)
+      const created = await createSession(selectedTrack, 'driver', undefined, selection)
       seqRef.current = 0
       setRunning(true)
       setDriverSession({
@@ -47,7 +49,7 @@ export function useDriveSession(normalizedControls: NormalizedControls) {
     } finally {
       setCreating(false)
     }
-  }, [creating, driverSession, stream.connection, selectedTrack, setDriverSession, reportError])
+  }, [creating, driverSession, stream.connection, selectedTrack, selection, setDriverSession, reportError])
 
   const endSession = useCallback(() => setDriverSession(null), [setDriverSession])
 

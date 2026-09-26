@@ -24,6 +24,7 @@ export interface HazardZone {
   start_distance: number
   end_distance: number
   position: [number, number]
+  corner_speed: number
 }
 
 export interface TrackProfile {
@@ -94,6 +95,8 @@ export interface VehicleStateMessage {
   signed_clearance: number
   packet_age_ms: number
   injected_delay_ms: number
+  warning_path_delay_ms: number
+  local_fallback_active: boolean
   warning_reason: string | null
   track_exit: boolean
   lap_complete: boolean
@@ -132,6 +135,7 @@ export interface WarningEventMessage {
   reason: string | null
   hazard_zone: string | null
   hazard_id: string | null
+  advised_speed: number | null
   source_t: number
 }
 
@@ -152,6 +156,7 @@ export interface SessionInfoMessage {
   seed: number
   track: TrackId
   scenario_id: string | null
+  upgrades: UpgradeConfig
   driver_connected: boolean
   engineer_connected: boolean
   engineer_ever_connected: boolean
@@ -181,3 +186,126 @@ export type ClientCommand =
   | { type: 'set_faults'; faults: FaultState }
   | { type: 'launch_scenario'; scenario_id: string }
   | ControlInputMessage
+
+export type UpgradeId = 'brake_servicing' | 'comms_improvement' | 'local_fallback'
+export const UPGRADE_IDS: UpgradeId[] = ['brake_servicing', 'comms_improvement', 'local_fallback']
+
+export type UpgradeConfig = Record<UpgradeId, boolean>
+export const NO_UPGRADES: UpgradeConfig = {
+  brake_servicing: false,
+  comms_improvement: false,
+  local_fallback: false,
+}
+
+export interface UpgradeSpec {
+  id: UpgradeId
+  name: string
+  price_cad: number
+  parameter: string
+  change: string
+  params: Record<string, number>
+}
+
+export interface BudgetDefaults {
+  cash_on_hand: number
+  remaining_commitments: number
+  reserve: number
+}
+
+export interface UpgradeOption {
+  key: string
+  label: string
+  upgrades: UpgradeConfig
+  cost_cad: number
+}
+
+export interface UpgradeCatalog {
+  budget_defaults: BudgetDefaults
+  upgrades: UpgradeSpec[]
+  configs: UpgradeOption[]
+}
+
+export interface Acceptance {
+  max_track_exits: number
+  min_clearance_m: number
+  require_lap_complete: boolean
+}
+
+export interface SuiteTestInfo {
+  id: string
+  track: TrackId
+  name: string
+  seed: number
+  faults: FaultState
+  onset_distance: number
+  end_distance: number
+  cruise_speed: number
+  reaction_s: number
+  lateral_offset: number
+}
+
+export interface SuiteInfo {
+  version: string
+  acceptance: Acceptance
+  tests: SuiteTestInfo[]
+}
+
+export interface TestResult {
+  test_id: string
+  track: TrackId
+  passed: boolean
+  track_exit: boolean
+  completed: boolean
+  min_clearance_m: number
+  min_warning_lead_s: number | null
+  warnings_missed: number
+  lap_time_s: number | null
+}
+
+export interface ConfigResult {
+  key: string
+  label: string
+  upgrades: UpgradeConfig
+  cost_cad: number
+  test_count: number
+  track_exits: number
+  min_clearance_m: number
+  min_warning_lead_s: number | null
+  warnings_missed: number
+  passed: boolean
+  failed_test_ids: string[]
+  tests: TestResult[]
+}
+
+export interface EvaluationResponse {
+  suite: SuiteInfo
+  configs: ConfigResult[]
+}
+
+export interface ReplayFrame {
+  t: number
+  x: number
+  y: number
+  heading: number
+  speed: number
+  throttle: number
+  brake: number
+  distance: number
+  clearance: number
+  warning_active: boolean
+  track_exit: boolean
+  lap_complete: boolean
+}
+
+export interface ReplayRun {
+  label: string
+  upgrades: UpgradeConfig
+  result: TestResult
+  frames: ReplayFrame[]
+}
+
+export interface ReplayResponse {
+  test: SuiteTestInfo
+  baseline: ReplayRun
+  upgraded: ReplayRun
+}
