@@ -1,15 +1,34 @@
 import type { NormalizedControls } from '../input/useInputAdapter'
+import type { VehicleStateMessage } from '../types/schemas'
 import './DriveHud.css'
 
 interface DriveHudProps {
   normalized: NormalizedControls
-  speed: number
+  vehicleState: VehicleStateMessage | null
 }
 
-export function DriveHud({ normalized, speed }: DriveHudProps) {
+export function DriveHud({ normalized, vehicleState }: DriveHudProps) {
   return (
     <div className="drive-hud">
-      <div className="drive-hud__speed">{speed.toFixed(1)} m/s</div>
+      <div className="drive-hud__speed">{(vehicleState?.speed ?? 0).toFixed(1)} m/s</div>
+
+      <div className="drive-hud__row">
+        <span>Lap</span>
+        <span>{((vehicleState?.lap_progress ?? 0) * 100).toFixed(0)}%</span>
+      </div>
+      <div className="drive-hud__row">
+        <span>Sector</span>
+        <span>{vehicleState?.sector_name ?? '—'}</span>
+      </div>
+      <div className="drive-hud__row">
+        <span>Next hazard</span>
+        <span>
+          {vehicleState?.next_hazard_distance != null
+            ? `${vehicleState.next_hazard_distance.toFixed(0)}m`
+            : '—'}
+        </span>
+      </div>
+
       <div className="drive-hud__row">
         <span>Steer</span>
         <Bar value={(normalized.steering + 1) / 2} />

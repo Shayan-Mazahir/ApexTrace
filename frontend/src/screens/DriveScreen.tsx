@@ -1,9 +1,7 @@
 import { Canvas } from '@react-three/fiber'
-import { useMemo } from 'react'
 import { CalibrationPanel } from '../components/CalibrationPanel'
 import { StatusBadge, type StatusTone } from '../components/StatusBadge'
 import { BrakeWarning } from '../drive/BrakeWarning'
-import { computeDemoBrakeWarning } from '../drive/demoBrakeWarning'
 import { DriveHud } from '../drive/DriveHud'
 import { RunStateBanner } from '../drive/RunStateBanner'
 import { TrackSelector } from '../drive/TrackSelector'
@@ -30,22 +28,21 @@ export function DriveScreen() {
   const input = useInputAdapter()
   const session = useDriveSession(input.normalized)
 
-  const brakeWarningActive = useMemo(
-    () => computeDemoBrakeWarning(session.vehicleState, session.trackProfile),
-    [session.vehicleState, session.trackProfile],
-  )
-
   return (
     <div className="drive-screen">
-      <Canvas shadows camera={{ position: [140, 180, 60], fov: 50 }}>
+      <Canvas shadows camera={{ position: [400, 500, 400], fov: 50 }}>
         <Scene
           trackProfile={session.trackProfile}
           vehicleState={session.vehicleState}
           trail={session.trail}
+          previousLapTrail={session.previousLapTrail}
         />
       </Canvas>
 
-      <BrakeWarning active={brakeWarningActive} />
+      <BrakeWarning
+        reason={session.vehicleState?.warning_reason ?? null}
+        hazardZone={session.vehicleState?.next_hazard_zone ?? null}
+      />
       <RunStateBanner vehicleState={session.vehicleState} />
 
       <div className="drive-screen__top-controls">
@@ -80,7 +77,7 @@ export function DriveScreen() {
         </button>
       </div>
 
-      <DriveHud normalized={input.normalized} speed={session.vehicleState?.speed ?? 0} />
+      <DriveHud normalized={input.normalized} vehicleState={session.vehicleState} />
       <CalibrationPanel
         source={input.source}
         raw={input.raw}

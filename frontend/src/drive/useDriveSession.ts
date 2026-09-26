@@ -7,10 +7,10 @@ import type { TrackId, TrackProfile, VehicleStateMessage } from '../types/schema
 export type ConnectionState = 'idle' | 'connecting' | 'connected' | 'error'
 
 const SEND_INTERVAL_MS = 50 // 20Hz, matches the backend tick rate
-const MAX_TRAIL_POINTS = 400
+const MAX_TRAIL_POINTS = 2000
 
 // Owns the session lifecycle: create -> connect WS -> stream controls up,
-// vehicle_state down. All actual state (position, track_exit, completed)
+// vehicle_state down. All actual state (position, track_exit, lap_complete)
 // is server-authoritative — this hook never computes physics locally.
 export function useDriveSession(normalizedControls: NormalizedControls) {
   const { reportError } = useErrorContext()
@@ -20,9 +20,12 @@ export function useDriveSession(normalizedControls: NormalizedControls) {
   const [vehicleState, setVehicleState] = useState<VehicleStateMessage | null>(null)
   const [running, setRunning] = useState(true)
   const [trail, setTrail] = useState<[number, number][]>([])
+  const [previousLapTrail, setPreviousLapTrail] = useState<[number, number][]>([])
 
   const wsRef = useRef<WebSocket | null>(null)
   const seqRef = useRef(0)
+  const sessionIdRef = useRef<string | null>(null)
+  const seedRef = useRef(0)
   const controlsRef = useRef(normalizedControls)
   controlsRef.current = normalizedControls
 
@@ -31,9 +34,12 @@ export function useDriveSession(normalizedControls: NormalizedControls) {
     setConnectionState('connecting')
     try {
       const { session_id, track_profile } = await createSession(selectedTrack)
+      sessionIdRef.current = session_id
+      seedRef.current = track_profile.seed
       setTrackProfile(track_profile)
       setVehicleState(null)
       setTrail([])
+      setPreviousLapTrail([])
       seqRef.current = 0
 
       const ws = new WebSocket(driverWebSocketUrl(session_id))
@@ -77,7 +83,10 @@ export function useDriveSession(normalizedControls: NormalizedControls) {
     const ws = wsRef.current
     if (!ws || ws.readyState !== WebSocket.OPEN) return
     ws.send(JSON.stringify({ type: 'reset' }))
-    setTrail([])
+    setTrail((prev) => {
+      if (prev.length > 1) setPreviousLapTrail(prev)
+      return []
+    })
     setRunning(true)
   }, [])
 
@@ -100,6 +109,10 @@ export function useDriveSession(normalizedControls: NormalizedControls) {
         JSON.stringify({
           type: 'control_input',
           seq: seqRef.current,
+          session_id: sessionIdRef.current,
+          track: selectedTrack,
+          seed: seedRef.current,
+          t_client: Date.now(),
           steering: controlsRef.current.steering,
           throttle: controlsRef.current.throttle,
           brake: controlsRef.current.brake,
@@ -107,7 +120,7 @@ export function useDriveSession(normalizedControls: NormalizedControls) {
       )
     }, SEND_INTERVAL_MS)
     return () => clearInterval(interval)
-  }, [connectionState])
+  }, [connectionState, selectedTrack])
 
   return {
     selectedTrack,
@@ -116,6 +129,7 @@ export function useDriveSession(normalizedControls: NormalizedControls) {
     trackProfile,
     vehicleState,
     trail,
+    previousLapTrail,
     running,
     start,
     togglePause,

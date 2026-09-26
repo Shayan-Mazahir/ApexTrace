@@ -1,11 +1,29 @@
-import type { SessionCreateResponse, SessionJoinResponse, SessionRole, TrackId } from '../types/schemas'
+import type {
+  SessionCreateResponse,
+  SessionJoinResponse,
+  SessionRole,
+  TrackId,
+  TrackProfileSummary,
+} from '../types/schemas'
 import { API_BASE_URL } from './config'
 
-export async function createSession(track: TrackId): Promise<SessionCreateResponse> {
+export async function listTracks(): Promise<TrackProfileSummary[]> {
+  const response = await fetch(`${API_BASE_URL}/tracks`)
+  if (!response.ok) {
+    throw new Error(`Failed to list tracks: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function createSession(
+  track: TrackId,
+  role: SessionRole = 'driver',
+  seed?: number,
+): Promise<SessionCreateResponse> {
   const response = await fetch(`${API_BASE_URL}/sessions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ track }),
+    body: JSON.stringify({ track, role, seed }),
   })
   if (!response.ok) {
     throw new Error(`Failed to create session: ${response.status}`)

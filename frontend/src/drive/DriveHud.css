@@ -28,9 +28,14 @@
   color: var(--color-neutral);
 }
 
-.drive-hud__row span {
-  width: 56px;
+.drive-hud__row span:first-child {
+  width: 80px;
   flex-shrink: 0;
+}
+
+.drive-hud__row span:last-child {
+  text-align: right;
+  flex: 1;
 }
 
 .drive-hud__bar {
