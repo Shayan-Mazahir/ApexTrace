@@ -45,6 +45,13 @@ export function ReplayPanel({ run, profile, t, maxT }: ReplayPanelProps) {
         <div className="replay-panel__hud">
           <span>{(pose?.speed ?? 0).toFixed(1)} m/s</span>
           {pose?.frame.warning_active && !over && <span className="replay-panel__warn">▲ BRAKE warning</span>}
+          {pose?.frame.warning_state === 'stale' && !over && <span className="replay-panel__warn">▲ data stale</span>}
+          {pose && pose.frame.active_faults.length > 0 && !over && (
+            <span className="replay-panel__faults">faults: {pose.frame.active_faults.join(', ')}</span>
+          )}
+          {pose?.frame.tcn_risk != null && !over && (
+            <span className="replay-panel__risk">TCN risk {Math.round(pose.frame.tcn_risk * 100)}%</span>
+          )}
           {pose && pose.frame.brake > 0.5 && !over && <span className="replay-panel__brake">■ braking</span>}
           {over && (
             <span className={result.track_exit ? 'replay-panel__brake' : ''}>
@@ -63,8 +70,14 @@ export function ReplayPanel({ run, profile, t, maxT }: ReplayPanelProps) {
         <dd>{seconds(warnedAt)}</dd>
         <dt>Braking began</dt>
         <dd>{seconds(brakedAt)}</dd>
-        <dt>Min warning lead</dt>
-        <dd>{result.min_warning_lead_s === null ? '—' : `${result.min_warning_lead_s.toFixed(2)} s`}</dd>
+        <dt>Worst warning margin</dt>
+        <dd>{result.min_warning_margin_m === null ? '—' : `${result.min_warning_margin_m.toFixed(1)} m`}</dd>
+        <dt>Stale / blackout</dt>
+        <dd>{result.stale_time_s.toFixed(1)} s / {result.blackout_time_s.toFixed(1)} s</dd>
+        <dt>Fallback first used</dt>
+        <dd>{result.fallback_first_t === null ? 'never' : `${result.fallback_first_t.toFixed(1)} s`}</dd>
+        <dt>Exit location</dt>
+        <dd>{result.exit_location ?? '—'}</dd>
         <dt>Lap time</dt>
         <dd>{result.lap_time_s === null ? 'not completed' : `${result.lap_time_s.toFixed(1)} s`}</dd>
       </dl>

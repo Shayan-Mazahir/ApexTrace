@@ -15,6 +15,7 @@ import {
 } from '../garage/budgetMath'
 import { GarageCar } from '../garage/GarageCar'
 import { ResultsTable } from '../garage/ResultsTable'
+import { PairedPanel } from '../garage/PairedPanel'
 import { UpgradeCard } from '../garage/UpgradeCard'
 import { UPGRADE_IDS } from '../types/schemas'
 import './GarageScreen.css'
@@ -26,10 +27,12 @@ export function GarageScreen() {
 
   const { catalog, budget, selection, evaluation, available, selectedCost } = garage
   const specs = catalog?.upgrades ?? []
-  const rows = evaluation ? classifyConfigs(evaluation.configs, budget) : []
+  const group = evaluation?.groups[garage.suiteGroup] ?? null
+  const rows = group ? classifyConfigs(group.configs, budget) : []
   const recommended = recommend(rows)
   const selectedKey = configKey(selection)
-  const selectedResult = evaluation?.configs.find((c) => c.key === selectedKey)
+  const selectedResult = group?.configs.find((c) => c.key === selectedKey)
+  const fullPassing = evaluation ? evaluation.groups.full.configs.filter((c) => c.passed).length : 0
   const anySelected = selectedIds(selection).length > 0
 
   return (
@@ -102,6 +105,18 @@ export function GarageScreen() {
 
         {evaluation && (
           <>
+            <div className="garage-screen__suites" role="tablist" aria-label="Test suite">
+              {Object.entries(evaluation.groups).map(([id, g]) => (
+                <button key={id} type="button" role="tab" aria-selected={garage.suiteGroup === id}
+                  className={garage.suiteGroup === id ? 'garage-screen__suite--on' : ''} onClick={() => garage.setSuiteGroup(id)}>
+                  {g.label} <small>({g.test_ids.length})</small>
+                </button>
+              ))}
+            </div>
+            <p className="garage-screen__suite-note">
+              Held-out suite ({evaluation.suite.version}) — never used for tuning. Full stress suite: {fullPassing} of 8
+              configurations pass.
+            </p>
             <p id="garage-verdict" className="garage-screen__verdict" role="status">
               {recommended ? (
                 <>
@@ -110,13 +125,13 @@ export function GarageScreen() {
                   {formatCad(recommended.remaining)} after commitments and reserve.
                 </>
               ) : (
-                <strong>No affordable configuration passed the selected suite.</strong>
+                <strong>No affordable configuration passed the selected test suite.</strong>
               )}
             </p>
             <ResultsTable
               rows={rows}
               acceptance={evaluation.suite.acceptance}
-              testCount={evaluation.suite.tests.length}
+              testCount={group?.test_ids.length ?? 0}
               filterOn={filterOn}
               onFilterChange={setFilterOn}
               selectedKey={selectedKey}
@@ -133,13 +148,20 @@ export function GarageScreen() {
                     .filter((t) => !t.passed)
                     .map((t) => (
                       <li key={t.test_id}>
-                        {t.test_id}: {t.track_exit ? 'left the track' : `min clearance ${t.min_clearance_m.toFixed(2)} m`}
+                        {t.test_id}: {t.track_exit ? `left the track at ${t.exit_location}` : `min clearance ${t.min_clearance_m.toFixed(2)} m`}
                         {!t.completed && !t.track_exit ? ', lap not completed' : ''}
                       </li>
                     ))}
                 </ul>
               </details>
             )}
+          </>
+        )}
+
+        {evaluation && (
+          <>
+            <h2 className="garage-screen__h2">Controlled comparison</h2>
+            <PairedPanel upgrade={selection} />
           </>
         )}
 

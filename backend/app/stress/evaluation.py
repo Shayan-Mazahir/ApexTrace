@@ -108,6 +108,7 @@ def run_scenario(
     driver = ScriptedDriver(profile, scenario.driver.cruise_speed_ms, scenario.driver.reaction_s)
     frames: list[dict[str, Any]] = []
     observations: list[dict[str, Any]] = []
+    replay_observations: list[list[float]] = []
     start_distance = run.vehicle.distance_along_lap
     max_ticks = int(scenario.max_time_s / TICK_DT)
     controls = (0.0, 0.0, 0.0)
@@ -121,6 +122,10 @@ def run_scenario(
         v = run.vehicle
         if observe is not None:
             observations.append(observe(run, v))
+        if record:
+            from app.ml.features import vector
+
+            replay_observations.append(vector(run.observation()))
         if record and i % FRAME_EVERY_TICKS == 0:
             tel = run.telemetry()
             shown = run.display.shown
@@ -165,6 +170,10 @@ def run_scenario(
         "lap_time_s": summary["lap_time_s"],
         "driver_ignored": driver.ignored,
     }
+    if record:
+        from app.ml.risk import annotate_frames
+
+        annotate_frames(frames, replay_observations)
     return RunOutput(result=result, frames=frames, events=run.events + driver.log, observations=observations)
 
 
@@ -180,7 +189,9 @@ def _clean(track: str) -> StressScenario:
 def families() -> list[StressScenario]:
     from app.scenarios import SCENARIOS
 
-    return [_clean("monza"), _clean("baku"), *SCENARIOS.values()]
+    # presets only: SAC-discovered scenarios are for the engineer to arm, and
+    # must not silently change the fixed suite every time the search is rerun
+    return [_clean("monza"), _clean("baku"), *(s for s in SCENARIOS.values() if s.source == "preset")]
 
 
 def build_suite(kind: str) -> list[tuple[str, StressScenario]]:
@@ -312,9 +323,20 @@ def replay(test_id: str, baseline: UpgradeConfig, upgraded: UpgradeConfig) -> di
     scenario = find_test(test_id)
     if scenario is None:
         raise KeyError(test_id)
+    from app.ml import risk
+    from app.ml.features import vector
+
     runs = {}
     for prefix, cfg in (("baseline", baseline), ("upgraded", upgraded)):
-        out = run_scenario(scenario, cfg, record=True, test_id=test_id)
+        observer = risk.new_observer()
+        observe = (lambda run, v, o=observer: o.update(vector(run.observation()))) if observer else None
+        out = run_scenario(scenario, cfg, record=True, test_id=test_id, observe=observe)
+        if observer:
+            for i, frame in enumerate(out.frames):
+                pred = out.observations[(i + 1) * FRAME_EVERY_TICKS - 1]
+                frame["tcn_risk"] = None if pred is None else round(pred["risk"], 4)
+                frame["tcn_clearance"] = None if pred is None else round(pred["clearance"], 3)
+                frame["tcn_spread"] = None if pred is None else round(pred["spread"], 4)
         name = config_label(cfg)
         label = name if name.lower().startswith(prefix) else f"{prefix.title()}: {name}"
         runs[prefix] = {"label": label, "upgrades": cfg.model_dump(), "result": out.result,

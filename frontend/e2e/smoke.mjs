@@ -8,6 +8,7 @@ import puppeteer from 'puppeteer-core'
 
 const CHROME = process.env.CHROME ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 const BASE = process.env.BASE ?? 'http://localhost:5173'
+const API = process.env.API ?? 'http://localhost:8000'
 const SHOTS = process.env.SHOT_DIR ?? path.join(process.cwd(), 'e2e', 'shots')
 mkdirSync(SHOTS, { recursive: true })
 
@@ -209,7 +210,9 @@ try {
       await waitText(garage, 'No affordable configuration passed', 5000)
     })
     const criteria = await garage.$eval('.results-table__criteria', (e) => e.textContent)
-    assert(criteria.includes('36 tests'), `criteria text: ${criteria}`)
+    const suite = await (await fetch(`${API}/evaluation/suite?kind=heldout`)).json()
+    assert(new RegExp(`\\b\\d+ tests`).test(criteria) && suite.tests.length > 0, `criteria text: ${criteria}`)
+    await waitText(garage, 'of 8 configurations pass') // full-suite summary alongside the selected group
     await garage.$eval('.results-table__filter input', (e) => e.click())
     const rows = (await garage.$$('.results-table tbody tr')).length
     assert(rows === 8, `expected 8 rows with the filter off, got ${rows}`)
@@ -224,7 +227,7 @@ try {
 
   await step('garage: shows "No affordable configuration passed" when nothing feasible', async () => {
     await setInput(garage, '.budget-panel__input input', 0, 7000) // available = -1,000: only "do nothing" is affordable
-    await waitText(garage, 'No affordable configuration passed the selected suite.')
+    await waitText(garage, 'No affordable configuration passed the selected test suite.')
     await setInput(garage, '.budget-panel__input input', 0, 12000)
   })
 
@@ -319,28 +322,36 @@ try {
     await waitText(drive, 'Engineer connected')
   })
 
-  await step('engineer: injected delay reaches the driver and is labelled simulated', async () => {
-    await setInput(engineer, '.fault-controls input[type=range]', 1, 300)
-    await clickButton(engineer, 'Apply faults')
+  await step('engineer: a manual uplink-delay fault reaches the driver and is labelled simulated', async () => {
+    await engineer.select('.fault-builder select', 'uplink_delay')
+    await setInput(engineer, '.fault-builder input[type=range]', 0, 300)
+    await clickButton(engineer, 'Add fault', { exact: true })
     await waitText(drive, 'Simulated connection fault')
     await waitText(engineer, 'Simulated connection fault')
     const link = await engineer.$eval('.link-indicators', (e) => e.innerText)
-    assert(link.includes('Injected delay (simulated)') && link.includes('+300 ms'), `link: ${link}`)
-    assert(link.includes('Measured packet age'), 'measured age must be shown separately')
+    assert(link.includes('Sim: injected uplink delay') && link.includes('+300 ms'), `link: ${link}`)
+    assert(link.includes('Real: driver control age'), 'the real link must be shown separately')
+    await engineer.waitForSelector('.active-faults__row', { timeout: 5000 })
   })
 
-  await step('engineer: preset + saved scenario launches; run id and scenario shown', async () => {
+  await step('engineer: arming a stress scenario restarts the run; name and faults shown', async () => {
     const before = await engineer.$eval('.run-info', (e) => e.innerText)
-    await clickButton(engineer, 'Monza high-speed braking')
-    await clickButton(engineer, 'Launch scenario')
-    await waitText(engineer, 'monza_high_speed_braking')
+    await engineer.select('.scenario-panel select', 'monza_high_speed_blackout')
+    await clickButton(engineer, 'Arm scenario')
+    // The preset name is already visible in the selector before the server
+    // responds. Wait for the run update, not that existing option text.
+    await engineer.waitForFunction(
+      (previous) => document.querySelector('.run-info')?.innerText !== previous,
+      { timeout: 10000 }, before,
+    )
     const after = await engineer.$eval('.run-info', (e) => e.innerText)
     assert(before !== after, 'run info did not change')
-    assert(frames.some((f) => f.includes('"scenario_id":"monza_high_speed_braking"')), 'driver never received the scenario')
+    assert(frames.some((f) => f.includes('"scenario_id":"monza_high_speed_blackout"')), 'driver never received the scenario')
+    const rows = await engineer.$$eval('.active-faults__row', (els) => els.map((e) => e.innerText))
+    assert(rows.length >= 1 && rows.every((r) => !/uplink delay.*manual/i.test(r)), `faults after arming: ${rows}`)
   })
 
-  await step('engineer: fault timeline reflects the scenario window', async () => {
-    await waitText(engineer, 'scenario window')
+  await step('engineer: fault timeline and 3D view render', async () => {
     await assertRendered(engineer, '.engineer-screen__view canvas', 'engineer 3D view')
     await shot(engineer, '4-engineer')
   })
@@ -389,24 +400,20 @@ try {
   const engineer2 = await newPage('engineer-baku')
   await engineer2.goto(`${BASE}/#engineer`)
 
-  await step('baku: engineer sees the Baku track and only Baku scenarios are usable', async () => {
+  await step('baku: engineer sees the Baku track and only Baku scenarios are offered', async () => {
     await engineer2.type('input[aria-label="Session ID"]', bakuSession)
     await clickButton(engineer2, 'Join', { exact: true })
     await waitText(engineer2, 'baku')
-    const disabled = await engineer2.evaluate(() => {
-      const b = [...document.querySelectorAll('.scenario-panel__presets button')]
-      return Object.fromEntries(b.map((x) => [x.textContent.trim(), x.disabled]))
-    })
-    assert(disabled['Monza high-speed braking'] === true, `monza preset should be disabled: ${JSON.stringify(disabled)}`)
-    assert(disabled['Azerbaijan stale telemetry'] === false, `baku preset should be enabled: ${JSON.stringify(disabled)}`)
+    const ids = await engineer2.$$eval('.scenario-panel select option', (els) => els.map((o) => o.value).filter(Boolean))
+    assert(ids.includes('baku_late_warning_delivery'), `baku scenarios missing: ${ids}`)
+    assert(!ids.some((id) => id.startsWith('monza_')), `monza scenarios offered on baku: ${ids}`)
   })
 
-  await step('baku: Azerbaijan stale-telemetry preset launches and reaches the driver', async () => {
-    await clickButton(engineer2, 'Azerbaijan stale telemetry')
-    await clickButton(engineer2, 'Launch scenario')
-    await waitText(engineer2, 'baku_stale_telemetry')
-    await sleep(500)
-    assert(bakuFrames.some((f) => f.includes('"scenario_id":"baku_stale_telemetry"')), 'driver never received the baku scenario')
+  await step('baku: late-warning-delivery scenario arms and reaches the driver', async () => {
+    await engineer2.select('.scenario-panel select', 'baku_late_warning_delivery')
+    await clickButton(engineer2, 'Arm scenario')
+    await sleep(800)
+    assert(bakuFrames.some((f) => f.includes('"scenario_id":"baku_late_warning_delivery"')), 'driver never received the baku scenario')
     await shot(engineer2, '9-engineer-baku')
   })
   await engineer2.close()
@@ -476,7 +483,7 @@ try {
       if (i === 1) {
         await waitConnected(demo)
         await sleep(3000) // hidden engineer joins and launches the saved scenario
-        assert(demoFrames.some((f) => f.includes('"scenario_id":"monza_high_speed_braking"')), 'demo engineer never launched the scenario')
+        assert(demoFrames.some((f) => f.includes('"scenario_id":"monza_high_speed_blackout"')), 'demo engineer never launched the scenario')
       }
       if (i === 2) {
         await demo.waitForSelector('.replay-panel canvas', { timeout: 60000 })

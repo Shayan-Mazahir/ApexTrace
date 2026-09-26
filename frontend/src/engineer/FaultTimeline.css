@@ -1,7 +1,7 @@
 .fault-timeline {
   display: flex;
   flex-direction: column;
-  gap: var(--space-sm);
+  gap: 6px;
 }
 
 .fault-timeline__empty {
@@ -11,28 +11,19 @@
 
 .fault-timeline__bar {
   position: relative;
-  height: 32px;
-  background: var(--color-charcoal-light);
-  border: 1px solid var(--color-neutral);
+  height: 30px;
+  background: #1f1f1f;
+  border: 1px solid #3a3a3a;
   border-radius: 4px;
   overflow: hidden;
 }
 
 .fault-timeline__window {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  background: rgba(255, 140, 0, 0.3);
-  border-left: 2px solid var(--color-orange);
-  border-right: 2px solid var(--color-orange);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--color-orange);
-  white-space: nowrap;
-  overflow: hidden;
+  top: 4px;
+  height: 14px;
+  opacity: 0.8;
+  border-radius: 2px;
 }
 
 .fault-timeline__hazard {
@@ -40,19 +31,9 @@
   bottom: 0;
   width: 0;
   height: 0;
-  border-left: 5px solid transparent;
-  border-right: 5px solid transparent;
-  border-bottom: 8px solid var(--color-amber);
-  transform: translateX(-50%);
-}
-
-.fault-timeline__event {
-  position: absolute;
-  top: 4px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--color-red);
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-bottom: 7px solid #ddd;
   transform: translateX(-50%);
 }
 
@@ -60,24 +41,23 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 3px;
-  background: var(--color-white);
-  transform: translateX(-50%);
+  width: 2px;
+  background: var(--color-orange);
 }
 
 .fault-timeline__legend {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-sm);
-  font-family: var(--font-mono);
+  gap: 8px;
   font-size: 10px;
+  font-family: var(--font-mono);
   color: var(--color-neutral);
 }
 
-.fault-timeline__log {
-  margin: 0;
-  padding-left: var(--space-md);
-  font-family: var(--font-mono);
-  font-size: var(--font-size-xs);
-  color: var(--color-neutral);
+.fault-timeline__legend i {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  vertical-align: middle;
 }

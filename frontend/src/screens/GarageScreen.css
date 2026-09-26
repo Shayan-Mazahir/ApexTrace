@@ -127,3 +127,38 @@
 #garage-verdict {
   scroll-margin-top: 72px;
 }
+
+.garage-screen__suites {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.garage-screen__suites button {
+  background: var(--color-charcoal-light);
+  color: var(--color-neutral);
+  border: 1px solid #3a3a3a;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+}
+
+.garage-screen__suites .garage-screen__suite--on {
+  color: #111;
+  background: var(--color-orange);
+  border-color: var(--color-orange);
+}
+
+.garage-screen__suite-note {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--color-neutral);
+}
+
+.garage-screen__h2 {
+  margin: var(--space-md) 0 0;
+  font-size: var(--font-size-lg);
+}

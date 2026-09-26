@@ -20,7 +20,7 @@ function squareTrack(): TrackProfile {
     return [-dy / l, dx / l] as [number, number]
   })
   return {
-    id: 'monza', name: 'test', seed: 1, track_width: 10, total_length: 400, start_finish: [0, 0],
+    id: 'monza', name: 'test', seed: 1, track_width: 10, total_length: 400, barrier_offset: 2, start_finish: [0, 0],
     centerline: c,
     left_edge: c.map(([x, y], i) => [x + normals[i][0] * 5, y + normals[i][1] * 5]),
     right_edge: c.map(([x, y], i) => [x - normals[i][0] * 5, y - normals[i][1] * 5]),
@@ -78,5 +78,27 @@ describe('track geometry', () => {
     expect(formatLapTime(83.4567)).toBe('1:23.457')
     expect(formatLapTime(9.5)).toBe('0:09.500')
     expect(formatLapTime(null)).toBe('—')
+  })
+})
+
+import { indexAt, uvFlat, uvWall } from './trackGeometry'
+
+describe('uv strips', () => {
+  it('tiles u along distance so textures do not stretch', () => {
+    const line: [number, number][] = [[0, 0], [10, 0], [20, 0]]
+    const w = uvWall(line, 0, 1, 10)
+    const us = [...w.uvs].filter((_, i) => i % 2 === 0)
+    expect(Math.max(...us)).toBeCloseTo(2) // 20 m / 10 m per repeat
+    expect(w.indices).toHaveLength(12)
+    const f = uvFlat(line, line.map(([x]) => [x, 5] as [number, number]), 0, 5, 1)
+    expect(Math.max(...[...f.uvs].filter((_, i) => i % 2 === 0))).toBeCloseTo(4)
+  })
+
+  it('maps lap distance to a sample index, wrapping', () => {
+    const c: [number, number][] = Array.from({ length: 101 }, (_, i) => [i, 0] as [number, number])
+    const p = { centerline: c, total_length: 100 } as unknown as import('../types/schemas').TrackProfile
+    expect(indexAt(p, 25)).toBe(25)
+    expect(indexAt(p, 125)).toBe(25)
+    expect(indexAt(p, -10)).toBe(90)
   })
 })

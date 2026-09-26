@@ -4,7 +4,8 @@ import { advancePlayback, bands, firstTime, poseAt, runDuration, trailUpTo } fro
 
 const frame = (t: number, x: number, extra: Partial<ReplayFrame> = {}): ReplayFrame => ({
   t, x, y: 0, heading: 0, speed: x, throttle: 0, brake: 0, distance: x, clearance: 1,
-  warning_active: false, track_exit: false, lap_complete: false, ...extra,
+  warning_active: false, warning_state: 'clear', track_exit: false, lap_complete: false, true_grip: 1,
+  estimated_grip: 1, sample_age_ms: 0, fallback_active: false, active_faults: [], ...extra,
 })
 const frames = [frame(0, 0), frame(0.1, 10), frame(0.2, 20), frame(0.3, 30)]
 

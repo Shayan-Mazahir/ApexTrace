@@ -47,3 +47,15 @@
     opacity: 0.55;
   }
 }
+
+.brake-warning--stale {
+  background: rgba(245, 158, 11, 0.95);
+  color: #111;
+  animation: none;
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.6), 0 10px 40px rgba(245, 158, 11, 0.45);
+}
+
+.brake-warning__label--small {
+  font-size: 22px;
+  letter-spacing: 0.06em;
+}

@@ -1,86 +1,127 @@
-import type { ScenarioConfig, TrackId } from '../types/schemas'
+import { useEffect, useState } from 'react'
+import type { ScenarioOverrides, StressScenario, TrackProfile } from '../types/schemas'
 import './ScenarioPanel.css'
 
-// The two named presets from the brief; their definitions live in the saved
-// scenario JSON files, so these buttons only select one.
-const PRESET_IDS = ['monza_high_speed_braking', 'baku_stale_telemetry']
-
 interface ScenarioPanelProps {
-  scenarios: ScenarioConfig[]
-  track: TrackId | null
-  selectedId: string
+  scenarios: StressScenario[]
+  profile: TrackProfile | null
   activeScenarioId: string | null
   disabled: boolean
-  onSelect: (id: string) => void
-  onLaunch: (id: string) => void
-  onClear: () => void
+  onArm: (id: string, overrides: ScenarioOverrides) => void
+  onCancel: () => void
+  onReset: () => void
 }
 
-export function ScenarioPanel({
-  scenarios,
-  track,
-  selectedId,
-  activeScenarioId,
-  disabled,
-  onSelect,
-  onLaunch,
-  onClear,
-}: ScenarioPanelProps) {
-  const forTrack = scenarios.filter((s) => s.track === track)
-  const selected = scenarios.find((s) => s.id === selectedId)
-  const presets = PRESET_IDS.map((id) => scenarios.find((s) => s.id === id)).filter(
-    (s): s is ScenarioConfig => s !== undefined,
+const SOURCE_LABEL: Record<string, string> = { preset: 'Presets', sac: 'Discovered by SAC', random: 'Random search', manual: 'Manual' }
+
+export function ScenarioPanel({ scenarios, profile, activeScenarioId, disabled, onArm, onCancel, onReset }: ScenarioPanelProps) {
+  const forTrack = scenarios.filter((s) => s.track === profile?.id)
+  const [selectedId, setSelectedId] = useState('')
+  const selected = forTrack.find((s) => s.id === selectedId)
+  const [zone, setZone] = useState('')
+  const [severity, setSeverity] = useState(1)
+  const [duration, setDuration] = useState('')
+  const [seed, setSeed] = useState('')
+
+  useEffect(() => {
+    setZone('')
+    setSeverity(1)
+    setDuration('')
+    setSeed(selected ? String(selected.seed) : '')
+  }, [selectedId, selected])
+
+  const hasZoneFaults = selected?.faults.some((f) => f.trigger?.kind === 'zone') ?? false
+  const groups = Object.entries(
+    forTrack.reduce<Record<string, StressScenario[]>>((acc, s) => {
+      ;(acc[s.source] ??= []).push(s)
+      return acc
+    }, {}),
   )
+
+  const arm = () => {
+    if (!selected) return
+    const overrides: ScenarioOverrides = { severity }
+    if (zone) overrides.zone_id = zone
+    if (duration) overrides.duration_s = Number(duration)
+    if (seed) overrides.seed = Number(seed)
+    onArm(selected.id, overrides)
+  }
 
   return (
     <div className="scenario-panel">
-      <div className="scenario-panel__presets">
-        {presets.map((preset) => (
-          <button
-            key={preset.id}
-            type="button"
-            disabled={disabled || preset.track !== track}
-            title={preset.track !== track ? `Needs a ${preset.track} session` : preset.description}
-            className={preset.id === selectedId ? 'scenario-panel__preset--selected' : ''}
-            onClick={() => onSelect(preset.id)}
-          >
-            {preset.name}
-          </button>
-        ))}
-      </div>
-
-      <label className="scenario-panel__select">
-        <span>Saved scenario</span>
-        <select
-          value={selectedId}
-          disabled={disabled || forTrack.length === 0}
-          onChange={(e) => onSelect(e.target.value)}
-        >
+      <label className="scenario-panel__field">
+        <span>Scenario ({profile?.name ?? 'join a session'})</span>
+        <select value={selectedId} disabled={disabled || forTrack.length === 0} onChange={(e) => setSelectedId(e.target.value)}>
           <option value="">— choose —</option>
-          {forTrack.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
+          {groups.map(([source, list]) => (
+            <optgroup key={source} label={SOURCE_LABEL[source] ?? source}>
+              {list.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </optgroup>
           ))}
         </select>
       </label>
 
       {selected && (
-        <p className="scenario-panel__description">
-          {selected.description} Active {selected.onset_distance}–{selected.end_distance} m, seed{' '}
-          {selected.seed}.
-        </p>
+        <>
+          <p className="scenario-panel__description">{selected.description}</p>
+          <ul className="scenario-panel__faults">
+            {selected.faults.map((f) => (
+              <li key={f.id}>
+                <code>{f.type}</code> [{f.target}] {Object.entries(f.parameters ?? {}).map(([k, v]) => `${k}=${v}`).join(', ')}
+                {' — '}
+                {f.trigger?.kind === 'zone' ? `zone ${f.trigger.zone_id}` : f.trigger?.kind ?? 'always'}
+              </li>
+            ))}
+          </ul>
+          <div className="scenario-panel__grid">
+            <label>
+              <span>Trigger zone</span>
+              <select value={zone} disabled={disabled || !hasZoneFaults} onChange={(e) => setZone(e.target.value)}>
+                <option value="">as defined</option>
+                {profile?.hazard_zones.map((h) => (
+                  <option key={h.id} value={h.id}>
+                    {h.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Severity ×{severity.toFixed(2)}</span>
+              <input type="range" min={0.25} max={1.5} step={0.05} value={severity} disabled={disabled}
+                onChange={(e) => setSeverity(Number(e.target.value))} />
+            </label>
+            <label>
+              <span>Duration cap (s)</span>
+              <input type="number" min={0.5} step={0.5} placeholder="none" value={duration} disabled={disabled}
+                onChange={(e) => setDuration(e.target.value)} />
+            </label>
+            <label>
+              <span>Seed</span>
+              <input type="number" value={seed} disabled={disabled} onChange={(e) => setSeed(e.target.value)} />
+            </label>
+          </div>
+        </>
       )}
 
       <div className="scenario-panel__actions">
-        <button type="button" disabled={disabled || !selected} onClick={() => onLaunch(selectedId)}>
-          Launch scenario
+        <button type="button" disabled={disabled || !selected} onClick={arm}>
+          Arm scenario
         </button>
-        <button type="button" disabled={disabled || !activeScenarioId} onClick={onClear}>
-          Clear scenario
+        <button type="button" disabled={disabled || !activeScenarioId} onClick={onCancel}>
+          Cancel scenario
+        </button>
+        <button type="button" disabled={disabled} onClick={onReset}>
+          Reset experiment
         </button>
       </div>
-      <div className="scenario-panel__active">Running: {activeScenarioId ?? 'none'}</div>
+      <p className="scenario-panel__note">
+        Arming restarts the run from the scenario&apos;s start with its seed. Faults then wait for their own triggers —
+        arming does not switch them all on.
+      </p>
     </div>
   )
 }

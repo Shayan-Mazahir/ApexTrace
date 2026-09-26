@@ -57,6 +57,7 @@ class Session:
     fault_signature: tuple | None = None
     loop_task: Any = None
     run: StressRun = field(init=False)
+    risk_observer: Any = None
 
     def __post_init__(self) -> None:
         self.build_run()
@@ -73,6 +74,9 @@ class Session:
         for spec in self.manual_faults:
             self.run.add_fault(spec)
         self.fault_signature = None
+        from app.ml import risk
+
+        self.risk_observer = risk.new_observer()  # None when no trained model
 
     @property
     def vehicle(self) -> DemoVehicleState:
@@ -132,6 +136,7 @@ class Session:
             "driver_connected": "driver" in self.clients.values(),
             "engineer_connected": "engineer" in self.clients.values(),
             "engineer_ever_connected": self.engineer_ever_connected,
+            "tcn": __import__("app.ml.risk", fromlist=["status"]).status(),
         }
 
     def fault_state_message(self) -> dict[str, Any]:
@@ -172,7 +177,15 @@ class Session:
         if self.last_control_received_at is not None:
             control_age_ms = max(0.0, (now - self.last_control_received_at) * 1000)
         tel = run.telemetry()
+        prediction = None
+        if self.risk_observer is not None and self.running:
+            from app.ml.features import vector
+
+            prediction = self.risk_observer.update(vector(run.observation()))
         return {
+            "tcn_risk": None if prediction is None else prediction["risk"],
+            "tcn_clearance": None if prediction is None else prediction["clearance"],
+            "tcn_spread": None if prediction is None else prediction["spread"],
             "type": "vehicle_state",
             "seq": vehicle.seq,
             "t": round(run.t, 3),

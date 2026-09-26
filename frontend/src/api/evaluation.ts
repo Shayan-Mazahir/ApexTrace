@@ -1,5 +1,6 @@
 import type {
   EvaluationResponse,
+  PairedResponse,
   ReplayResponse,
   TrackProfile,
   UpgradeCatalog,
@@ -22,6 +23,16 @@ const post = (body: unknown): RequestInit => ({
 export const getUpgradeCatalog = () => request<UpgradeCatalog>('/upgrades')
 
 export const runEvaluation = () => request<EvaluationResponse>('/evaluation/run', { method: 'POST' })
+
+export const getPaired = (scenarioId: string, upgrade: UpgradeConfig) =>
+  request<PairedResponse>('/evaluation/paired', post({ scenario_id: scenarioId, upgrade }))
+
+export interface MlStatus {
+  tcn: import('../types/schemas').TcnStatus & { metrics?: Record<string, unknown> }
+  sac: Record<string, unknown> | null
+}
+
+export const getMlStatus = () => request<MlStatus>('/ml/status')
 
 export const getReplay = (testId: string, baseline: UpgradeConfig, upgraded: UpgradeConfig) =>
   request<ReplayResponse>('/evaluation/replay', post({ test_id: testId, baseline, upgraded }))

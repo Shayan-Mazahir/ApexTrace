@@ -2,17 +2,23 @@ import type { WarningEventMessage } from '../types/schemas'
 
 export interface WarningState {
   lastSeq: number
-  active: boolean
+  active: boolean // BRAKE shown
+  stale: boolean // the warning system has no fresh data: caution shown instead
   reason: string | null
   hazardZone: string | null
+  source: 'remote' | 'local' | null
+  dataAgeMs: number | null
   since: number | null
 }
 
 export const INITIAL_WARNING: WarningState = {
   lastSeq: 0,
   active: false,
+  stale: false,
   reason: null,
   hazardZone: null,
+  source: null,
+  dataAgeMs: null,
   since: null,
 }
 
@@ -24,15 +30,28 @@ export function applyWarningEvent(
   receivedAt: number,
 ): WarningState {
   if (event.seq <= state.lastSeq) return state
+  const stale = event.state === 'stale' || event.state === 'no_data'
   if (!event.active) {
-    return { lastSeq: event.seq, active: false, reason: null, hazardZone: null, since: null }
+    return {
+      lastSeq: event.seq,
+      active: false,
+      stale,
+      reason: stale ? event.reason : null,
+      hazardZone: null,
+      source: event.source,
+      dataAgeMs: event.data_age_ms,
+      since: stale ? (state.stale && state.since !== null ? state.since : receivedAt) : null,
+    }
   }
   const sameHazard = state.active && state.hazardZone === event.hazard_zone
   return {
     lastSeq: event.seq,
     active: true,
+    stale: false,
     reason: event.reason,
     hazardZone: event.hazard_zone,
+    source: event.source,
+    dataAgeMs: event.data_age_ms,
     since: sameHazard && state.since !== null ? state.since : receivedAt,
   }
 }

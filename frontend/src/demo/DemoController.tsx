@@ -15,7 +15,7 @@ import './DemoController.css'
 const BAR_HEIGHT = '116px'
 const TONE: Record<CheckStatus, StatusTone> = { ok: 'success', warn: 'warning', fail: 'danger' }
 const LABEL: Record<CheckStatus, string> = { ok: 'OK', warn: 'Check', fail: 'Failed' }
-const SCENARIO_FOR = { monza: 'monza_high_speed_braking', baku: 'baku_stale_telemetry' } as const
+const SCENARIO_FOR = { monza: 'monza_high_speed_blackout', baku: 'baku_late_warning_delivery' } as const
 
 async function fetchJson(url: string, init?: RequestInit): Promise<unknown> {
   const response = await fetch(url, init)
@@ -45,8 +45,9 @@ export function DemoController() {
 
   const demoUpgrade = (): UpgradeConfig => {
     const g = garageRef.current
-    if (!g.evaluation) return { ...NO_UPGRADES, local_fallback: true }
-    return recommend(classifyConfigs(g.evaluation.configs, g.budget))?.result.upgrades ?? { ...NO_UPGRADES, local_fallback: true }
+    const group = g.evaluation?.groups[g.suiteGroup]
+    if (!group) return { ...NO_UPGRADES, local_fallback: true }
+    return recommend(classifyConfigs(group.configs, g.budget))?.result.upgrades ?? { ...NO_UPGRADES, local_fallback: true }
   }
 
   useEffect(() => {
@@ -105,7 +106,7 @@ export function DemoController() {
   useEffect(() => {
     if (!demo.active || demo.step.id !== 'drive' || !driverSession || launched.current) return
     if (engineer.connection === 'connected') {
-      launched.current = engineer.send({ type: 'launch_scenario', scenario_id: SCENARIO_FOR[driverSession.track] })
+      launched.current = engineer.send({ type: 'arm_scenario', scenario_id: SCENARIO_FOR[driverSession.track] })
     }
   }, [demo.active, demo.step.id, driverSession, engineer, engineer.connection])
 

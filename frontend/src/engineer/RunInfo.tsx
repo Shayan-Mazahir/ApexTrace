@@ -13,7 +13,7 @@ export function RunInfo({ info }: { info: SessionInfoMessage | null }) {
       <dt>Track</dt>
       <dd>{info?.track ?? '—'}</dd>
       <dt>Scenario</dt>
-      <dd>{info?.scenario_id ?? 'none'}</dd>
+      <dd>{info?.scenario_name ?? info?.scenario_id ?? 'none'}</dd>
       <dt>Driver</dt>
       <dd>{info ? (info.driver_connected ? 'connected' : 'disconnected') : '—'}</dd>
     </dl>

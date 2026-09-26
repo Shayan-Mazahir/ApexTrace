@@ -7,7 +7,7 @@ const STALE_THRESHOLD_MS = 500
 const FLASH_MS = 3000
 
 interface Flash {
-  kind: 'lap' | 'sector'
+  kind: 'lap' | 'sector' | 'contact'
   text: string
 }
 
@@ -21,6 +21,19 @@ export function RunStateBanner({ vehicleState }: { vehicleState: VehicleStateMes
   const laps = vehicleState?.laps_completed
   const lastLap = vehicleState?.last_lap_s
   const sectorName = vehicleState?.sector_name
+  const contacts = vehicleState?.barrier_contacts
+  const prevContacts = useRef<number | null>(null)
+
+  useEffect(() => {
+    if (contacts === undefined) return
+    const before = prevContacts.current
+    prevContacts.current = contacts
+    if (before !== null && contacts > before) {
+      setFlash({ kind: 'contact', text: 'Barrier contact' })
+      const t = setTimeout(() => setFlash((f) => (f?.kind === 'contact' ? null : f)), 1800)
+      return () => clearTimeout(t)
+    }
+  }, [contacts])
 
   useEffect(() => {
     if (laps === undefined) return
@@ -49,7 +62,15 @@ export function RunStateBanner({ vehicleState }: { vehicleState: VehicleStateMes
   if (vehicleState.off_track) {
     return (
       <div className="race-msg race-msg--danger" role="status">
-        <span aria-hidden="true">✕</span> Off track — rejoin safely ({vehicleState.track_exits} this run)
+        <span aria-hidden="true">✕</span> {flash?.kind === 'contact' ? 'Barrier contact' : 'Off track'} — rejoin safely (
+        {vehicleState.track_exits} this run)
+      </div>
+    )
+  }
+  if (flash?.kind === 'contact') {
+    return (
+      <div className="race-msg race-msg--danger" role="status">
+        <span aria-hidden="true">✕</span> {flash.text}
       </div>
     )
   }

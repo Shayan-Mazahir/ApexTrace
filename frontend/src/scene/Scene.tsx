@@ -83,7 +83,8 @@ function CameraRig({ view, profile, shown }: { view: SceneView; profile: TrackPr
     const fz = Math.sin(p.heading)
     const back = 8.5 + p.speed * 0.02
     scratch.target.set(p.x - fx * back, 2.6 + p.speed * 0.006, p.y - fz * back)
-    cam.position.lerp(scratch.target, 1 - Math.exp(-Math.min(dt, 0.1) * 7))
+    if (cam.position.distanceTo(scratch.target) > 150) cam.position.copy(scratch.target) // coming from overview: snap
+    else cam.position.lerp(scratch.target, 1 - Math.exp(-Math.min(dt, 0.1) * 7))
     scratch.look.set(p.x + fx * 10, 0.9, p.y + fz * 10)
     cam.lookAt(scratch.look)
     const fov = 58 + Math.min(p.speed, 88) * 0.14 // widen with speed

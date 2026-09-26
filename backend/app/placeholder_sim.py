@@ -16,6 +16,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
+from app.barriers import constrain_motion
 from app.schemas import HazardKind, HazardZone, Sector, TrackId, TrackProfile
 from app.track_layouts import LAYOUTS, Layout
 
@@ -501,32 +502,21 @@ def step(
     sample_step = profile.total_length / n
     idx = nearest_index(x, y, line, hint=state.nearest_point_index)
 
-    # Barriers are solid: past them the car is pushed back, loses speed by
-    # impact angle, and is turned along the wall.
-    (cx, cy), (lx, ly) = line[idx % n], profile.left_edge[idx % n]
-    half_width = math.hypot(lx - cx, ly - cy)
-    nx, ny = (lx - cx) / (half_width or 1.0), (ly - cy) / (half_width or 1.0)
-    lateral = (x - cx) * nx + (y - cy) * ny
-    limit = half_width + profile.barrier_offset - CAR_HALF_WIDTH
-    in_contact = abs(lateral) > limit
+    # Sweep the complete car against the exact rendered wall polylines.
+    # Stop at first contact rather than projecting its centre through a wall
+    # and snapping the heading (which also swung the nose through barriers).
+    x, y, heading, in_contact = constrain_motion(
+        profile, state.x, state.y, state.heading, x, y, heading)
     barrier_contacts = state.barrier_contacts
     if in_contact:
-        side = 1.0 if lateral > 0 else -1.0
-        excess = abs(lateral) - limit
-        x -= nx * excess * side
-        y -= ny * excess * side
-        (tx0, ty0), (tx1, ty1) = line[idx % n], line[(idx + 1) % n]
-        along = math.atan2(ty1 - ty0, tx1 - tx0)
-        rel = (heading - along + math.pi) % (2 * math.pi) - math.pi
-        if abs(rel) > math.pi / 2:  # hitting it while going the wrong way
-            along += math.pi
-            rel = (heading - along + math.pi) % (2 * math.pi) - math.pi
-        impact = abs(math.sin(rel))  # 0 = glancing, 1 = head-on
-        speed *= max(0.0, 1.0 - 0.9 * impact) * 0.92
-        heading = along - side * 0.04  # nudged away from the wall
+        speed = 0.0
         if not state.in_contact:
             barrier_contacts += 1
-    off_track = _clearance_at_index(x, y, idx, profile) < 0
+        idx = nearest_index(x, y, line, hint=state.nearest_point_index)
+    # The full body can reach a barrier before its centre leaves the road
+    # (especially at Baku). Barriers sit outside the road edge, so contact
+    # also records an exit; a crash must not become a clean stopped run.
+    off_track = _clearance_at_index(x, y, idx, profile) < 0 or in_contact
 
     delta_idx = (idx - state.nearest_point_index) % n
     if delta_idx > n // 2:

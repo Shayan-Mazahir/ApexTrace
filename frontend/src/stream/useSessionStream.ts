@@ -2,6 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { sessionExists, sessionWebSocketUrl } from '../api/session'
 import { useErrorContext } from '../app/ErrorContext'
 import type {
+  FaultEventMessage,
+  RunEventMessage,
+  WarningEventMessage,
   ClientCommand,
   FaultStateMessage,
   ServerMessage,
@@ -9,11 +12,19 @@ import type {
   SessionRole,
   VehicleStateMessage,
 } from '../types/schemas'
-import { appendFaultEvent, type FaultEvent } from './faultTimeline'
+import { appendFaultEvent } from './faultTimeline'
 import { openSessionConnection, type StreamConnection } from './connection'
 import { applyWarningEvent, INITIAL_WARNING, type WarningState } from './warningState'
 
 export type { StreamConnection }
+
+export type LogEntry = FaultEventMessage | WarningEventMessage | RunEventMessage
+const MAX_LOG = 80
+
+function pushLog(prev: LogEntry[], entry: LogEntry): LogEntry[] {
+  const next = [...prev, entry]
+  return next.length > MAX_LOG ? next.slice(next.length - MAX_LOG) : next
+}
 
 const MAX_TRAIL_POINTS = 2000
 
@@ -28,7 +39,8 @@ export function useSessionStream(role: SessionRole, sessionId: string | null) {
   const [vehicleState, setVehicleState] = useState<VehicleStateMessage | null>(null)
   const [warning, setWarning] = useState<WarningState>(INITIAL_WARNING)
   const [faultState, setFaultState] = useState<FaultStateMessage | null>(null)
-  const [faultEvents, setFaultEvents] = useState<FaultEvent[]>([])
+  const [faultEvents, setFaultEvents] = useState<FaultEventMessage[]>([])
+  const [eventLog, setEventLog] = useState<LogEntry[]>([])
   const [sessionInfo, setSessionInfo] = useState<SessionInfoMessage | null>(null)
   const [trail, setTrail] = useState<Point[]>([])
   const [previousLapTrail, setPreviousLapTrail] = useState<Point[]>([])
@@ -47,6 +59,7 @@ export function useSessionStream(role: SessionRole, sessionId: string | null) {
     setWarning(INITIAL_WARNING)
     setFaultState(null)
     setFaultEvents([])
+    setEventLog([])
     setSessionInfo(null)
     setTrail([])
     setPreviousLapTrail([])
@@ -70,10 +83,17 @@ export function useSessionStream(role: SessionRole, sessionId: string | null) {
         }
         case 'warning_event':
           setWarning((prev) => applyWarningEvent(prev, message, Date.now()))
+          setEventLog((prev) => pushLog(prev, message))
           break
         case 'fault_state':
           setFaultState(message)
+          break
+        case 'fault_event':
           setFaultEvents((prev) => appendFaultEvent(prev, message))
+          setEventLog((prev) => pushLog(prev, message))
+          break
+        case 'run_event':
+          setEventLog((prev) => pushLog(prev, message))
           break
         case 'session_info':
           if (runIdRef.current !== null && runIdRef.current !== message.run_id) {
@@ -125,6 +145,7 @@ export function useSessionStream(role: SessionRole, sessionId: string | null) {
     warning,
     faultState,
     faultEvents,
+    eventLog,
     sessionInfo,
     trail,
     previousLapTrail,

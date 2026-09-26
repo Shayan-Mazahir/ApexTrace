@@ -10,7 +10,7 @@
 }
 
 .engineer-screen__panel {
-  width: 380px;
+  width: 420px;
   flex-shrink: 0;
   overflow-y: auto;
   padding: var(--space-md);
@@ -76,4 +76,10 @@
 .engineer-screen__panel button:disabled {
   cursor: not-allowed;
   opacity: 0.4;
+}
+
+.engineer-screen__warning {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }

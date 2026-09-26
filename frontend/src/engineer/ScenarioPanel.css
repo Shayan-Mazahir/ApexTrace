@@ -4,47 +4,49 @@
   gap: var(--space-sm);
 }
 
-.scenario-panel__presets {
+.scenario-panel__field,
+.scenario-panel__grid label {
   display: flex;
   flex-direction: column;
-  gap: var(--space-xs);
-}
-
-.scenario-panel__preset--selected {
-  border-color: var(--color-orange) !important;
-  color: var(--color-orange) !important;
-}
-
-.scenario-panel__select {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
+  gap: 4px;
   font-size: var(--font-size-xs);
   color: var(--color-neutral);
 }
 
-.scenario-panel__select select {
-  background: var(--color-charcoal-light);
+.scenario-panel select,
+.scenario-panel input[type='number'] {
+  background: var(--color-charcoal);
   color: var(--color-white);
-  border: 1px solid var(--color-neutral);
+  border: 1px solid #444;
   border-radius: 4px;
-  padding: var(--space-xs) var(--space-sm);
+  padding: 4px 6px;
   font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
 }
 
-.scenario-panel__description {
+.scenario-panel__description,
+.scenario-panel__note {
   margin: 0;
   font-size: var(--font-size-xs);
   color: var(--color-neutral);
 }
 
-.scenario-panel__actions {
-  display: flex;
+.scenario-panel__faults {
+  margin: 0;
+  padding-left: var(--space-md);
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--color-white);
+}
+
+.scenario-panel__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: var(--space-sm);
 }
 
-.scenario-panel__active {
-  font-family: var(--font-mono);
-  font-size: var(--font-size-xs);
-  color: var(--color-neutral);
+.scenario-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
 }

@@ -130,10 +130,11 @@ def test_zero_control_does_not_turn():
 def test_leaving_the_track_is_recorded_but_does_not_freeze_the_car():
     profile = TRACK_PRESETS["monza"]
     start = initial_state(profile)
-    # shove the car well off to the side of the start straight, moving fast
+    # Start in the runoff, clear of the solid wall and its car-width margin.
+    lateral = profile.track_width / 2 + profile.barrier_offset / 2
     off = DemoVehicleState(
-        x=start.x - math.sin(start.heading) * 20,
-        y=start.y + math.cos(start.heading) * 20,
+        x=start.x - math.sin(start.heading) * lateral,
+        y=start.y + math.cos(start.heading) * lateral,
         heading=start.heading,
         speed=60.0,
     )

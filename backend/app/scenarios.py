@@ -15,7 +15,8 @@ SCENARIO_DIR = Path(__file__).resolve().parents[2] / "scenarios"
 
 def load_scenarios(directory: Path = SCENARIO_DIR) -> dict[str, StressScenario]:
     scenarios: dict[str, StressScenario] = {}
-    for path in sorted(directory.glob("*.json")):
+    # hand-written presets, plus schedules exported by the SAC search
+    for path in [*sorted(directory.glob("*.json")), *sorted(directory.glob("discovered/*.json"))]:
         scenario = StressScenario.model_validate(json.loads(path.read_text()))
         if scenario.id in scenarios:
             raise ValueError(f"duplicate scenario id {scenario.id!r} in {path.name}")

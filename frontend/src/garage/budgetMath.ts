@@ -1,7 +1,7 @@
 import type { ConfigResult, UpgradeConfig, UpgradeId, UpgradeSpec } from '../types/schemas'
 import { UPGRADE_IDS } from '../types/schemas'
 
-export const NO_AFFORDABLE_MESSAGE = 'No affordable configuration passed the selected suite.'
+export const NO_AFFORDABLE_MESSAGE = 'No affordable configuration passed the selected test suite.'
 
 export interface BudgetInputs {
   cash: number

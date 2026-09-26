@@ -41,3 +41,15 @@
   font-family: var(--font-mono);
   font-size: 10px;
 }
+
+.replay-timeline__stale {
+  fill: #a16207;
+  opacity: 0.8;
+}
+
+.replay-timeline__risk {
+  fill: none;
+  stroke: #c084fc;
+  stroke-width: 1.5;
+  stroke-dasharray: 3 2;
+}

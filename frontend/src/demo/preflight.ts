@@ -72,10 +72,10 @@ export async function runPreflight(deps: PreflightDeps): Promise<Check[]> {
   checks.push(
     await attempt('scenarios', 'Saved scenarios loaded', async () => {
       const list = (await get('/scenarios')) as { id: string }[]
-      const need = ['monza_high_speed_braking', 'baku_stale_telemetry']
+      const need = ['monza_wet_braking', 'monza_fade_stale_speed', 'baku_sensor_freeze', 'baku_late_warning_delivery']
       const missing = need.filter((id) => !list.some((s) => s.id === id))
       if (missing.length) throw new Error(`missing presets: ${missing.join(', ')}`)
-      return { detail: `${list.length} scenarios, both presets present` }
+      return { detail: `${list.length} scenarios, the four required presets present` }
     }),
   )
   checks.push(
@@ -92,7 +92,7 @@ export async function runPreflight(deps: PreflightDeps): Promise<Check[]> {
       const started = Date.now()
       const result = (await post('/evaluation/run')) as { configs: unknown[]; suite: { tests: unknown[] } }
       if (result.configs.length !== 8) throw new Error('evaluation did not return 8 configurations')
-      return { detail: `${result.suite.tests.length} tests × 8 configs in ${Date.now() - started} ms` }
+      return { detail: `${result.suite.tests.length} held-out tests × 8 configs in ${Date.now() - started} ms` }
     }),
   )
   checks.push(

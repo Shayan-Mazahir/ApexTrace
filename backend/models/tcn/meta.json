@@ -1,0 +1,648 @@
+{
+  "created": "2026-09-26T19:23:16+00:00",
+  "architecture": {
+    "type": "causal residual TCN",
+    "blocks": 4,
+    "channels": 32,
+    "kernel": 3,
+    "dilations": [
+      1,
+      2,
+      4,
+      8
+    ],
+    "receptive_field": 61,
+    "heads": [
+      "exit_logit (next 1 s)",
+      "min signed clearance (next 1 s)"
+    ]
+  },
+  "inputs": [
+    "speed",
+    "steering",
+    "brake",
+    "throttle",
+    "yaw_rate",
+    "lateral",
+    "distance_to_corner",
+    "grip_estimate",
+    "packet_age_ms",
+    "warning"
+  ],
+  "window": 50,
+  "horizon": 20,
+  "hz": 20,
+  "normalisation": {
+    "mean": [
+      38.19731903076172,
+      0.021230382844805717,
+      0.11934612691402435,
+      0.46945294737815857,
+      0.008887624368071556,
+      0.007490495219826698,
+      341.53424072265625,
+      0.46945294737815857,
+      131.4615936279297,
+      0.3537590503692627
+    ],
+    "std": [
+      18.07159996032715,
+      0.313615620136261,
+      0.30155476927757263,
+      0.2671262323856354,
+      0.345069944858551,
+      0.38644692301750183,
+      317.8446960449219,
+      0.48448678851127625,
+      653.1824951171875,
+      0.6571275591850281
+    ],
+    "clearance_mean": 6.058976650238037,
+    "clearance_std": 1.1494526134262084,
+    "fitted_on": "train split only"
+  },
+  "loss": "BCE-with-logits + 0.5 x Huber(delta=1) on standardised clearance",
+  "ensemble": [
+    {
+      "file": "tcn_seed1.pt",
+      "logit_offset": -3.1543387259518405,
+      "seed": 1,
+      "best_val_loss": 0.0925,
+      "negative_sample_rate": 0.042666605985271486,
+      "epochs_run": 15,
+      "history": [
+        {
+          "epoch": 1,
+          "train_loss": 0.9152,
+          "val_loss": 0.3325
+        },
+        {
+          "epoch": 2,
+          "train_loss": 0.4298,
+          "val_loss": 0.1976
+        },
+        {
+          "epoch": 3,
+          "train_loss": 0.331,
+          "val_loss": 0.1858
+        },
+        {
+          "epoch": 4,
+          "train_loss": 0.2785,
+          "val_loss": 0.1488
+        },
+        {
+          "epoch": 5,
+          "train_loss": 0.2426,
+          "val_loss": 0.1551
+        },
+        {
+          "epoch": 6,
+          "train_loss": 0.2181,
+          "val_loss": 0.1367
+        },
+        {
+          "epoch": 7,
+          "train_loss": 0.2068,
+          "val_loss": 0.1314
+        },
+        {
+          "epoch": 8,
+          "train_loss": 0.1939,
+          "val_loss": 0.1319
+        },
+        {
+          "epoch": 9,
+          "train_loss": 0.1787,
+          "val_loss": 0.1298
+        },
+        {
+          "epoch": 10,
+          "train_loss": 0.1726,
+          "val_loss": 0.1199
+        },
+        {
+          "epoch": 11,
+          "train_loss": 0.1677,
+          "val_loss": 0.1009
+        },
+        {
+          "epoch": 12,
+          "train_loss": 0.1519,
+          "val_loss": 0.1095
+        },
+        {
+          "epoch": 13,
+          "train_loss": 0.1422,
+          "val_loss": 0.1022
+        },
+        {
+          "epoch": 14,
+          "train_loss": 0.1364,
+          "val_loss": 0.0953
+        },
+        {
+          "epoch": 15,
+          "train_loss": 0.1305,
+          "val_loss": 0.0925
+        }
+      ],
+      "train_seconds": 623.3
+    },
+    {
+      "file": "tcn_seed2.pt",
+      "logit_offset": -3.1543387259518405,
+      "seed": 2,
+      "best_val_loss": 0.0909,
+      "negative_sample_rate": 0.042666605985271486,
+      "epochs_run": 15,
+      "history": [
+        {
+          "epoch": 1,
+          "train_loss": 0.8726,
+          "val_loss": 0.3129
+        },
+        {
+          "epoch": 2,
+          "train_loss": 0.4279,
+          "val_loss": 0.2123
+        },
+        {
+          "epoch": 3,
+          "train_loss": 0.3347,
+          "val_loss": 0.1869
+        },
+        {
+          "epoch": 4,
+          "train_loss": 0.2884,
+          "val_loss": 0.1697
+        },
+        {
+          "epoch": 5,
+          "train_loss": 0.2558,
+          "val_loss": 0.155
+        },
+        {
+          "epoch": 6,
+          "train_loss": 0.2338,
+          "val_loss": 0.1405
+        },
+        {
+          "epoch": 7,
+          "train_loss": 0.2136,
+          "val_loss": 0.1292
+        },
+        {
+          "epoch": 8,
+          "train_loss": 0.1933,
+          "val_loss": 0.1375
+        },
+        {
+          "epoch": 9,
+          "train_loss": 0.1865,
+          "val_loss": 0.1162
+        },
+        {
+          "epoch": 10,
+          "train_loss": 0.1802,
+          "val_loss": 0.1126
+        },
+        {
+          "epoch": 11,
+          "train_loss": 0.1608,
+          "val_loss": 0.1151
+        },
+        {
+          "epoch": 12,
+          "train_loss": 0.1569,
+          "val_loss": 0.1221
+        },
+        {
+          "epoch": 13,
+          "train_loss": 0.1516,
+          "val_loss": 0.1039
+        },
+        {
+          "epoch": 14,
+          "train_loss": 0.1374,
+          "val_loss": 0.0909
+        },
+        {
+          "epoch": 15,
+          "train_loss": 0.1356,
+          "val_loss": 0.0911
+        }
+      ],
+      "train_seconds": 638.8
+    },
+    {
+      "file": "tcn_seed3.pt",
+      "logit_offset": -3.1543387259518405,
+      "seed": 3,
+      "best_val_loss": 0.0853,
+      "negative_sample_rate": 0.042666605985271486,
+      "epochs_run": 15,
+      "history": [
+        {
+          "epoch": 1,
+          "train_loss": 0.8888,
+          "val_loss": 0.3077
+        },
+        {
+          "epoch": 2,
+          "train_loss": 0.4201,
+          "val_loss": 0.2028
+        },
+        {
+          "epoch": 3,
+          "train_loss": 0.3255,
+          "val_loss": 0.1802
+        },
+        {
+          "epoch": 4,
+          "train_loss": 0.2778,
+          "val_loss": 0.1508
+        },
+        {
+          "epoch": 5,
+          "train_loss": 0.241,
+          "val_loss": 0.1604
+        },
+        {
+          "epoch": 6,
+          "train_loss": 0.2134,
+          "val_loss": 0.1297
+        },
+        {
+          "epoch": 7,
+          "train_loss": 0.195,
+          "val_loss": 0.1177
+        },
+        {
+          "epoch": 8,
+          "train_loss": 0.1764,
+          "val_loss": 0.1062
+        },
+        {
+          "epoch": 9,
+          "train_loss": 0.1672,
+          "val_loss": 0.1049
+        },
+        {
+          "epoch": 10,
+          "train_loss": 0.1526,
+          "val_loss": 0.0997
+        },
+        {
+          "epoch": 11,
+          "train_loss": 0.1491,
+          "val_loss": 0.0936
+        },
+        {
+          "epoch": 12,
+          "train_loss": 0.1394,
+          "val_loss": 0.094
+        },
+        {
+          "epoch": 13,
+          "train_loss": 0.1314,
+          "val_loss": 0.0918
+        },
+        {
+          "epoch": 14,
+          "train_loss": 0.1271,
+          "val_loss": 0.0853
+        },
+        {
+          "epoch": 15,
+          "train_loss": 0.1221,
+          "val_loss": 0.0925
+        }
+      ],
+      "train_seconds": 757.3
+    }
+  ],
+  "dataset": {
+    "channels": [
+      "speed",
+      "steering",
+      "brake",
+      "throttle",
+      "yaw_rate",
+      "lateral",
+      "distance_to_corner",
+      "grip_estimate",
+      "packet_age_ms",
+      "warning"
+    ],
+    "window": 50,
+    "horizon": 20,
+    "hz": 20,
+    "seed": 20260926,
+    "segment_runs": 2400,
+    "lap_runs": 160,
+    "suite_runs": 42,
+    "simulation_seconds": 16.9,
+    "splits": {
+      "train": {
+        "runs": 1792,
+        "exit_runs": 623,
+        "windows": 714756,
+        "positive_windows": 11630
+      },
+      "val": {
+        "runs": 384,
+        "exit_runs": 123,
+        "windows": 170764,
+        "positive_windows": 2286
+      },
+      "test": {
+        "runs": 384,
+        "exit_runs": 126,
+        "windows": 166549,
+        "positive_windows": 2311
+      },
+      "suite": {
+        "runs": 42,
+        "exit_runs": 14,
+        "windows": 82350,
+        "positive_windows": 280
+      }
+    },
+    "split_rule": "by run, before windowing (70/15/15); 'suite' = held-out stress suite runs (out of distribution)"
+  },
+  "metrics": {
+    "test": {
+      "windows": 166549,
+      "positives": 2311,
+      "base_rate": 0.01388,
+      "tcn": {
+        "pr_auc": 0.9098,
+        "brier": 0.00351,
+        "clearance_mae_m": 0.365,
+        "mean_ensemble_spread": 0.0021
+      },
+      "baselines": {
+        "constant_base_rate": {
+          "pr_auc": 0.0139,
+          "brier": 0.01368
+        },
+        "current_true_clearance (not available to the TCN)": {
+          "pr_auc": 0.1934,
+          "clearance_mae_m": 0.226
+        },
+        "naive_stopping_margin (observed speed & corner distance)": {
+          "pr_auc": 0.0368
+        }
+      },
+      "reliability": [
+        {
+          "bin": "0.0-0.1",
+          "n": 162771,
+          "mean_predicted": 0.0004,
+          "observed_rate": 0.0004
+        },
+        {
+          "bin": "0.1-0.2",
+          "n": 449,
+          "mean_predicted": 0.1466,
+          "observed_rate": 0.069
+        },
+        {
+          "bin": "0.2-0.3",
+          "n": 336,
+          "mean_predicted": 0.2475,
+          "observed_rate": 0.1815
+        },
+        {
+          "bin": "0.3-0.4",
+          "n": 314,
+          "mean_predicted": 0.3457,
+          "observed_rate": 0.242
+        },
+        {
+          "bin": "0.4-0.5",
+          "n": 326,
+          "mean_predicted": 0.4495,
+          "observed_rate": 0.4172
+        },
+        {
+          "bin": "0.5-0.6",
+          "n": 350,
+          "mean_predicted": 0.5518,
+          "observed_rate": 0.6
+        },
+        {
+          "bin": "0.6-0.7",
+          "n": 407,
+          "mean_predicted": 0.6505,
+          "observed_rate": 0.7002
+        },
+        {
+          "bin": "0.7-0.8",
+          "n": 491,
+          "mean_predicted": 0.7512,
+          "observed_rate": 0.7902
+        },
+        {
+          "bin": "0.8-0.9",
+          "n": 525,
+          "mean_predicted": 0.85,
+          "observed_rate": 0.9105
+        },
+        {
+          "bin": "0.9-1.0",
+          "n": 580,
+          "mean_predicted": 0.9491,
+          "observed_rate": 1.0
+        }
+      ]
+    },
+    "suite_out_of_distribution": {
+      "windows": 82346,
+      "positives": 280,
+      "base_rate": 0.0034,
+      "tcn": {
+        "pr_auc": 0.9057,
+        "brier": 0.00094,
+        "clearance_mae_m": 0.315,
+        "mean_ensemble_spread": 0.00053
+      },
+      "baselines": {
+        "constant_base_rate": {
+          "pr_auc": 0.0034,
+          "brier": 0.00339
+        },
+        "current_true_clearance (not available to the TCN)": {
+          "pr_auc": 0.1663,
+          "clearance_mae_m": 0.117
+        },
+        "naive_stopping_margin (observed speed & corner distance)": {
+          "pr_auc": 0.0563
+        }
+      },
+      "reliability": [
+        {
+          "bin": "0.0-0.1",
+          "n": 81943,
+          "mean_predicted": 0.0002,
+          "observed_rate": 0.0004
+        },
+        {
+          "bin": "0.1-0.2",
+          "n": 74,
+          "mean_predicted": 0.1395,
+          "observed_rate": 0.1351
+        },
+        {
+          "bin": "0.2-0.3",
+          "n": 64,
+          "mean_predicted": 0.2429,
+          "observed_rate": 0.125
+        },
+        {
+          "bin": "0.3-0.4",
+          "n": 37,
+          "mean_predicted": 0.3464,
+          "observed_rate": 0.3243
+        },
+        {
+          "bin": "0.4-0.5",
+          "n": 24,
+          "mean_predicted": 0.4544,
+          "observed_rate": 0.8333
+        },
+        {
+          "bin": "0.5-0.6",
+          "n": 26,
+          "mean_predicted": 0.5314,
+          "observed_rate": 0.7308
+        },
+        {
+          "bin": "0.6-0.7",
+          "n": 36,
+          "mean_predicted": 0.6486,
+          "observed_rate": 1.0
+        },
+        {
+          "bin": "0.7-0.8",
+          "n": 33,
+          "mean_predicted": 0.7513,
+          "observed_rate": 1.0
+        },
+        {
+          "bin": "0.8-0.9",
+          "n": 58,
+          "mean_predicted": 0.8552,
+          "observed_rate": 1.0
+        },
+        {
+          "bin": "0.9-1.0",
+          "n": 51,
+          "mean_predicted": 0.9545,
+          "observed_rate": 1.0
+        }
+      ]
+    },
+    "suite_at_training": {
+      "windows": 82350,
+      "positives": 280,
+      "base_rate": 0.0034,
+      "tcn": {
+        "pr_auc": 0.9114,
+        "brier": 0.0009,
+        "clearance_mae_m": 0.314,
+        "mean_ensemble_spread": 0.00053
+      },
+      "baselines": {
+        "constant_base_rate": {
+          "pr_auc": 0.0034,
+          "brier": 0.00339
+        },
+        "current_true_clearance (not available to the TCN)": {
+          "pr_auc": 0.1871,
+          "clearance_mae_m": 0.119
+        },
+        "naive_stopping_margin (observed speed & corner distance)": {
+          "pr_auc": 0.056
+        }
+      },
+      "reliability": [
+        {
+          "bin": "0.0-0.1",
+          "n": 81943,
+          "mean_predicted": 0.0002,
+          "observed_rate": 0.0004
+        },
+        {
+          "bin": "0.1-0.2",
+          "n": 74,
+          "mean_predicted": 0.1395,
+          "observed_rate": 0.1351
+        },
+        {
+          "bin": "0.2-0.3",
+          "n": 64,
+          "mean_predicted": 0.2429,
+          "observed_rate": 0.1094
+        },
+        {
+          "bin": "0.3-0.4",
+          "n": 37,
+          "mean_predicted": 0.3464,
+          "observed_rate": 0.3243
+        },
+        {
+          "bin": "0.4-0.5",
+          "n": 24,
+          "mean_predicted": 0.4544,
+          "observed_rate": 0.8333
+        },
+        {
+          "bin": "0.5-0.6",
+          "n": 26,
+          "mean_predicted": 0.5314,
+          "observed_rate": 0.7308
+        },
+        {
+          "bin": "0.6-0.7",
+          "n": 36,
+          "mean_predicted": 0.6486,
+          "observed_rate": 1.0
+        },
+        {
+          "bin": "0.7-0.8",
+          "n": 33,
+          "mean_predicted": 0.7513,
+          "observed_rate": 1.0
+        },
+        {
+          "bin": "0.8-0.9",
+          "n": 58,
+          "mean_predicted": 0.8552,
+          "observed_rate": 1.0
+        },
+        {
+          "bin": "0.9-1.0",
+          "n": 55,
+          "mean_predicted": 0.9547,
+          "observed_rate": 1.0
+        }
+      ]
+    }
+  },
+  "caveats": [
+    "Trained on a toy simulator with a scripted driver; human inputs are outside the training distribution.",
+    "Probabilities are prior-corrected for negative subsampling; check the reliability table before trusting them.",
+    "Ensemble spread is disagreement between seeds, not a calibrated confidence.",
+    "An observer only: it does not drive warnings.",
+    "Training/test data predates the solid-footprint barrier fix; the held-out stress suite was rerun with the current simulator."
+  ],
+  "total_seconds": 2333.2,
+  "suite_simulator_sha256": {
+    "placeholder_sim.py": "fc58f5d05cc5b0c9a5d910f5ad21d59c19f5f9bd2b5ac61761c11a60b27ee73d",
+    "barriers.py": "3cd8aa0cbdb695f8942d88a24f81e4d653cdec2e5de3dffad2fb43e35ea23e2d",
+    "stress/run.py": "a35faddef43cac434c38a8e6c52b765bc1c867184ae95a2266ed08c94e52da1e",
+    "stress/evaluation.py": "f80d04ffab1e03cec86f12bfd3e5da30c274aca225ecc80080982037fbab3d28"
+  }
+}

@@ -9,11 +9,19 @@ export function BrakeWarning({ warning }: { warning: WarningState }) {
   const [now, setNow] = useState(() => Date.now())
 
   useEffect(() => {
-    if (!warning.active) return
+    if (!warning.active && !warning.stale) return
     const interval = setInterval(() => setNow(Date.now()), 100)
     return () => clearInterval(interval)
   }, [warning.active])
 
+  if (warning.stale && !warning.active) {
+    return (
+      <div className="brake-warning brake-warning--stale" role="alert">
+        <div className="brake-warning__label brake-warning__label--small">WARNING DATA STALE</div>
+        <div className="brake-warning__reason">No fresh braking advice — judge corners yourself</div>
+      </div>
+    )
+  }
   if (!warning.active) return null
 
   const ageSeconds = warning.since === null ? 0 : Math.max(0, now - warning.since) / 1000
@@ -24,7 +32,8 @@ export function BrakeWarning({ warning }: { warning: WarningState }) {
       <div className="brake-warning__reason">{warning.reason}</div>
       <div className="brake-warning__meta">
         {warning.hazardZone ? `${warning.hazardZone} · ` : ''}
-        warning age {ageSeconds.toFixed(1)}s
+        {warning.source === 'local' ? 'onboard fallback · ' : ''}
+        shown {ageSeconds.toFixed(1)}s
       </div>
     </div>
   )

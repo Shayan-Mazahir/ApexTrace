@@ -66,3 +66,23 @@ async def run_paired(body: PairedRequest) -> dict[str, Any]:
     if body.seed is not None:
         scenario = scenario.model_copy(update={"seed": body.seed})
     return await asyncio.to_thread(evaluation.paired, scenario, body.upgrade)
+
+
+@router.get("/ml/status")
+def ml_status() -> dict[str, Any]:
+    """TCN observer status + held-out metrics, and the SAC vs random report."""
+    import json
+
+    from app.ml import risk
+
+    tcn = risk.status()
+    meta_path = risk.MODEL_DIR / "meta.json"
+    if meta_path.exists():
+        meta = json.loads(meta_path.read_text())
+        tcn["metrics"] = meta["metrics"]
+        tcn["dataset"] = meta["dataset"]["splits"]
+        tcn["architecture"] = meta["architecture"]
+        tcn["caveats"] = meta["caveats"]
+    sac_path = risk.MODEL_DIR.parent / "sac" / "report.json"
+    sac = json.loads(sac_path.read_text()) if sac_path.exists() else None
+    return {"tcn": tcn, "sac": sac}

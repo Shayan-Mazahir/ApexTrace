@@ -16,6 +16,8 @@ interface GarageContextValue {
   evaluate: () => Promise<void>
   available: number
   selectedCost: number
+  suiteGroup: string
+  setSuiteGroup: (group: string) => void
 }
 
 const GarageContext = createContext<GarageContextValue | null>(null)
@@ -32,6 +34,7 @@ export function GarageProvider({ children }: { children: ReactNode }) {
   const [selection, setSelection] = useState<UpgradeConfig>(NO_UPGRADES)
   const [evaluation, setEvaluation] = useState<EvaluationResponse | null>(null)
   const [evaluating, setEvaluating] = useState(false)
+  const [suiteGroup, setSuiteGroup] = useState('telemetry')
 
   useEffect(() => {
     getUpgradeCatalog()
@@ -81,6 +84,8 @@ export function GarageProvider({ children }: { children: ReactNode }) {
         evaluate,
         available,
         selectedCost: configCost(selection, specs),
+        suiteGroup,
+        setSuiteGroup,
       }}
     >
       {children}

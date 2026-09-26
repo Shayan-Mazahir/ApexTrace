@@ -1,6 +1,7 @@
 import { useFrame } from '@react-three/fiber'
 import { useMemo, useRef } from 'react'
 import { DoubleSide, Shape, type Group } from 'three'
+import { wordmark } from './textures'
 
 export interface Livery {
   primary: string
@@ -8,7 +9,7 @@ export interface Livery {
   accent: string
 }
 
-export const DEFAULT_LIVERY: Livery = { primary: '#ff7a00', secondary: '#161616', accent: '#2dd4bf' }
+export const DEFAULT_LIVERY: Livery = { primary: '#ff8000', secondary: '#121214', accent: '#2dd4bf' }
 
 const CARBON = '#1b1b1d'
 const TYRE = '#141414'
@@ -122,8 +123,8 @@ export function F1Car({ livery = DEFAULT_LIVERY, speed, steering, marks }: F1Car
       </mesh>
 
       {/* raised nose + tub */}
-      <mesh position={[1.5, 0.42, 0]} rotation={[0, 0, -Math.PI / 2]} castShadow>
-        <cylinderGeometry args={[0.1, 0.24, 1.9, 16]} />
+      <mesh position={[1.5, 0.4, 0]} rotation={[0, 0, -Math.PI / 2]} scale={[0.62, 1, 1.05]} castShadow>
+        <cylinderGeometry args={[0.1, 0.26, 1.9, 20]} />
         <meshStandardMaterial color={livery.primary} metalness={0.3} roughness={0.35} />
       </mesh>
       <mesh position={[0.15, 0.55, 0]} castShadow>
@@ -131,10 +132,29 @@ export function F1Car({ livery = DEFAULT_LIVERY, speed, steering, marks }: F1Car
         <meshStandardMaterial color={livery.primary} metalness={0.3} roughness={0.35} />
       </mesh>
 
+      {/* two-tone livery: black sidepod flanks over the papaya chassis */}
+      {[1, -1].map((side) => (
+        <group key={side}>
+          <mesh position={[-0.35, 0.36, side * 0.62]} castShadow>
+            <boxGeometry args={[1.35, 0.3, 0.2]} />
+            <meshStandardMaterial color={livery.secondary} metalness={0.4} roughness={0.35} />
+          </mesh>
+          <mesh position={[-0.35, 0.38, side * 0.725]} rotation={[0, side > 0 ? 0 : Math.PI, 0]}>
+            <planeGeometry args={[1.1, 0.27]} />
+            <meshStandardMaterial map={wordmark('tangerine', '#ff8000')} transparent depthWrite={false} />
+          </mesh>
+          {/* mirror */}
+          <mesh position={[0.62, 0.78, side * 0.45]}>
+            <boxGeometry args={[0.08, 0.07, 0.16]} />
+            <meshStandardMaterial color={livery.secondary} />
+          </mesh>
+        </group>
+      ))}
+
       {/* engine cover, stripe, airbox, shark fin */}
       <mesh position={[-0.95, 0.62, 0]} castShadow>
         <boxGeometry args={[1.5, 0.36, 0.52]} />
-        <meshStandardMaterial color={livery.primary} metalness={0.3} roughness={0.35} />
+        <meshStandardMaterial color={livery.secondary} metalness={0.4} roughness={0.35} />
       </mesh>
       <mesh position={[-0.95, 0.805, 0]}>
         <boxGeometry args={[1.5, 0.01, 0.16]} />
@@ -148,6 +168,12 @@ export function F1Car({ livery = DEFAULT_LIVERY, speed, steering, marks }: F1Car
         <boxGeometry args={[1.3, 0.34, 0.025]} />
         <meshStandardMaterial color={livery.primary} side={DoubleSide} />
       </mesh>
+      {[1, -1].map((side) => (
+        <mesh key={`fin${side}`} position={[-1.25, 0.98, side * 0.014]} rotation={[0, side > 0 ? 0 : Math.PI, 0]}>
+          <planeGeometry args={[1.1, 0.26]} />
+          <meshStandardMaterial map={wordmark('LIMITLAB', '#121214')} transparent depthWrite={false} />
+        </mesh>
+      ))}
 
       {/* cockpit: helmet + halo */}
       <mesh position={[0.28, 0.8, 0]}>
@@ -191,6 +217,10 @@ export function F1Car({ livery = DEFAULT_LIVERY, speed, steering, marks }: F1Car
       <mesh position={[-2.38, 1.07, 0]} rotation={[0, 0, 0.3]}>
         <boxGeometry args={[0.26, 0.04, 1.0]} />
         <meshStandardMaterial color={livery.primary} />
+      </mesh>
+      <mesh position={[-2.45, 0.978, 0]} rotation={[-Math.PI / 2, 0, -Math.PI / 2]}>
+        <planeGeometry args={[0.95, 0.3]} />
+        <meshStandardMaterial map={wordmark('tangerine', '#ffffff')} transparent depthWrite={false} />
       </mesh>
       {[1, -1].map((side) => (
         <mesh key={side} position={[-2.42, 0.8, side * 0.51]} castShadow>

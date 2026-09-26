@@ -37,7 +37,7 @@ function deps(overrides: Partial<PreflightDeps> & { socket?: 'ok' | 'silent' } =
     openSocket: () => new FakeSocket(overrides.socket ?? 'ok') as unknown as WebSocket,
     fetchJson: async (url) => {
       if (url.endsWith('/health')) return { status: 'ok' }
-      if (url.endsWith('/scenarios')) return [{ id: 'monza_high_speed_braking' }, { id: 'baku_stale_telemetry' }]
+      if (url.endsWith('/scenarios')) return ['monza_wet_braking', 'monza_fade_stale_speed', 'baku_sensor_freeze', 'baku_late_warning_delivery'].map((id) => ({ id }))
       if (url.endsWith('/upgrades')) return { upgrades: [1, 2, 3], configs: new Array(8).fill(0) }
       if (url.endsWith('/evaluation/run')) return { configs: new Array(8).fill(0), suite: { tests: new Array(36).fill(0) } }
       if (url.endsWith('/sessions')) return { session_id: 's1' }

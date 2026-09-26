@@ -57,8 +57,8 @@ const result = (key: string, cost: number, passed: boolean): ConfigResult => ({
   test_count: 36,
   track_exits: 0,
   min_clearance_m: 0.6,
-  min_warning_lead_s: 0.4,
-  warnings_missed: 0,
+  min_warning_margin_m: 10,
+  unnecessary_warnings: 0,
   passed,
   failed_test_ids: passed ? [] : ['x'],
   tests: [],
@@ -98,8 +98,10 @@ import { pickDefaultTest, describeOutcome } from '../compare/compareLogic'
 import type { TestResult } from '../types/schemas'
 
 const tr = (id: string, passed: boolean, clr: number): TestResult => ({
-  test_id: id, track: 'monza', passed, track_exit: false, completed: true,
-  min_clearance_m: clr, min_warning_lead_s: 0.4, warnings_missed: 0, lap_time_s: 80,
+  test_id: id, scenario_id: id, track: 'monza', passed, track_exit: false, completed: true, exit_location: null,
+  min_clearance_m: clr, warnings: 3, unnecessary_warnings: 0, min_warning_margin_m: 10, stale_time_s: 0,
+  blackout_time_s: 0, fallback_first_t: null, packets_rejected_old: 0, barrier_contacts: 0, lap_time_s: 80,
+  driver_ignored: 0,
 })
 
 describe('pickDefaultTest', () => {

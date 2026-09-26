@@ -70,13 +70,20 @@ def test_catalogue_labels_every_type():
         assert CATALOG[core].status == "implemented"
 
 
+def test_suite_contains_presets_only():
+    from app.stress.evaluation import families
+
+    assert all(s.source == "preset" for s in families())
+
+
 def test_presets_all_validate_and_the_four_required_exist():
     for required in ["monza_wet_braking", "monza_fade_stale_speed", "baku_sensor_freeze", "baku_late_warning_delivery"]:
         assert required in SCENARIOS
     for s in SCENARIOS.values():
         zones = {h.id for h in TRACK_PRESETS[s.track].hazard_zones}
+        assert s.source in {"preset", "sac"}
         for f in s.faults:
-            assert f.source == "preset"
+            assert f.source == s.source
             if f.trigger.kind == "zone":
                 assert f.trigger.zone_id in zones
 

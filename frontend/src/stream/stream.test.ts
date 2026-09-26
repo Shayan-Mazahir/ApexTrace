@@ -1,14 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import { classifyConnection } from './connectionQuality'
-import { appendFaultEvent, MAX_FAULT_EVENTS } from './faultTimeline'
+import { appendFaultEvent, faultWindows, MAX_FAULT_EVENTS } from './faultTimeline'
 import { nextBackoffMs } from './reconnect'
 import { applyWarningEvent, INITIAL_WARNING } from './warningState'
-import type { FaultStateMessage, WarningEventMessage } from '../types/schemas'
+import type { FaultEventMessage, WarningEventMessage } from '../types/schemas'
 
 const warning = (seq: number, active: boolean, zone = 'Turn 1'): WarningEventMessage => ({
   type: 'warning_event',
   seq,
   active,
+  state: active ? 'brake' : 'clear',
+  source: 'remote',
+  data_age_ms: 20,
+  generated_t: 0,
+  displayed_t: 0,
   reason: active ? `Approaching ${zone}` : null,
   hazard_zone: active ? zone : null,
   hazard_id: active ? 'turn1' : null,
@@ -39,6 +44,18 @@ describe('applyWarningEvent', () => {
   })
 })
 
+describe('stale warnings', () => {
+  it('shows a stale caution (not BRAKE) and keeps its start time', () => {
+    const stale = { ...warning(3, false), state: 'stale' as const, reason: 'Telemetry stale' }
+    const s1 = applyWarningEvent(INITIAL_WARNING, stale, 1000)
+    expect(s1).toMatchObject({ active: false, stale: true, since: 1000, reason: 'Telemetry stale' })
+    const s2 = applyWarningEvent(s1, { ...stale, seq: 4 }, 2000)
+    expect(s2.since).toBe(1000)
+    const brake = applyWarningEvent(s2, warning(5, true), 3000)
+    expect(brake).toMatchObject({ active: true, stale: false })
+  })
+})
+
 describe('classifyConnection', () => {
   it('is offline when disconnected', () => {
     expect(classifyConnection({ connected: false, msSinceLastMessage: 0, packetAgeMs: 0 }).level).toBe(
@@ -64,19 +81,22 @@ describe('nextBackoffMs', () => {
 })
 
 describe('appendFaultEvent', () => {
-  const message = (distance: number): FaultStateMessage => ({
-    type: 'fault_state',
-    manual: { grip_multiplier: 1, telemetry_delay_ms: 0, brake_wear: 1 },
-    effective: { grip_multiplier: 0.8, telemetry_delay_ms: 0, brake_wear: 1 },
-    scenario_id: null,
-    scenario_active: false,
-    distance_along_lap: distance,
-    t: 0,
+  const ev = (d: number): FaultEventMessage => ({
+    type: 'fault_event', event: 'fault_activated', t: d, distance: d, fault_id: `f${d}`, fault_type: 'grip_loss',
+    target: 'world', source: 'manual', description: '',
   })
   it('caps the history', () => {
-    let events: ReturnType<typeof appendFaultEvent> = []
-    for (let i = 0; i < MAX_FAULT_EVENTS + 10; i++) events = appendFaultEvent(events, message(i))
+    let events: FaultEventMessage[] = []
+    for (let i = 0; i < MAX_FAULT_EVENTS + 10; i++) events = appendFaultEvent(events, ev(i))
     expect(events).toHaveLength(MAX_FAULT_EVENTS)
     expect(events[events.length - 1].distance).toBe(MAX_FAULT_EVENTS + 9)
+  })
+  it('pairs activations with deactivations into windows', () => {
+    const on = ev(100)
+    const off: FaultEventMessage = { ...on, event: 'fault_deactivated', distance: 250 }
+    expect(faultWindows([on, off, ev(400)], 1000)).toEqual([
+      { id: 'f100', target: 'world', start: 100, end: 250 },
+      { id: 'f400', target: 'world', start: 400, end: null },
+    ])
   })
 })

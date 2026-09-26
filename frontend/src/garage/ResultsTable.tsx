@@ -57,7 +57,8 @@ export function ResultsTable({
                 <th>Tests</th>
                 <th>Track exits</th>
                 <th>Min clearance</th>
-                <th>Min warning lead</th>
+                <th title="Ground truth: metres left before the latest point full braking could still make the corner, at the moment the warning was shown">Worst warning margin</th>
+                <th title="BRAKE shown when ground truth did not require braking">Unneeded warnings</th>
                 <th>Outcome</th>
                 <th>Left after upgrade</th>
                 <th />
@@ -80,7 +81,8 @@ export function ResultsTable({
                   <td>{result.test_count}</td>
                   <td>{result.track_exits}</td>
                   <td>{fmt(result.min_clearance_m)} m</td>
-                  <td>{fmt(result.min_warning_lead_s)} s</td>
+                  <td>{fmt(result.min_warning_margin_m, 1)} m</td>
+                  <td>{result.unnecessary_warnings}</td>
                   <td>
                     {result.passed ? (
                       <StatusBadge tone="info" label="Passed this test suite" />

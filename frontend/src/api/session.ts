@@ -1,5 +1,6 @@
 import type {
-  ScenarioConfig,
+  FaultType,
+  StressScenario,
   SessionCreateResponse,
   SessionJoinResponse,
   SessionRole,
@@ -65,7 +66,7 @@ export async function sessionExists(sessionId: string): Promise<boolean | null> 
   }
 }
 
-export async function listScenarios(): Promise<ScenarioConfig[]> {
+export async function listScenarios(): Promise<StressScenario[]> {
   const response = await fetch(`${API_BASE_URL}/scenarios`)
   if (!response.ok) {
     throw new Error(`Failed to list scenarios: ${response.status}`)
@@ -83,5 +84,11 @@ export async function getTrack(track: TrackId): Promise<TrackProfile> {
   if (!response.ok) {
     throw new Error(`Failed to load track: ${response.status}`)
   }
+  return response.json()
+}
+
+export async function getFaultCatalog(): Promise<FaultType[]> {
+  const response = await fetch(`${API_BASE_URL}/faults/catalog`)
+  if (!response.ok) throw new Error(`Failed to load fault catalog: ${response.status}`)
   return response.json()
 }

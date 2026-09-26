@@ -166,3 +166,59 @@ export function formatLapTime(seconds: number | null | undefined): string {
   const s = seconds - m * 60
   return `${m}:${s.toFixed(3).padStart(6, '0')}`
 }
+
+export interface UvStrip {
+  positions: Float32Array
+  uvs: Float32Array
+  indices: number[]
+}
+
+function cumulative(line: Pt[]): number[] {
+  const out = [0]
+  for (let i = 1; i < line.length; i++) out.push(out[i - 1] + Math.hypot(line[i][0] - line[i - 1][0], line[i][1] - line[i - 1][1]))
+  return out
+}
+
+// Vertical strip with u running along the line (one texture repeat every
+// `uLength` metres) so boards/fences tile without stretching.
+export function uvWall(line: Pt[], y0: number, y1: number, uLength: number, include: (i: number) => boolean = () => true): UvStrip {
+  const d = cumulative(line)
+  const positions: number[] = []
+  const uvs: number[] = []
+  const indices: number[] = []
+  for (let i = 0; i < line.length - 1; i++) {
+    if (!include(i)) continue
+    const base = positions.length / 3
+    const [x0, z0] = line[i]
+    const [x1, z1] = line[i + 1]
+    const u0 = d[i] / uLength
+    const u1 = d[i + 1] / uLength
+    positions.push(x0, y0, z0, x0, y1, z0, x1, y0, z1, x1, y1, z1)
+    uvs.push(u0, 0, u0, 1, u1, 0, u1, 1)
+    indices.push(base, base + 1, base + 2, base + 1, base + 3, base + 2)
+  }
+  return { positions: new Float32Array(positions), uvs: new Float32Array(uvs), indices }
+}
+
+// Flat ribbon between two lines with u along the lap and v across it.
+export function uvFlat(a: Pt[], b: Pt[], y: number, uLength: number, vRepeat = 1): UvStrip {
+  const d = cumulative(a)
+  const positions: number[] = []
+  const uvs: number[] = []
+  const indices: number[] = []
+  for (let i = 0; i < a.length - 1; i++) {
+    const base = positions.length / 3
+    positions.push(a[i][0], y, a[i][1], b[i][0], y, b[i][1], a[i + 1][0], y, a[i + 1][1], b[i + 1][0], y, b[i + 1][1])
+    const u0 = d[i] / uLength
+    const u1 = d[i + 1] / uLength
+    uvs.push(u0, 0, u0, vRepeat, u1, 0, u1, vRepeat)
+    indices.push(base, base + 1, base + 2, base + 1, base + 3, base + 2)
+  }
+  return { positions: new Float32Array(positions), uvs: new Float32Array(uvs), indices }
+}
+
+// Sample index at a distance along the lap.
+export function indexAt(profile: TrackProfile, distance: number): number {
+  const n = profile.centerline.length - 1
+  return Math.round(((((distance % profile.total_length) + profile.total_length) % profile.total_length) / profile.total_length) * n) % n
+}

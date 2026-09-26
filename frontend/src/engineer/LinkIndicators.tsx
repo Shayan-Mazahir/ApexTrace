@@ -26,35 +26,36 @@ interface LinkIndicatorsProps {
   lastMessageAt: number | null
 }
 
-// Connection status, measured message age and injected delay are three
-// different things and are shown separately: only the first two describe the
-// real link; injected delay is a simulated fault.
-export function LinkIndicators({ connection, vehicleState, lastMessageAt }: LinkIndicatorsProps) {
+const ms = (v: number | null | undefined) => (v === null || v === undefined ? '—' : `${v.toFixed(0)} ms`)
+
+// Real link (this device <-> server, heartbeat-driven) and the SIMULATED
+// warning-data path are shown separately: only the first is a network.
+export function LinkIndicators({ connection, vehicleState: v, lastMessageAt }: LinkIndicatorsProps) {
   const now = useNow(500)
   const msSince = lastMessageAt === null ? null : Math.max(0, now - lastMessageAt)
-  const quality = classifyConnection({
-    connected: connection === 'connected',
-    msSinceLastMessage: msSince,
-    packetAgeMs: vehicleState?.packet_age_ms ?? null,
-  })
-  const injected = vehicleState?.injected_delay_ms ?? 0
+  const quality = classifyConnection({ connected: connection === 'connected', msSinceLastMessage: msSince, packetAgeMs: v?.packet_age_ms ?? null })
 
   return (
     <div className="link-indicators">
       <div className="link-indicators__badges">
-        <StatusBadge
-          label={CONNECTION_LABEL[connection]}
-          tone={connection === 'connected' ? 'success' : connection === 'idle' ? 'neutral' : 'warning'}
-        />
-        <StatusBadge label={`Link quality: ${quality.label}`} tone={LEVEL_TONE[quality.level]} />
+        <StatusBadge label={CONNECTION_LABEL[connection]} tone={connection === 'connected' ? 'success' : connection === 'idle' ? 'neutral' : 'warning'} />
+        <StatusBadge label={`Real link: ${quality.label}`} tone={LEVEL_TONE[quality.level]} />
+        {v?.blackout && <StatusBadge label="Simulated blackout" tone="danger" />}
+        {v?.local_fallback_active && <StatusBadge label="Local fallback active" tone="info" />}
       </div>
       <dl className="link-indicators__grid">
-        <dt>Measured packet age</dt>
-        <dd>{vehicleState ? `${vehicleState.packet_age_ms.toFixed(0)} ms` : '—'}</dd>
-        <dt>Injected delay (simulated)</dt>
-        <dd>{vehicleState ? `+${injected.toFixed(0)} ms` : '—'}</dd>
-        <dt>Last data received</dt>
+        <dt>Real: last data received</dt>
         <dd>{msSince === null ? '—' : `${msSince.toFixed(0)} ms ago`}</dd>
+        <dt>Real: driver control age</dt>
+        <dd>{ms(v?.packet_age_ms)}</dd>
+        <dt>Sim: warning-data sample age</dt>
+        <dd>{ms(v?.sample_age_ms)}</dd>
+        <dt>Sim: injected uplink delay</dt>
+        <dd>{v ? `+${v.injected_delay_ms.toFixed(0)} ms` : '—'}</dd>
+        <dt>Sim: warning delivery delay</dt>
+        <dd>{v ? `+${v.warning_delivery_delay_ms.toFixed(0)} ms` : '—'}</dd>
+        <dt>Sim: grip actual / estimated</dt>
+        <dd>{v ? `${v.true_grip.toFixed(2)} / ${v.estimated_grip.toFixed(2)}` : '—'}</dd>
       </dl>
     </div>
   )

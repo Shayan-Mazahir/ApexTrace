@@ -58,9 +58,10 @@ Keyboard fallback: **W / ↑** throttle, **S / ↓ / Space** brake, **A / ←** 
 ## Tests
 
 ```bash
-cd backend  && source venv/bin/activate && python -m pytest      # 87 tests
-cd frontend && npm test                                          # 52 unit tests
+cd backend  && source venv/bin/activate && python -m pytest
+cd frontend && npm test
 cd frontend && npm run e2e                                       # 23 real-Chrome checks (25 with E2E_OUTAGE=1)
+cd frontend && node e2e/barriers.mjs                             # wall impacts + live TCN on both tracks
 ```
 
 `npm run e2e` needs the app running (`scripts/start.sh`) and Chrome installed.
@@ -85,9 +86,31 @@ scripts/    start.sh, record_backup_replay.py
 docs/       DEMO.md
 ```
 
-## What is placeholder
+## Simulator and AI status
 
-`backend/app/placeholder_sim.py` and `placeholder_eval.py` stand in for
-Person A's `backend/sim/*` and `backend/evaluation.py`. Everything above them
-(sessions, faults, upgrades, budget, UI) talks to a small interface, so they
-are replaceable; there is no ML/RL yet.
+`backend/app/placeholder_sim.py` still contains the simplified vehicle model,
+pending integration with Person A's simulator. `backend/app/stress/` owns
+the shared fault pipeline and evaluation. Solid barriers use swept collision
+checks against the rendered wall geometry and the whole 5.6 × 2 m car.
+Impact stops the car and records a failed run; use Reset to restart after a
+head-on crash. This is a contact constraint, not a realistic damage model.
+
+The optional TCN observer loads three trained checkpoints and `meta.json`
+from `backend/models/tcn/`. It predicts one-second exit risk and clearance
+from 2.5 seconds of observed telemetry, in both live sessions and replays;
+it does not control braking warnings. Missing models or ML dependencies
+are shown as unavailable. SAC artifacts and its random-search comparison
+are in `backend/models/sac/`.
+
+```bash
+cd backend
+venv/bin/pip install -r requirements-ml.txt
+venv/bin/python -m app.ml.dataset        # regenerate training data if needed
+venv/bin/python -m app.ml.train_tcn      # train and evaluate the ensemble
+venv/bin/python -m app.ml.evaluate_tcn   # recheck saved models after simulator changes
+```
+
+The saved training/test results use the original dataset; the held-out
+stress suite is reevaluated after the solid-barrier fix. Simulator hashes
+and this distinction are recorded in the model metadata. Clearance error
+must be compared with its baseline separately from exit classification.

@@ -8,6 +8,7 @@ import { useScreen } from '../app/ScreenContext'
 import { LoadingIndicator } from '../components/LoadingIndicator'
 import { StatusBadge } from '../components/StatusBadge'
 import { describeOutcome, pickDefaultTest } from '../compare/compareLogic'
+import { ModelsPanel } from '../compare/ModelsPanel'
 import { ReplayPanel } from '../compare/ReplayPanel'
 import { runDuration } from '../compare/replayMath'
 import { usePlayback } from '../compare/usePlayback'
@@ -169,12 +170,12 @@ export function CompareScreen() {
           </div>
 
           <p className="compare-screen__note">
-            {replay.test.name} · faults: grip {replay.test.faults.grip_multiplier}, delay{' '}
-            {replay.test.faults.telemetry_delay_ms} ms, brake fade {replay.test.faults.brake_wear} · seed{' '}
-            {replay.test.seed}. One test is an illustration; the garage table has the whole suite.
+            {replay.test.name} · seed {replay.test.seed} · faults: {replay.test.faults.length ? replay.test.faults.join('; ') : 'none'}.
+            One test is an illustration; the garage table has the whole suite.
           </p>
         </>
       )}
+      <ModelsPanel />
     </div>
   )
 }

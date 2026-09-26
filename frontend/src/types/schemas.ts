@@ -33,6 +33,7 @@ export interface TrackProfile {
   seed: number
   track_width: number
   total_length: number
+  barrier_offset: number
   start_finish: [number, number]
   centerline: [number, number][]
   left_edge: [number, number][]
@@ -78,6 +79,8 @@ export interface ControlInputMessage {
   brake: number
 }
 
+export type WarningDisplayState = 'clear' | 'brake' | 'stale' | 'no_data'
+
 export interface VehicleStateMessage {
   type: 'vehicle_state'
   seq: number
@@ -93,67 +96,188 @@ export interface VehicleStateMessage {
   next_hazard_zone: string | null
   next_hazard_distance: number | null
   signed_clearance: number
+  // real, measured: age of the driver device's last control message
   packet_age_ms: number
+  // simulated warning-data pipeline
+  sample_age_ms: number | null
   injected_delay_ms: number
   warning_path_delay_ms: number
+  warning_delivery_delay_ms: number
+  blackout: boolean
   local_fallback_active: boolean
   warning_reason: string | null
+  warning_state: WarningDisplayState
+  true_grip: number
+  estimated_grip: number
   track_exit: boolean
   lap_complete: boolean
   off_track: boolean
   track_exits: number
+  barrier_contacts: number
   lap: number
   laps_completed: number
   lap_time_s: number
   last_lap_s: number | null
   best_lap_s: number | null
+  // TCN observer (null while warming up or unavailable)
+  tcn_risk: number | null
+  tcn_clearance: number | null
+  tcn_spread: number | null
 }
 
-export interface FaultState {
-  grip_multiplier: number
-  telemetry_delay_ms: number
-  brake_wear: number
+// --- stress framework ------------------------------------------------------
+
+export type FaultTarget = 'world' | 'vehicle' | 'sensor' | 'uplink' | 'downlink' | 'warning_service' | 'driver'
+export type FaultSource = 'manual' | 'preset' | 'random' | 'sac'
+export type TriggerKind = 'always' | 'time' | 'distance' | 'zone' | 'speed_above'
+
+export interface ParamSpec {
+  name: string
+  unit: string
+  min: number
+  max: number
+  default: number
+  description: string
 }
 
-// Hard limits, mirroring backend FaultState.
-export const FAULT_LIMITS = {
-  grip_multiplier: { min: 0.65, max: 1 },
-  telemetry_delay_ms: { min: 0, max: 400 },
-  brake_wear: { min: 0.75, max: 1 },
-} as const
+export interface FaultType {
+  type: string
+  label: string
+  target: FaultTarget
+  status: 'implemented' | 'requires_model_extension'
+  description: string
+  params: ParamSpec[]
+  composition: string
+}
 
-export const NO_FAULTS: FaultState = { grip_multiplier: 1, telemetry_delay_ms: 0, brake_wear: 1 }
+export interface Trigger {
+  kind: TriggerKind
+  start?: number
+  end?: number | null
+  zone_id?: string | null
+  pad_m?: number
+  repeat?: 'once_per_run' | 'once_per_lap'
+}
 
-export interface ScenarioConfig {
+export interface FaultSpec {
+  id: string
+  type: string
+  enabled?: boolean
+  target?: FaultTarget | null
+  trigger?: Trigger
+  duration_s?: number | null
+  parameters?: Record<string, number>
+  ramp_in_s?: number
+  ramp_out_s?: number
+  seed?: number
+  source?: FaultSource
+}
+
+export interface StressScenario {
   id: string
   name: string
   description: string
   track: TrackId
   seed: number
-  faults: FaultState
-  onset_distance: number
-  end_distance: number
+  faults: FaultSpec[]
+  source: FaultSource
+  driver: { kind: string; cruise_speed_ms: number; reaction_s: number }
+}
+
+export type FaultLifecycle = 'pending' | 'active' | 'waiting' | 'completed' | 'cancelled'
+
+export interface FaultSummary {
+  id: string
+  type: string
+  target: FaultTarget
+  source: FaultSource
+  state: FaultLifecycle
+  level: number
+  description: string
+  parameters: Record<string, number>
+  activations: number
+  remaining_m: number | null
+}
+
+export interface EffectiveValues {
+  grip: number
+  brake_fade: number
+  uplink_delay_ms: number
+  uplink_loss: number
+  blackout: boolean
+  downlink_delay_ms: number
+  downlink_loss: number
+  compute_delay_ms: number
+  speed_scale: number
+  speed_offset: number
+  frozen: string[]
+  position_offset: number
+  [key: string]: unknown
+}
+
+export interface ScenarioOverrides {
+  seed?: number
+  severity?: number
+  zone_id?: string
+  duration_s?: number
 }
 
 export interface WarningEventMessage {
   type: 'warning_event'
   seq: number
   active: boolean
+  state: WarningDisplayState
   reason: string | null
   hazard_zone: string | null
   hazard_id: string | null
   advised_speed: number | null
+  source: 'remote' | 'local' | null
+  data_age_ms: number | null
+  generated_t: number | null
+  displayed_t: number
   source_t: number
+}
+
+export interface FaultEventMessage {
+  type: 'fault_event'
+  event: 'fault_activated' | 'fault_deactivated' | 'fault_cancelled'
+  t: number
+  distance: number
+  fault_id: string
+  fault_type: string
+  target: FaultTarget
+  source: FaultSource
+  description: string
+}
+
+export interface RunEventMessage {
+  type: 'run_event'
+  event: string
+  t: number
+  distance?: number
+  location?: string | null
 }
 
 export interface FaultStateMessage {
   type: 'fault_state'
-  manual: FaultState
-  effective: FaultState
+  faults: FaultSummary[]
+  effective: EffectiveValues
   scenario_id: string | null
-  scenario_active: boolean
   distance_along_lap: number
   t: number
+}
+
+export interface TcnStatus {
+  available: boolean
+  reason?: string
+  created?: string
+  ensemble_size?: number
+  window_s?: number
+  horizon_s?: number
+  test_pr_auc?: number
+  test_brier?: number
+  test_clearance_mae_m?: number
+  role?: string
 }
 
 export interface SessionInfoMessage {
@@ -163,10 +287,12 @@ export interface SessionInfoMessage {
   seed: number
   track: TrackId
   scenario_id: string | null
+  scenario_name: string | null
   upgrades: UpgradeConfig
   driver_connected: boolean
   engineer_connected: boolean
   engineer_ever_connected: boolean
+  tcn: TcnStatus
 }
 
 export interface HeartbeatMessage {
@@ -184,14 +310,17 @@ export type ServerMessage =
   | VehicleStateMessage
   | WarningEventMessage
   | FaultStateMessage
+  | FaultEventMessage
+  | RunEventMessage
   | SessionInfoMessage
   | HeartbeatMessage
   | ServerErrorMessage
 
 export type ClientCommand =
-  | { type: 'pause' | 'resume' | 'reset' | 'pong' | 'clear_scenario' }
-  | { type: 'set_faults'; faults: FaultState }
-  | { type: 'launch_scenario'; scenario_id: string }
+  | { type: 'pause' | 'resume' | 'reset' | 'pong' | 'cancel_scenario' }
+  | { type: 'arm_scenario'; scenario_id: string; overrides?: ScenarioOverrides }
+  | { type: 'add_fault'; fault: FaultSpec }
+  | { type: 'cancel_fault'; fault_id: string }
   | ControlInputMessage
 
 export type UpgradeId = 'brake_servicing' | 'comms_improvement' | 'local_fallback'
@@ -240,33 +369,42 @@ export interface Acceptance {
 
 export interface SuiteTestInfo {
   id: string
+  scenario_id: string
   track: TrackId
   name: string
   seed: number
-  faults: FaultState
-  onset_distance: number
-  end_distance: number
+  description: string
+  faults: string[]
   cruise_speed: number
   reaction_s: number
-  lateral_offset: number
 }
 
 export interface SuiteInfo {
   version: string
+  kind: 'dev' | 'heldout'
   acceptance: Acceptance
   tests: SuiteTestInfo[]
 }
 
 export interface TestResult {
   test_id: string
+  scenario_id: string
   track: TrackId
   passed: boolean
   track_exit: boolean
   completed: boolean
+  exit_location: string | null
   min_clearance_m: number
-  min_warning_lead_s: number | null
-  warnings_missed: number
+  warnings: number
+  unnecessary_warnings: number
+  min_warning_margin_m: number | null
+  stale_time_s: number
+  blackout_time_s: number
+  fallback_first_t: number | null
+  packets_rejected_old: number
+  barrier_contacts: number
   lap_time_s: number | null
+  driver_ignored: number
 }
 
 export interface ConfigResult {
@@ -277,15 +415,22 @@ export interface ConfigResult {
   test_count: number
   track_exits: number
   min_clearance_m: number
-  min_warning_lead_s: number | null
-  warnings_missed: number
+  min_warning_margin_m: number | null
+  unnecessary_warnings: number
   passed: boolean
   failed_test_ids: string[]
   tests: TestResult[]
 }
 
+export interface SuiteGroup {
+  label: string
+  test_ids: string[]
+  configs: ConfigResult[]
+}
+
 export interface EvaluationResponse {
   suite: SuiteInfo
+  groups: Record<string, SuiteGroup>
   configs: ConfigResult[]
 }
 
@@ -300,8 +445,17 @@ export interface ReplayFrame {
   distance: number
   clearance: number
   warning_active: boolean
+  warning_state: WarningDisplayState
   track_exit: boolean
   lap_complete: boolean
+  true_grip: number
+  estimated_grip: number
+  sample_age_ms: number | null
+  fallback_active: boolean
+  active_faults: string[]
+  tcn_risk?: number | null
+  tcn_clearance?: number | null
+  tcn_spread?: number | null
 }
 
 export interface ReplayRun {
@@ -309,10 +463,26 @@ export interface ReplayRun {
   upgrades: UpgradeConfig
   result: TestResult
   frames: ReplayFrame[]
+  events: (FaultEventMessage | WarningEventMessage | RunEventMessage)[]
 }
 
 export interface ReplayResponse {
   test: SuiteTestInfo
   baseline: ReplayRun
   upgraded: ReplayRun
+  tcn?: TcnStatus
+}
+
+export interface PairedRow {
+  key: string
+  label: string
+  upgrades: UpgradeConfig
+  result: TestResult
+}
+
+export interface PairedResponse {
+  scenario_id: string
+  scenario_name: string
+  seed: number
+  rows: PairedRow[]
 }
