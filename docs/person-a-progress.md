@@ -56,6 +56,20 @@ side by side:
   `/scenario/*`, `/configuration/*`, `/ai/status`, `/ws/simulation`.
 - Unifying the two simulators is not done yet (next step).
 
+## Drive screen / Baku fixes (on `version1`)
+
+- First-person cockpit camera (default while driving; button cycles Cockpit -> Chase -> Overview).
+- Racing line overlay (`frontend/src/scene/racingLine.ts`): curvature-minimising
+  line inside the track edges, green = accelerate, red = brake, using the
+  session car model's limits. About 7 s faster per lap than the centreline
+  under those limits on both tracks. Toggle: "Racing line".
+- Baku fixes: Turn 7 and Turn 12 cusps rounded, Turn 13-15 S-wobble removed
+  (`track_layouts.py`); off-track clearance now uses the local width so the
+  7.6 m castle section counts (`placeholder_sim.half_width_at`); city buildings
+  kept clear of the road/walls using their footprint. The TCN observer's suite
+  metrics were re-run with `python -m app.ml.evaluate_tcn` (PR-AUC 0.906 ->
+  0.905; clearance MAE 0.315 -> 0.402 m because castle clearances are now true).
+
 ## Status: all Section 4 steps done
 
 | Step | State | Evidence |
