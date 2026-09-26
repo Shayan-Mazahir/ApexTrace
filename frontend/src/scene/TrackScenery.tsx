@@ -15,6 +15,8 @@ import {
   bounds,
   cornerMask,
   flatStrip,
+  grandstandBack,
+  grandstandSpan,
   hexToRgb,
   indexAt,
   leftNormals,
@@ -202,8 +204,15 @@ function Buildings({ items }: { items: Prop[] }) {
   )
 }
 
-// A grandstand beside the start straight, facing the track.
+// A grandstand beside the start straight, facing the track. Its extent comes
+// from grandstandSpan so it never reaches over a corner (Baku's Turn 1 starts
+// ~200 m after the line).
 function Grandstand({ profile, from, to, side }: { profile: TrackProfile; from: number; to: number; side: 1 | -1 }) {
+  const span = useMemo(() => grandstandSpan(profile, from, to, side), [profile, from, to, side])
+  return span ? <GrandstandBody profile={profile} from={span.from} to={span.to} side={side} /> : null
+}
+
+function GrandstandBody({ profile, from, to, side }: { profile: TrackProfile; from: number; to: number; side: 1 | -1 }) {
   const normals = useMemo(() => leftNormals(profile), [profile])
   const i0 = indexAt(profile, from)
   const i1 = indexAt(profile, to)
@@ -213,7 +222,7 @@ function Grandstand({ profile, from, to, side }: { profile: TrackProfile; from: 
   const [nx, nz] = normals[mid]
   const length = Math.hypot(x1 - x0, z1 - z0)
   const heading = Math.atan2(z1 - z0, x1 - x0)
-  const back = profile.track_width / 2 + profile.barrier_offset + 9
+  const back = grandstandBack(profile)
   const cx = (x0 + x1) / 2 + nx * side * back
   const cz = (z0 + z1) / 2 + nz * side * back
   const crowd = useMemo(() => {

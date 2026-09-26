@@ -235,3 +235,67 @@ export function indexAt(profile: TrackProfile, distance: number): number {
   const n = profile.centerline.length - 1
   return Math.round(((((distance % profile.total_length) + profile.total_length) % profile.total_length) / profile.total_length) * n) % n
 }
+
+// Grandstand layout (local frame of the stand: `back` metres out from the
+// straight's centerline, extending `GRANDSTAND_REACH_IN` towards the track
+// (roof front edge) and `GRANDSTAND_REACH_OUT` away from it).
+export const GRANDSTAND_REACH_IN = 4
+export const GRANDSTAND_REACH_OUT = 14
+const GRANDSTAND_MIN_LENGTH = 60
+const GRANDSTAND_CORNER_GAP = 40 // stop this far before the first corner
+const GRANDSTAND_STRAIGHTNESS = 1 // max deviation of the track from the stand's line, metres
+
+export function grandstandBack(profile: TrackProfile): number {
+  return profile.track_width / 2 + profile.barrier_offset + 9
+}
+
+/**
+ * The stretch [from, end] a straight grandstand can occupy beside the start
+ * straight without reaching over the track: it stops before the first corner,
+ * only covers track that is actually straight, and its whole footprint must
+ * stay behind the walls of every part of the circuit. Returns null when there
+ * is no long enough straight (then no stand is drawn).
+ */
+export function grandstandSpan(profile: TrackProfile, from: number, to: number, side: 1 | -1): { from: number; to: number } | null {
+  const firstCorner = Math.min(
+    Infinity,
+    ...profile.hazard_zones.filter((h) => h.start_distance > from).map((h) => h.start_distance),
+  )
+  const step = profile.total_length / (profile.centerline.length - 1)
+  const wall = profile.track_width / 2 + profile.barrier_offset + 1
+  const back = grandstandBack(profile)
+  const line = profile.centerline as Pt[]
+  const normals = leftNormals(profile)
+  for (let end = Math.min(to, firstCorner - GRANDSTAND_CORNER_GAP); end - from >= GRANDSTAND_MIN_LENGTH; end -= step) {
+    const i0 = indexAt(profile, from)
+    const i1 = indexAt(profile, end)
+    const [x0, z0] = line[i0]
+    const [x1, z1] = line[i1]
+    const len = Math.hypot(x1 - x0, z1 - z0) || 1
+    const ux = (x1 - x0) / len
+    const uz = (z1 - z0) / len
+    let straight = true
+    for (let i = i0; i <= i1 && straight; i++) {
+      const dev = Math.abs((line[i][0] - x0) * uz - (line[i][1] - z0) * ux)
+      straight = dev <= GRANDSTAND_STRAIGHTNESS
+    }
+    if (!straight) continue
+    const [nx, nz] = normals[indexAt(profile, (from + end) / 2)]
+    let clear = true
+    for (let t = 0; t <= len && clear; t += step) {
+      for (const reach of [back - GRANDSTAND_REACH_IN, back + GRANDSTAND_REACH_OUT]) {
+        const px = x0 + ux * t + nx * side * reach
+        const pz = z0 + uz * t + nz * side * reach
+        for (const [cx, cz] of line) {
+          if (Math.hypot(cx - px, cz - pz) < wall) {
+            clear = false
+            break
+          }
+        }
+        if (!clear) break
+      }
+    }
+    if (clear) return { from, to: end }
+  }
+  return null
+}

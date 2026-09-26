@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { TrackProfile } from '../types/schemas'
-import { cornerMask, flatStrip, formatLapTime, leftNormals, offset, scatterProps, wallStrip } from './trackGeometry'
+import { cornerMask, flatStrip, formatLapTime, grandstandSpan, leftNormals, offset, scatterProps, wallStrip } from './trackGeometry'
 
 // A 400 m square loop, 10 m wide, with one "corner" hazard.
 function squareTrack(): TrackProfile {
@@ -83,6 +83,23 @@ describe('track geometry', () => {
       const nearest = Math.min(...p.centerline.map(([x, y]) => Math.hypot(x - pr.x, y - pr.z)))
       expect(nearest - footprint).toBeGreaterThanOrEqual(10) // every sample is checked when a footprint is set
     }
+  })
+
+  it('stops the start grandstands before the first corner', () => {
+    // The square's first straight runs 0-100 m; its corner hazard is moved to 150 m.
+    const p = { ...squareTrack(), total_length: 400 }
+    p.hazard_zones = [{ ...p.hazard_zones[0], start_distance: 150, end_distance: 170 }]
+    for (const side of [1, -1] as const) {
+      const span = grandstandSpan(p, 10, 300, side)
+      expect(span).not.toBeNull()
+      expect(span!.to).toBeLessThanOrEqual(100) // never past the end of the straight
+      expect(span!.to - span!.from).toBeGreaterThanOrEqual(60)
+    }
+  })
+
+  it('draws no grandstand when there is no long enough straight', () => {
+    const p = squareTrack() // corner hazard at 90 m: only 40 m of straight before it
+    expect(grandstandSpan(p, 10, 300, 1)).toBeNull()
   })
 
   it('formats lap times like a timing screen', () => {
