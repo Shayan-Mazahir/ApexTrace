@@ -30,7 +30,7 @@ def test_completed_lap_replay_has_every_corner():
     rp = build_replay(Scenario(track="baku", entry_speed=75), CN.BASELINE)
     entries = [e.detail.split(" speed")[0] for e in rp.events if e.kind == "corner_entry"]
     assert entries == [c.name for c in rp.track.corners]
-    assert any(e.kind == "lap_completed" for e in rp.events)
+    assert [e.kind for e in rp.events][-2:] == ["lap_completed", "finished"]
     assert rp.sample_hz == 20
 
 

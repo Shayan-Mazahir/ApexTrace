@@ -88,7 +88,7 @@ def build_replay(
     if result.metrics.lap_completed:
         events.append(ReplayEvent(timestamp=result.metrics.lap_time, kind="lap_completed",
                                   detail=f"lap time {result.metrics.lap_time:.2f} s"))
-    events.append(ReplayEvent(timestamp=frames[-1].timestamp, kind="finished"))
+    events.append(ReplayEvent(timestamp=result.metrics.sim_time, kind="finished"))
     events.sort(key=lambda e: e.timestamp)
 
     stride = max(1, int(round((1.0 / sample_hz) / C.DT)))
