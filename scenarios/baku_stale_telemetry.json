@@ -1,0 +1,13 @@
+{
+  "name": "baku_stale_telemetry",
+  "description": "Baku with 35% burst packet loss, amplified in the radio-shadow zone before the corner.",
+  "scenario": {
+    "scenario_id": "baku_stale_telemetry",
+    "seed": 26,
+    "track": "baku",
+    "entry_speed": 58.0,
+    "packet_loss": 0.35,
+    "warning_margin": 0.05,
+    "driver_reaction_delay": 0.35
+  }
+}

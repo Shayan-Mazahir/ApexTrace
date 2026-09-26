@@ -1,0 +1,10 @@
+{
+  "name": "monza_nominal",
+  "description": "Monza, healthy car and clean telemetry. Expected: pass.",
+  "scenario": {
+    "scenario_id": "monza_nominal",
+    "seed": 1,
+    "track": "monza",
+    "entry_speed": 85.0
+  }
+}
