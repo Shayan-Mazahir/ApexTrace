@@ -144,3 +144,87 @@ class SimulationResult(BaseModel):
     minimum_boundary_distance: float
     metrics: SimulationMetrics
     telemetry: list[VehicleState] | None = None
+
+
+# --------------------------------------------------------------------------- #
+# Track geometry / replay
+# --------------------------------------------------------------------------- #
+
+
+class CornerInfo(BaseModel):
+    name: str
+    s_entry: float
+    s_exit: float
+    curvature: float = Field(description="signed 1/m, + = left")
+    radius: float
+    direction: Literal["left", "right"]
+
+
+class BrakingZoneInfo(BaseModel):
+    corner: str
+    s_start: float
+    s_end: float
+
+
+class TrackGeometry(BaseModel):
+    name: TrackName
+    display_name: str
+    purpose: str
+    width: float
+    length: float
+    corner_curvature: float
+    centerline: list[tuple[float, float]]
+    left_boundary: list[tuple[float, float]]
+    right_boundary: list[tuple[float, float]]
+    corners: list[CornerInfo]
+    braking_zones: list[BrakingZoneInfo]
+    telemetry_shadow_zones: list[tuple[float, float]] = Field(description="(s_start, s_end) with amplified packet loss")
+
+
+class ReplayEvent(BaseModel):
+    timestamp: float
+    kind: Literal["caution_shown", "brake_now_shown", "corner_entry", "left_track", "finished"]
+    detail: str | None = None
+
+
+class Replay(BaseModel):
+    """Everything needed to play a run back. Regenerable from (scenario, configuration)."""
+
+    replay_id: str
+    scenario: Scenario
+    configuration: ConfigurationName
+    sample_hz: float
+    track: TrackGeometry
+    frames: list[VehicleState]
+    events: list[ReplayEvent]
+    result: SimulationResult = Field(description="summary; its telemetry field is omitted (see frames)")
+
+
+# --------------------------------------------------------------------------- #
+# Configuration evaluation
+# --------------------------------------------------------------------------- #
+
+
+class ScenarioOutcome(BaseModel):
+    scenario_id: str
+    failed: bool
+    minimum_boundary_distance: float
+    warning_too_late: bool
+    corner_entry_speed: float | None
+
+
+class ConfigurationEvaluation(BaseModel):
+    configuration: ConfigurationName
+    description: str
+    scenario_count: int
+    stress_test_failures: int = Field(description="count of simulator failures (not a real-world probability)")
+    failed_scenario_ids: list[str]
+    outcomes: list[ScenarioOutcome]
+
+
+class ConfigurationComparison(BaseModel):
+    scenario_count: int
+    scenario_ids: list[str] = Field(description="the identical scenario set run under every configuration")
+    evaluations: list[ConfigurationEvaluation]
+    fixed_vs_baseline: dict[str, list[str]] = Field(description="configuration -> scenarios that fail in baseline but pass here")
+    new_failures_vs_baseline: dict[str, list[str]]
