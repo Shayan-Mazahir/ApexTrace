@@ -92,12 +92,15 @@ interface F1CarProps {
   // without re-rendering React at 60 fps)
   speed?: React.MutableRefObject<number>
   steering?: React.MutableRefObject<number>
+  // cockpit camera sits where the helmet is; hide the helmet and the halo's
+  // centre pillar (which would sit right across the driver's line of sight)
+  hideDriver?: boolean
 }
 
 // A recognisably F1-shaped car from primitives: long nose, front and rear
 // wings, sidepods, halo, driver's helmet, airbox, shark fin, exposed wheels.
 // About 5.6 m long, 2 m wide. Local +x is forward.
-export function F1Car({ livery = DEFAULT_LIVERY, speed, steering, marks }: F1CarProps) {
+export function F1Car({ livery = DEFAULT_LIVERY, speed, steering, marks, hideDriver = false }: F1CarProps) {
   const spin = useRef(0)
   const steer = useRef(0)
   const shape = useMemo(bodyShape, [])
@@ -176,22 +179,28 @@ export function F1Car({ livery = DEFAULT_LIVERY, speed, steering, marks }: F1Car
       ))}
 
       {/* cockpit: helmet + halo */}
-      <mesh position={[0.28, 0.8, 0]}>
-        <sphereGeometry args={[0.16, 20, 16]} />
-        <meshStandardMaterial color="#f5d000" metalness={0.2} roughness={0.3} />
-      </mesh>
-      <mesh position={[0.32, 0.8, 0]}>
-        <boxGeometry args={[0.05, 0.08, 0.34]} />
-        <meshStandardMaterial color="#111" />
-      </mesh>
+      {!hideDriver && (
+        <>
+          <mesh position={[0.28, 0.8, 0]}>
+            <sphereGeometry args={[0.16, 20, 16]} />
+            <meshStandardMaterial color="#f5d000" metalness={0.2} roughness={0.3} />
+          </mesh>
+          <mesh position={[0.32, 0.8, 0]}>
+            <boxGeometry args={[0.05, 0.08, 0.34]} />
+            <meshStandardMaterial color="#111" />
+          </mesh>
+        </>
+      )}
       <mesh position={[0.3, 0.98, 0]} rotation={[Math.PI / 2, 0, Math.PI / 2]}>
         <torusGeometry args={[0.34, 0.03, 10, 32, Math.PI]} />
         <meshStandardMaterial color={CARBON} />
       </mesh>
-      <mesh position={[0.66, 0.86, 0]} rotation={[0, 0, -0.6]}>
-        <boxGeometry args={[0.04, 0.3, 0.05]} />
-        <meshStandardMaterial color={CARBON} />
-      </mesh>
+      {!hideDriver && (
+        <mesh position={[0.66, 0.86, 0]} rotation={[0, 0, -0.6]}>
+          <boxGeometry args={[0.04, 0.3, 0.05]} />
+          <meshStandardMaterial color={CARBON} />
+        </mesh>
+      )}
 
       {/* front wing: two elements + endplates */}
       <mesh position={[2.55, 0.12, 0]} castShadow>

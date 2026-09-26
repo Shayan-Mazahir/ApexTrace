@@ -23,6 +23,14 @@ function carLabel(upgrades: UpgradeConfig): string {
   return on.length ? on.join(' + ') : 'baseline (worn brakes)'
 }
 
+// The view button cycles cockpit -> chase -> overview -> cockpit; its label names the next view.
+const NEXT_VIEW: Record<SceneView, SceneView> = { cockpit: 'follow', follow: 'overview', overview: 'cockpit' }
+const VIEW_BUTTON_LABEL: Record<SceneView, string> = {
+  cockpit: 'Chase cam',
+  follow: 'Overview',
+  overview: 'Cockpit',
+}
+
 export function DriveScreen() {
   const input = useInputAdapter()
   const session = useDriveSession(input.normalized)
@@ -33,6 +41,7 @@ export function DriveScreen() {
   const [profiles, setProfiles] = useState<Partial<Record<TrackId, TrackProfile>>>({})
   const [viewOverride, setViewOverride] = useState<SceneView | null>(null)
   const [showControls, setShowControls] = useState(false)
+  const [showRacingLine, setShowRacingLine] = useState(true)
   const steeringRef = useRef(0)
   steeringRef.current = input.normalized.steering
 
@@ -50,7 +59,7 @@ export function DriveScreen() {
 
   const profile = session.trackProfile ?? profiles[session.selectedTrack] ?? null
   const inSession = session.sessionId !== null
-  const view: SceneView = viewOverride ?? (inSession ? 'follow' : 'overview')
+  const view: SceneView = viewOverride ?? (inSession ? 'cockpit' : 'overview')
 
   useEffect(() => {
     if (demo.active && demo.step.id === 'drive' && connectionState === 'idle') void start()
@@ -76,6 +85,7 @@ export function DriveScreen() {
           trail={session.trail}
           previousLapTrail={session.previousLapTrail}
           steering={steeringRef}
+          showRacingLine={showRacingLine && inSession}
         />
       </Canvas>
 
@@ -124,8 +134,11 @@ export function DriveScreen() {
             <button type="button" onClick={session.reset} disabled={connectionState !== 'connected'}>
               Reset to grid
             </button>
-            <button type="button" onClick={() => setViewOverride(view === 'follow' ? 'overview' : 'follow')}>
-              {view === 'follow' ? 'Overview' : 'Chase cam'}
+            <button type="button" onClick={() => setViewOverride(NEXT_VIEW[view])}>
+              {VIEW_BUTTON_LABEL[view]}
+            </button>
+            <button type="button" onClick={() => setShowRacingLine((s) => !s)} aria-pressed={showRacingLine}>
+              Racing line
             </button>
             <button type="button" onClick={() => setShowControls((s) => !s)} aria-pressed={showControls}>
               Controls

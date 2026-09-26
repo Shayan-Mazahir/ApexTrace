@@ -1,10 +1,11 @@
 import { Line, OrbitControls, Sky } from '@react-three/drei'
 import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useMemo, useRef, type ElementRef } from 'react'
-import { Vector3, type Group, type PerspectiveCamera } from 'three'
+import { BufferAttribute, BufferGeometry, Color, DoubleSide, Vector3, type Group, type PerspectiveCamera } from 'three'
 import type { TrackProfile } from '../types/schemas'
 import { F1Car } from './F1Car'
-import { bounds, type Pt } from './trackGeometry'
+import { computeRacingLine } from './racingLine'
+import { bounds, flatStrip, type Pt } from './trackGeometry'
 import { TrackScenery } from './TrackScenery'
 
 export interface CarPose {
@@ -14,7 +15,13 @@ export interface CarPose {
   speed?: number
 }
 
-export type SceneView = 'follow' | 'overview'
+export type SceneView = 'cockpit' | 'follow' | 'overview'
+
+// Driver's eye in car-local coordinates (x forward, y up): just above the
+// helmet, under the halo, so the halo and nose frame the view like an onboard.
+const EYE = { x: 0.25, y: 1.1 }
+const EYE_LOOK_AHEAD = 40 // metres
+const EYE_LOOK_HEIGHT = 0.3
 
 const SKY_HORIZON = '#bcd3e6'
 
@@ -76,6 +83,27 @@ function CameraRig({ view, profile, shown }: { view: SceneView; profile: TrackPr
   }, [view, profile, size.width, size.height, camera])
 
   useFrame((_, dt) => {
+    if (view !== 'cockpit') return
+    // Rigidly attached to the car: any lag would make the cockpit swim.
+    const cam = camera as PerspectiveCamera
+    const p = shown.current
+    const fx = Math.cos(p.heading)
+    const fz = Math.sin(p.heading)
+    cam.position.set(p.x + fx * EYE.x, EYE.y, p.y + fz * EYE.x)
+    scratch.look.set(p.x + fx * EYE_LOOK_AHEAD, EYE_LOOK_HEIGHT, p.y + fz * EYE_LOOK_AHEAD)
+    cam.lookAt(scratch.look)
+    const fov = 72 + Math.min(p.speed, 88) * 0.1 // widen a little with speed
+    if (Math.abs(cam.fov - fov) > 0.05 || cam.near !== 0.25 || cam.far !== 4000) {
+      cam.fov += (fov - cam.fov) * Math.min(1, dt * 3)
+      // The halo is ~0.34 m from the eye. Going much nearer than this costs the
+      // depth precision that separates the asphalt (2 cm) from the grass below.
+      cam.near = 0.25
+      cam.far = 4000
+      cam.updateProjectionMatrix()
+    }
+  })
+
+  useFrame((_, dt) => {
     if (view !== 'follow') return
     const cam = camera as PerspectiveCamera
     const p = shown.current
@@ -99,7 +127,7 @@ function CameraRig({ view, profile, shown }: { view: SceneView; profile: TrackPr
   return <OrbitControls ref={controls} makeDefault enabled={view === 'overview'} enableDamping={false} />
 }
 
-function Car({ shown, steering, scale }: { shown: React.MutableRefObject<ShownPose>; steering?: React.MutableRefObject<number>; scale: number }) {
+function Car({ shown, steering, scale, cockpit }: { shown: React.MutableRefObject<ShownPose>; steering?: React.MutableRefObject<number>; scale: number; cockpit: boolean }) {
   const group = useRef<Group>(null)
   const speed = useRef(0)
   useFrame(() => {
@@ -124,8 +152,43 @@ function Car({ shown, steering, scale }: { shown: React.MutableRefObject<ShownPo
         <planeGeometry args={[5.6, 2.3]} />
         <meshBasicMaterial color="#000" transparent opacity={0.35} depthWrite={false} />
       </mesh>
-      <F1Car speed={speed} steering={steering} />
+      <F1Car speed={speed} steering={steering} hideDriver={cockpit} />
     </group>
+  )
+}
+
+const RACING_LINE_WIDTH = 0.6 // metres
+const RACING_LINE_Y = 0.035 // above the asphalt (0.02), below the white edge lines (0.045)
+// Color() converts the sRGB hex to the renderer's linear working space, so
+// the stripe stays saturated instead of washing out.
+const THROTTLE_RGB = new Color('#22c55e').toArray() as [number, number, number]
+const BRAKE_RGB = new Color('#ef4444').toArray() as [number, number, number]
+
+// Painted guide line: green where the car model can accelerate, red where it
+// has to brake for the next corner (see racingLine.ts).
+function RacingLine({ profile }: { profile: TrackProfile }) {
+  const geometry = useMemo(() => {
+    const { points, phase } = computeRacingLine(profile)
+    const half = RACING_LINE_WIDTH / 2
+    const side = (sign: 1 | -1): Pt[] =>
+      points.map(([x, y], i) => {
+        const [ax, ay] = points[Math.max(0, i - 1)]
+        const [bx, by] = points[Math.min(points.length - 1, i + 1)]
+        const len = Math.hypot(bx - ax, by - ay) || 1
+        return [x - ((by - ay) / len) * half * sign, y + ((bx - ax) / len) * half * sign]
+      })
+    const strip = flatStrip(side(1), side(-1), RACING_LINE_Y, (i) => (phase[i] === 'brake' ? BRAKE_RGB : THROTTLE_RGB))
+    const g = new BufferGeometry()
+    g.setAttribute('position', new BufferAttribute(strip.positions, 3))
+    g.setAttribute('color', new BufferAttribute(strip.colors, 3))
+    g.setIndex(strip.indices)
+    return g
+  }, [profile])
+  useEffect(() => () => geometry.dispose(), [geometry])
+  return (
+    <mesh geometry={geometry}>
+      <meshBasicMaterial vertexColors transparent opacity={0.95} depthWrite={false} side={DoubleSide} />
+    </mesh>
   )
 }
 
@@ -141,9 +204,10 @@ interface SceneProps {
   previousLapTrail: [number, number][]
   view?: SceneView
   steering?: React.MutableRefObject<number>
+  showRacingLine?: boolean
 }
 
-export function Scene({ trackProfile, vehicleState, trail, previousLapTrail, view = 'overview', steering }: SceneProps) {
+export function Scene({ trackProfile, vehicleState, trail, previousLapTrail, view = 'overview', steering, showRacingLine = false }: SceneProps) {
   const start = useMemo<CarPose>(() => {
     if (!trackProfile) return { x: 0, y: 0, heading: 0 }
     const [x0, y0] = trackProfile.centerline[0]
@@ -161,9 +225,10 @@ export function Scene({ trackProfile, vehicleState, trail, previousLapTrail, vie
       <hemisphereLight args={['#dfeaf5', '#4d5a3c', 0.85]} />
       <directionalLight position={[300, 400, 200]} intensity={1.6} />
       {trackProfile && <TrackScenery profile={trackProfile} />}
+      {trackProfile && showRacingLine && <RacingLine profile={trackProfile} />}
       <Trail points={previousLapTrail} color="#9ca3af" opacity={0.5} />
       {overview && <Trail points={trail} color="#ff7a00" opacity={0.95} />}
-      <Car shown={shown} steering={steering} scale={overview ? 8 : 1} />
+      <Car shown={shown} steering={steering} scale={overview ? 8 : 1} cockpit={view === 'cockpit'} />
       <CameraRig view={view} profile={trackProfile} shown={shown} />
     </>
   )
