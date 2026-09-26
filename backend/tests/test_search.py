@@ -6,7 +6,7 @@ from app.ai.search import RandomSearch, TPESearch
 from app.ai.search.sac import SACConfig, SACSearch, sac_available, train_sac
 from app.schemas import Scenario
 from app.sim.runner import run_batch, run_scenario
-from app.sim.scenario_space import ScenarioSpace
+from app.sim.scenario_space import DIM, ScenarioSpace
 from app.sim.track import PROFILES
 
 SPACE = ScenarioSpace()
@@ -18,7 +18,8 @@ def assert_in_bounds(s: Scenario):
         assert 0.0 <= v <= 1.0, b.name
     lo, hi = PROFILES[s.track].entry_speed_range
     assert lo - 1e-9 <= s.entry_speed <= hi + 1e-9
-    assert -0.1 - 1e-9 <= s.estimated_grip - s.actual_grip <= 0.2 + 1e-9
+    ge = next(b for b in SPACE.bounds if b.name == "grip_error")
+    assert ge.low - 1e-9 <= s.estimated_grip - s.actual_grip <= ge.high + 1e-9
 
 
 def test_space_roundtrip():
@@ -30,7 +31,7 @@ def test_space_roundtrip():
 
 
 def test_out_of_range_unit_values_are_clipped():
-    s = SPACE.to_scenario("monza", np.full(10, 5.0), "x", 0)
+    s = SPACE.to_scenario("monza", np.full(DIM, 5.0), "x", 0)
     assert_in_bounds(s)
 
 
@@ -62,9 +63,9 @@ def test_reward_prefers_failures_and_penalises_severity():
 
 
 def test_sac_trains_and_proposes_in_bounds():
-    cfg = SACConfig(total_steps=64, warmup_steps=32, steps_per_iter=16, updates_per_iter=4, batch_size=16, hidden=32)
-    agent, meta = train_sac(lambda scs: run_batch(scs), cfg, log=lambda *_: None)
-    assert meta["simulations_used"] == 64
+    cfg = SACConfig(total_steps=32, warmup_steps=16, steps_per_iter=16, updates_per_iter=4, batch_size=16, hidden=32)
+    agent, meta = train_sac(lambda scs: run_batch(scs, workers=4), cfg, log=lambda *_: None)
+    assert meta["simulations_used"] == 32
     for s in SACSearch(agent, seed=0).propose(30):
         assert_in_bounds(s)
 

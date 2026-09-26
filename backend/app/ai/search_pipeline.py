@@ -49,11 +49,11 @@ class SearchOutcome:
 
     @property
     def distinct_failure_conditions(self) -> int:
-        return len({failure_signature(t.scenario) for t in self.failures})
+        return len({failure_signature(t.scenario, t.result.failure_corner) for t in self.failures})
 
 
 def default_simulate(scs: list[Scenario]) -> list[SimulationResult]:
-    return run_batch(scs, workers=None if len(scs) >= 16 else 1)
+    return run_batch(scs, workers=None if len(scs) >= 4 else 1)
 
 
 def make_strategy(name: str, space: ScenarioSpace, seed: int) -> tuple[ScenarioSearchStrategy, str | None]:
