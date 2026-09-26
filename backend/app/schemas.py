@@ -330,3 +330,71 @@ class LiveResultMessage(BaseModel):
 class LiveErrorMessage(BaseModel):
     type: Literal["error"] = "error"
     detail: str
+
+
+# --------------------------------------------------------------------------- #
+# AI: predictions and scenario search
+# --------------------------------------------------------------------------- #
+
+SearchStrategyName = Literal["sac", "tpe", "random"]
+MAX_SEARCH_BUDGET = 200
+
+
+class ModelPrediction(BaseModel):
+    """TCN output. A model estimate of the simulator outcome, NOT a simulator result."""
+
+    kind: Literal["model_prediction"] = "model_prediction"
+    scenario_id: str
+    failure_probability: float = Field(ge=0.0, le=1.0)
+    uncertainty: float = Field(ge=0.0, description="std over MC-dropout samples")
+    predicted_failure: bool = Field(description="failure_probability >= model threshold")
+
+
+class PredictRequest(BaseModel):
+    scenarios: list[Scenario] = Field(min_length=1, max_length=MAX_COMPARE)
+    configuration: ConfigurationName = ConfigurationName.BASELINE
+
+
+class ScenarioSearchRequest(BaseModel):
+    strategy: SearchStrategyName = "sac"
+    use_tcn_selection: bool = True
+    budget: int = Field(default=30, ge=1, le=MAX_SEARCH_BUDGET, description="number of FULL simulations")
+    track: TrackName | None = None
+    seed: int = Field(default=0, ge=0)
+    candidates_per_round: int = Field(default=40, ge=2, le=200)
+    per_round: int = Field(default=10, ge=1, le=50)
+
+
+class SearchTestRecord(BaseModel):
+    scenario: Scenario
+    prediction: ModelPrediction | None = Field(description="present when the TCN screened this scenario")
+    result: SimulationResult = Field(description="ground truth from the simulator")
+
+
+class ScenarioSearchResponse(BaseModel):
+    strategy_requested: SearchStrategyName
+    strategy_used: str
+    used_tcn_selection: bool
+    notes: list[str]
+    budget: int
+    simulations_run: int
+    stress_test_failures: int = Field(description="simulator failures found (not a real-world probability)")
+    distinct_failure_conditions: int
+    tests_until_first_failure: int | None
+    candidates_screened: int
+    screening_sim_seconds: float = Field(description="simulated prefix time spent screening candidates")
+    tested: list[SearchTestRecord]
+
+
+class ModelStatus(BaseModel):
+    available: bool
+    path: str
+    metadata: dict | None = Field(default=None, description="training metadata / evaluation read from disk")
+
+
+class AIStatus(BaseModel):
+    tcn: ModelStatus
+    tcn_heldout_evaluation: dict | None = Field(description="metrics from scripts/evaluate_tcn.py on held-out simulator data")
+    sac: ModelStatus
+    default_strategy: SearchStrategyName
+    experiment: dict | None = Field(description="summary from scripts/run_experiment.py, if it has been run")
