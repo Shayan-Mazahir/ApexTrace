@@ -30,11 +30,12 @@ interface TrackPickerProps {
   value: TrackId
   onChange: (id: TrackId) => void
   onStart: () => void
+  onOpenSetup?: () => void
   starting: boolean
   carLabel: string
 }
 
-export function TrackPicker({ profiles, value, onChange, onStart, starting, carLabel }: TrackPickerProps) {
+export function TrackPicker({ profiles, value, onChange, onStart, onOpenSetup, starting, carLabel }: TrackPickerProps) {
   return (
     <div className="track-picker" role="dialog" aria-label="Choose a circuit">
       <h1>Choose your circuit</h1>
@@ -61,11 +62,19 @@ export function TrackPicker({ profiles, value, onChange, onStart, starting, carL
       </div>
       <div className="track-picker__footer">
         <span>Car: {carLabel}</span>
+        {onOpenSetup && (
+          <button type="button" className="track-picker__setup" onClick={onOpenSetup}>
+            Car setup
+          </button>
+        )}
         <button type="button" className="track-picker__go" onClick={onStart} disabled={starting}>
           {starting ? 'Starting…' : 'Start session'}
         </button>
       </div>
-      <p className="track-picker__keys">W / ↑ throttle · S / ↓ / Space brake · A D / ← → steer · a wheel is picked up automatically</p>
+      <p className="track-picker__keys">
+        W / ↑ throttle · S / ↓ / Space brake · A D / ← → steer · E / Q shift · F DRS · R reverse · B battery · a wheel is picked
+        up automatically
+      </p>
     </div>
   )
 }

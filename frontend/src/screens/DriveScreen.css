@@ -102,3 +102,11 @@
 .drive-screen__dock .drive-screen__end {
   color: #fca5a5;
 }
+
+.drive-screen__setup {
+  position: fixed;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+}

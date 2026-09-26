@@ -6,9 +6,11 @@ import { CalibrationPanel } from '../components/CalibrationPanel'
 import { SimulatedFaultLabel } from '../components/SimulatedFaultLabel'
 import { StatusBadge, type StatusTone } from '../components/StatusBadge'
 import { BrakeWarning } from '../drive/BrakeWarning'
+import { CarSetupPanel } from '../drive/CarSetupPanel'
 import { DriveHud } from '../drive/DriveHud'
 import { Minimap } from '../drive/Minimap'
 import { RunStateBanner } from '../drive/RunStateBanner'
+import { TelemetryPanel } from '../drive/TelemetryPanel'
 import { TrackPicker } from '../drive/TrackPicker'
 import { useDriveSession } from '../drive/useDriveSession'
 import { useInputAdapter } from '../input/useInputAdapter'
@@ -33,7 +35,7 @@ const VIEW_BUTTON_LABEL: Record<SceneView, string> = {
 
 export function DriveScreen() {
   const input = useInputAdapter()
-  const session = useDriveSession(input.normalized)
+  const session = useDriveSession(input.normalized, input.buttonCounts, input.presses.ersCycle)
   const demo = useDemo()
   const { selection } = useGarage()
   const { start, connectionState } = session
@@ -42,6 +44,7 @@ export function DriveScreen() {
   const [viewOverride, setViewOverride] = useState<SceneView | null>(null)
   const [showControls, setShowControls] = useState(false)
   const [showRacingLine, setShowRacingLine] = useState(true)
+  const [showSetup, setShowSetup] = useState(false)
   const steeringRef = useRef(0)
   steeringRef.current = input.normalized.steering
 
@@ -81,7 +84,7 @@ export function DriveScreen() {
         <Scene
           view={view}
           trackProfile={profile}
-          vehicleState={v ? { x: v.x, y: v.y, heading: v.heading, speed: v.speed } : null}
+          vehicleState={v ? { x: v.x, y: v.y, heading: v.heading, speed: v.speed, drsOpen: v.drs_open } : null}
           trail={session.trail}
           previousLapTrail={session.previousLapTrail}
           steering={steeringRef}
@@ -97,6 +100,7 @@ export function DriveScreen() {
           onStart={session.start}
           starting={connectionState === 'connecting'}
           carLabel={carLabel(selection)}
+          onOpenSetup={() => setShowSetup(true)}
         />
       )}
 
@@ -125,7 +129,8 @@ export function DriveScreen() {
 
           <BrakeWarning warning={session.warning} />
           <RunStateBanner vehicleState={v} />
-          <DriveHud normalized={input.normalized} vehicleState={v} profile={profile} />
+          <DriveHud normalized={input.normalized} vehicleState={v} profile={profile} sessionId={session.sessionId} />
+          <TelemetryPanel normalized={input.normalized} vehicleState={v} />
 
           <div className="drive-screen__dock">
             <button type="button" onClick={session.togglePause} disabled={connectionState !== 'connected'}>
@@ -136,6 +141,9 @@ export function DriveScreen() {
             </button>
             <button type="button" onClick={() => setViewOverride(NEXT_VIEW[view])}>
               {VIEW_BUTTON_LABEL[view]}
+            </button>
+            <button type="button" onClick={() => setShowSetup((s) => !s)} aria-pressed={showSetup}>
+              Car setup
             </button>
             <button type="button" onClick={() => setShowRacingLine((s) => !s)} aria-pressed={showRacingLine}>
               Racing line
@@ -148,6 +156,12 @@ export function DriveScreen() {
             </button>
           </div>
         </>
+      )}
+
+      {showSetup && (
+        <div className="drive-screen__setup">
+          <CarSetupPanel setup={session.setup} onChange={session.setSetup} onClose={() => setShowSetup(false)} />
+        </div>
       )}
 
       {showControls && (
