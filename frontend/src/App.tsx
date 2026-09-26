@@ -1,29 +1,48 @@
-import { Canvas } from '@react-three/fiber'
-import { useEffect, useState } from 'react'
 import './App.css'
-import { fetchHealth } from './api/health'
-import { Scene } from './scene/Scene'
+import { ErrorProvider } from './app/ErrorContext'
+import { ScreenProvider, useScreen } from './app/ScreenContext'
+import { ScreenNav } from './app/ScreenNav'
+import { ConnectionStatus } from './components/ConnectionStatus'
+import { ErrorBanner } from './components/ErrorBanner'
+import { CompareScreen } from './screens/CompareScreen'
+import { DriveScreen } from './screens/DriveScreen'
+import { EngineerScreen } from './screens/EngineerScreen'
+import { GarageScreen } from './screens/GarageScreen'
 
-function App() {
-  const [backendStatus, setBackendStatus] = useState<'checking' | 'connected' | 'unreachable'>(
-    'checking',
-  )
+function CurrentScreen() {
+  const { screen } = useScreen()
+  switch (screen) {
+    case 'drive':
+      return <DriveScreen />
+    case 'engineer':
+      return <EngineerScreen />
+    case 'garage':
+      return <GarageScreen />
+    case 'compare':
+      return <CompareScreen />
+  }
+}
 
-  useEffect(() => {
-    fetchHealth()
-      .then(() => setBackendStatus('connected'))
-      .catch(() => setBackendStatus('unreachable'))
-  }, [])
-
+function AppShell() {
   return (
     <div id="app-root">
-      <div id="status-bar">
-        LimitLab scaffold — backend: <strong>{backendStatus}</strong>
+      <ErrorBanner />
+      <ScreenNav />
+      <div id="connection-status-slot">
+        <ConnectionStatus />
       </div>
-      <Canvas shadows camera={{ position: [6, 6, 6], fov: 50 }}>
-        <Scene />
-      </Canvas>
+      <CurrentScreen />
     </div>
+  )
+}
+
+function App() {
+  return (
+    <ErrorProvider>
+      <ScreenProvider>
+        <AppShell />
+      </ScreenProvider>
+    </ErrorProvider>
   )
 }
 

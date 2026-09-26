@@ -1,0 +1,22 @@
+:root {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  overflow: hidden;
+  background: var(--color-charcoal);
+  color: var(--color-white);
+  font-family: var(--font-base);
+  font-size: var(--font-size-md);
+}
+
+#root {
+  width: 100vw;
+  height: 100vh;
+}
