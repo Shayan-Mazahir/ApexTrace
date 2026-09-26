@@ -1,5 +1,10 @@
 import pytest
 
+# Needs the optional ML stack (requirements-ml.txt); skipped on a core-only install.
+pytest.importorskip("torch")
+pytest.importorskip("optuna")
+
+
 from app.ai import search_pipeline
 from app.ai.inference import model_available
 from app.ai.search import RandomSearch, TPESearch

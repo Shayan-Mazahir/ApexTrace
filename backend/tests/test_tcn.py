@@ -1,5 +1,10 @@
-import numpy as np
 import pytest
+
+# Needs the optional ML stack (requirements-ml.txt); skipped on a core-only install.
+pytest.importorskip("torch")
+pytest.importorskip("optuna")
+
+import numpy as np
 import torch
 
 from app.ai.dataset import LoadedDataset

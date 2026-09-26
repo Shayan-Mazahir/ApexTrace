@@ -1,5 +1,10 @@
-import numpy as np
 import pytest
+
+# Needs the optional ML stack (requirements-ml.txt); skipped on a core-only install.
+pytest.importorskip("torch")
+pytest.importorskip("optuna")
+
+import numpy as np
 
 from app.ai.reward import fault_severity, scenario_reward
 from app.ai.search import RandomSearch, TPESearch
