@@ -16,7 +16,7 @@ the design.
 ## Requirements
 
 - Node.js 20+ and npm
-- Python **3.11** (3.14 has no prebuilt `pydantic-core` wheels yet)
+- Python **3.11** or 3.12 (3.14 has no prebuilt `pydantic-core` wheels yet)
 - Google Chrome (only for the optional browser end-to-end test)
 
 ## First-time setup
@@ -80,8 +80,9 @@ cd frontend && npm run build && npm run preview -- --host --port 4173
 ```
 frontend/   React + TypeScript + React Three Fiber (Drive, Engineer, Garage, Compare, demo mode)
 backend/    FastAPI: sessions + WebSockets, faults, scenarios, upgrades, evaluation
+            + app/sim (lap simulator), app/ai (TCN lap forecaster, SAC/TPE/random scenario search)
 config/     upgrades.json — upgrade prices/effects and default budget (editable assumptions)
-scenarios/  saved stress scenarios (*.json)
+scenarios/  saved stress scenarios (*.json); scenarios/presets/ = lap-simulator presets
 scripts/    start.sh, record_backup_replay.py
 docs/       DEMO.md
 ```
@@ -114,3 +115,42 @@ The saved training/test results use the original dataset; the held-out
 stress suite is reevaluated after the solid-barrier fix. Simulator hashes
 and this distinction are recorded in the model metadata. Clearance error
 must be compared with its baseline separately from exit classification.
+
+## Lap simulator and AI scenario search (Person A)
+
+A separate deterministic lap simulator lives in `backend/app/sim/` with its
+AI layer in `backend/app/ai/`. It runs one flying lap of simplified closed
+Monza (~4.4 km, 11 corners) and Baku (~4.3 km, 13 corners) layouts with a
+scripted driver, a corner-entry warning system and seeded faults (grip
+mismatch, telemetry delay, sensor noise, burst packet loss, brake
+degradation, reaction delay). The same scenario and seed always give the same
+lap. It is served under `/simulation/*`, `/scenario/*`,
+`/configuration/*`, `/ai/status` and `/ws/simulation`; interactive docs at
+`http://localhost:8000/docs`. The AI routes need `requirements-ml.txt` and
+are skipped if torch/optuna are missing. Presets are in `scenarios/presets/`;
+design notes are in [ARCHITECTURE.md](ARCHITECTURE.md), and progress/decisions
+in [docs/person-a-progress.md](docs/person-a-progress.md).
+
+Trained artifacts are committed (`backend/models/tcn/model.pt` +
+`config.json`, `backend/models/sac/sac.pt`, `backend/models/experiment.json`),
+next to the TCN observer / SAC artifacts above. To regenerate (from `backend/`,
+venv active, ML requirements installed):
+
+```bash
+python scripts/demo.py   # baseline vs upgrades on presets, replays, AI search -> simulator
+
+# simulator-labelled data and a held-out set (5000 laps take ~4 min on 8 cores)
+python scripts/generate_data.py --num-runs 5000 --seed 42 --output data/training.json
+python scripts/generate_data.py --num-runs 1500 --seed 7  --output data/test.json
+python scripts/train_tcn.py --data data/training.json --output models/tcn
+python scripts/evaluate_tcn.py --model models/tcn --data data/test.json
+python scripts/train_sac.py --steps 3072 --output models/sac
+python scripts/run_experiment.py --budget 50 --seeds 0 1 2 3 4 --output models/experiment.json
+```
+
+Quick API example:
+
+```bash
+curl -s -X POST localhost:8000/simulation/run -H 'content-type: application/json' \
+  -d '{"scenario": {"track": "monza", "entry_speed": 85, "brake_effectiveness": 0.5, "warning_margin": 0, "driver_reaction_delay": 0.5}, "configuration": "baseline"}'
+```

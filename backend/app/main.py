@@ -4,12 +4,21 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.stress import evaluation
+from app.api.live import router as live_router
+from app.api.simulation import router as simulation_router
 from app.evaluation_routes import router as evaluation_router
 from app.scenarios import router as scenarios_router
 from app.schemas import HealthStatus
 from app.sessions import router as sessions_router
 from app.sessions import sweep_loop
+from app.stress import evaluation
+
+# Lap-simulator AI routes need the optional ML stack (requirements-ml.txt).
+# Without it the rest of the API still runs, like the TCN risk observer.
+try:
+    from app.api.ai import router as ai_router
+except ImportError:  # torch / optuna not installed
+    ai_router = None
 
 
 @asynccontextmanager
@@ -46,3 +55,10 @@ app.include_router(evaluation_router)
 @app.get("/health", response_model=HealthStatus)
 def health() -> HealthStatus:
     return HealthStatus(status="ok", service="limitlab-backend")
+
+
+# Lap simulator (deterministic scenario runs, replays, configuration comparison, AI search).
+app.include_router(simulation_router)
+app.include_router(live_router)
+if ai_router is not None:
+    app.include_router(ai_router)
