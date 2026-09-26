@@ -74,6 +74,17 @@ describe('track geometry', () => {
     expect(scatterProps(p, opts)).toEqual(props)
   })
 
+  it('keeps a prop\'s whole footprint, not just its centre, clear of the road', () => {
+    const p = squareTrack()
+    const footprint = 13
+    const props = scatterProps(p, { count: 40, minGap: 8, maxGap: 60, clearance: 10, seed: 3, minHeight: 5, maxHeight: 10, footprint })
+    expect(props.length).toBeGreaterThan(0)
+    for (const pr of props) {
+      const nearest = Math.min(...p.centerline.map(([x, y]) => Math.hypot(x - pr.x, y - pr.z)))
+      expect(nearest - footprint).toBeGreaterThanOrEqual(10) // every sample is checked when a footprint is set
+    }
+  })
+
   it('formats lap times like a timing screen', () => {
     expect(formatLapTime(83.4567)).toBe('1:23.457')
     expect(formatLapTime(9.5)).toBe('0:09.500')

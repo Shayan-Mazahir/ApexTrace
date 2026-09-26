@@ -112,9 +112,21 @@ export interface Prop {
 
 // Scenery (trees / buildings) scattered beside the circuit but never on or
 // too near the road: every candidate is checked against the whole centerline.
+// `footprint` is how far the prop extends from its centre at the largest
+// scale (e.g. a rotated building's half-diagonal), so the whole prop, not just
+// its centre, stays `clearance` away from the centerline.
 export function scatterProps(
   profile: TrackProfile,
-  opts: { count: number; minGap: number; maxGap: number; clearance: number; seed: number; minHeight: number; maxHeight: number },
+  opts: {
+    count: number
+    minGap: number
+    maxGap: number
+    clearance: number
+    seed: number
+    minHeight: number
+    maxHeight: number
+    footprint?: number
+  },
 ): Prop[] {
   const random = rng(opts.seed)
   const line = profile.centerline
@@ -127,8 +139,9 @@ export function scatterProps(
       const x = line[i][0] + normals[i][0] * side * gap
       const z = line[i][1] + normals[i][1] * side * gap
       let tooClose = false
-      for (let k = 0; k < line.length; k += 2) {
-        if (Math.hypot(line[k][0] - x, line[k][1] - z) < opts.clearance) {
+      const keepOut = opts.clearance + (opts.footprint ?? 0)
+      for (let k = 0; k < line.length; k += opts.footprint ? 1 : 2) {
+        if (Math.hypot(line[k][0] - x, line[k][1] - z) < keepOut) {
           tooClose = true
           break
         }

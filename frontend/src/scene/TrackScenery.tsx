@@ -157,6 +157,17 @@ function Trees({ items }: { items: Prop[] }) {
   )
 }
 
+// Buildings are 16 m x 12.8 m at scale 1, up to scale 1.3, at any rotation:
+// the furthest a corner can reach from the centre is the half-diagonal.
+const BUILDING_MAX_SCALE = 1.3
+const BUILDING_FOOTPRINT = Math.hypot(8 * BUILDING_MAX_SCALE, 6.4 * BUILDING_MAX_SCALE)
+
+// Start candidates beyond the keep-out so street blocks line the walls
+// instead of being mostly rejected.
+function buildingMinGap(profile: TrackProfile): number {
+  return profile.track_width / 2 + profile.barrier_offset + 3 + BUILDING_FOOTPRINT + 1
+}
+
 function Buildings({ items }: { items: Prop[] }) {
   const ref = useRef<InstancedMesh>(null)
   const tints = useMemo(() => {
@@ -312,9 +323,10 @@ export function TrackScenery({ profile }: { profile: TrackProfile }) {
       fenceR: uvWall(out(right, -1, profile.barrier_offset + 0.3), h, h + 3.4, 3.4, fenceAt),
       props: scatterProps(profile, {
         count: theme.props === 'trees' ? 320 : 200,
-        minGap: profile.barrier_offset + 16,
+        minGap: theme.props === 'trees' ? profile.barrier_offset + 16 : buildingMinGap(profile),
         maxGap: profile.barrier_offset + 140,
-        clearance: profile.barrier_offset + profile.track_width / 2 + 10,
+        clearance: profile.barrier_offset + profile.track_width / 2 + (theme.props === 'trees' ? 10 : 3),
+        footprint: theme.props === 'trees' ? 0 : BUILDING_FOOTPRINT,
         seed: profile.id === 'baku' ? 11 : 7,
         minHeight: theme.props === 'trees' ? 9 : 14,
         maxHeight: theme.props === 'trees' ? 17 : 70,
