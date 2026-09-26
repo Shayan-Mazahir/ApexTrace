@@ -51,9 +51,31 @@ Health check: `curl localhost:8000/health`.
 
 ## Controls
 
-Keyboard fallback: **W / ↑** throttle, **S / ↓ / Space** brake, **A / ←** and
-**D / →** steer. A wheel/gamepad is used automatically if the browser sees one
-(calibrate centre and dead-zone in the panel, bottom-left of the Drive screen).
+| Action | Keyboard | Wheel / gamepad |
+| --- | --- | --- |
+| Throttle / brake | W / ↑, S / ↓ / Space | right / left trigger |
+| Steer | A / ←, D / → | axis 0 |
+| Shift up / down (manual) | E / Q | RB / LB (paddles) |
+| DRS / active aero (manual) | F | A |
+| Reverse (when stopped) | R | X |
+| Cycle battery mode | B | Y |
+
+A wheel/gamepad is used automatically if the browser sees one (calibrate
+centre and dead-zone in the Controls panel of the Drive screen). The view
+button cycles cockpit, chase and overview cameras.
+
+**Car setup** (track picker or the dock during a run; applies immediately):
+traction control Off/Medium/Full, ABS On/Off, automatic or manual
+transmission, DRS Off/Auto/Manual, and battery power Harvest/Balanced/Overtake.
+
+**Car model** (`backend/app/f1_car.py`): a simplified 2026-regulation car -
+tyre slip and a friction circle (so braking or wheelspin costs cornering
+grip), downforce and drag that grow with speed plus Z/X-mode active aero, a
+400 kW engine through an 8-speed gearbox and a 350 kW MGU-K that fades above
+290 km/h and runs on a 4 MJ battery recharged under braking. It reaches
+0-100 km/h in about 2.6 s and 325-343 km/h. Plausible public figures, not team
+data. Laps are timed against track limits (void once the whole car is past
+the edge line) and the dash keeps the session's best valid lap.
 
 ## Tests
 

@@ -95,6 +95,27 @@ trying). It is unit-tested with a fake socket and exercised end-to-end in Chrome
 (transient drop resumes the same session; backend outage shows "Reconnecting",
 and a restart ends the lost in-memory session).
 
+## Drive-screen car physics (backend/app/f1_car.py)
+
+`placeholder_sim.step` (sessions, stress runs, evaluation) drives the car
+through `f1_car.step_car`, integrated in 4 ms substeps inside each 50 ms tick:
+
+| Part | Model |
+| --- | --- |
+| Chassis | planar bicycle model: forward/lateral velocity and yaw rate; 800 kg, 3.4 m wheelbase, 46.5 % front weight; kinematic blend below ~7 m/s |
+| Tyres | Pacejka-style lateral force vs slip angle (peak ~7 deg), friction circle with drive/brake force, locked/spinning tyres lose most lateral grip |
+| Aero | ClA 3.75 / CdA 1.13 in Z-mode, 2.25 / 0.78 in X-mode (opens on straights, closes on braking); 44 % front balance |
+| Load transfer | longitudinal, from the previous substep's acceleration |
+| Power unit | 400 kW ICE with an rpm curve and limiter, 8 gears; 350 kW MGU-K fading 290-355 km/h (to 337 km/h in Overtake), 4 MJ battery, regen under braking, coast harvest |
+| Aids | traction control Off/Medium/Full, ABS, automatic or manual gearbox (over-rev protection), DRS Off/Auto/Manual, battery Harvest/Balanced/Overtake, reverse gear |
+| Steering | speed-sensitive range: full input asks slightly past the grip limit at speed |
+
+Corner speeds for hazard zones come from `corner_speed_for_radius`
+(v^2/R = mu(g + k v^2)). The warning system still assumes a constant nominal
+braking rate (`WarningPolicyConfig.nominal_brake_decel`, now 32 m/s^2) - that
+simplification is part of the system under test. Numbers are plausible public
+2026 figures, not team data.
+
 ## Lap simulator (backend/app/sim, Person A)
 
 The lap simulator is independent of the session simulator used by the drive
