@@ -8,7 +8,7 @@ import { ASSUMED_REACTION_S } from '../drive/driverReport'
 import type { ConfigResult, EvaluationResponse, TrackId, TrackProfile } from '../types/schemas'
 import './HomeScreen.css'
 
-// The front page for anyone new (judges first): what LimitLab is, how a run
+// The front page for anyone new (judges first): what ApexTrace is, how a run
 // works, which challenge tracks each part answers, and the live leaderboard.
 
 const STEPS = [
@@ -110,11 +110,11 @@ export function HomeScreen() {
         <div className="home__hero-text">
           <p className="home__kicker">Formula Tech Hacks 2026 · Safety in Motorsport</p>
           <h1>
-            Test the limit.<br />
-            <span>Fund the fix.</span>
+            Find the failure<br />
+            <span>before the wall does.</span>
           </h1>
           <p className="home__lede">
-            LimitLab is a motorsport safety test bench. Drive a lap while an engineer breaks the car’s corner-entry BRAKE warning in
+            ApexTrace is a motorsport safety test bench. Drive a lap while an engineer breaks the car’s corner-entry BRAKE warning in
             real time — then prove, on a fixed stress suite, which upgrade actually fixes it and whether the budget can pay for it.
           </p>
           <div className="home__cta">
