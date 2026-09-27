@@ -7,6 +7,7 @@ import { F1Car } from '../scene/F1Car'
 import { ModelBoundary } from '../scene/ModelBoundary'
 import type { UpgradeConfig } from '../types/schemas'
 import './GarageCar.css'
+import { useGraphicsMode } from '../app/graphics'
 
 function Turntable({ selection, detailed }: { selection: UpgradeConfig; detailed: boolean }) {
   const group = useRef<Group>(null)
@@ -40,11 +41,12 @@ const FITTED: { id: keyof UpgradeConfig; label: string }[] = [
 // The same car the driver races (the detailed model when present), on a
 // turntable, with the fitted upgrades listed underneath.
 export function GarageCar({ selection }: { selection: UpgradeConfig }) {
+  const lowGraphics = useGraphicsMode() === 'performance'
   const detailed = useCarModelAvailable()
   const fitted = FITTED.filter((f) => selection[f.id])
   return (
     <div className="garage-car">
-      <Canvas camera={{ position: [5.2, 2.4, 5.2], fov: 36 }} dpr={[1, 1.5]}>
+      <Canvas camera={{ position: [5.2, 2.4, 5.2], fov: 36 }} dpr={lowGraphics ? 1 : [1, 1.5]}>
         <color attach="background" args={['#15171c']} />
         <hemisphereLight args={['#e8eef5', '#2a2a2e', 0.7]} />
         <directionalLight position={[4, 6, 3]} intensity={1.6} />

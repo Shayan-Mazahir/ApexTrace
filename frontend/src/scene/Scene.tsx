@@ -1,15 +1,18 @@
-import { Environment, Lightformer, Line, OrbitControls, Sky } from '@react-three/drei'
-import { Bloom, EffectComposer, SMAA, Vignette } from '@react-three/postprocessing'
+import { Environment, Lightformer, Line, OrbitControls } from '@react-three/drei'
+import { Bloom, BrightnessContrast, EffectComposer, HueSaturation, SMAA, Vignette } from '@react-three/postprocessing'
 import { useFrame, useThree } from '@react-three/fiber'
 import { Suspense, useEffect, useMemo, useRef, type ElementRef } from 'react'
-import { BufferAttribute, BufferGeometry, Color, DoubleSide, Vector3, type Group, type PerspectiveCamera } from 'three'
-import type { TrackProfile } from '../types/schemas'
+import { Vector3, type Group, type PerspectiveCamera } from 'three'
+import type { HapticSignal } from '../haptics/signal'
+import type { HazardZone, TrackProfile } from '../types/schemas'
+import { applyCameraShake, DriveEffects } from './DriveEffects'
 import { PoseBuffer } from './poseBuffer'
 import { CarModel, useCarModelAvailable } from './CarModel'
 import { ModelBoundary } from './ModelBoundary'
 import { F1Car } from './F1Car'
-import { computeRacingLine } from './racingLine'
-import { bounds, flatStrip, type Pt } from './trackGeometry'
+import { useGraphicsMode } from '../app/graphics'
+import { Clouds, contactShadow, RacingLine, RubberLine, SKY_HORIZON, SkyDome, Sun } from './Atmosphere'
+import { bounds, type Pt } from './trackGeometry'
 import { TrackScenery } from './TrackScenery'
 
 export interface CarPose {
@@ -30,8 +33,6 @@ export type SceneView = 'cockpit' | 'follow' | 'overview'
 const EYE = { x: -0.55, y: 1.42 }
 const EYE_LOOK_AHEAD = 9 // metres
 const EYE_LOOK_HEIGHT = -0.75
-
-const SKY_HORIZON = '#bcd3e6'
 
 type ShownPose = { x: number; y: number; heading: number; speed: number; drsOpen: boolean }
 
@@ -70,7 +71,7 @@ function useSmoothedPose(pose: CarPose, exact = false) {
   return shown
 }
 
-function CameraRig({ view, profile, shown }: { view: SceneView; profile: TrackProfile | null; shown: React.MutableRefObject<ShownPose> }) {
+function CameraRig({ view, profile, shown, haptics }: { view: SceneView; profile: TrackProfile | null; shown: React.MutableRefObject<ShownPose>; haptics?: React.MutableRefObject<HapticSignal> }) {
   const { camera, size } = useThree()
   const controls = useRef<ElementRef<typeof OrbitControls>>(null)
   const scratch = useMemo(() => ({ target: new Vector3(), look: new Vector3() }), [])
@@ -103,7 +104,7 @@ function CameraRig({ view, profile, shown }: { view: SceneView; profile: TrackPr
     }
   }, [view, profile, size.width, size.height, camera])
 
-  useFrame((_, dt) => {
+  useFrame((state, dt) => {
     if (view !== 'cockpit') return
     // Rigidly attached to the car: any lag would make the cockpit swim.
     const cam = camera as PerspectiveCamera
@@ -122,10 +123,11 @@ function CameraRig({ view, profile, shown }: { view: SceneView; profile: TrackPr
       cam.far = 7000
       cam.updateProjectionMatrix()
     }
+    if (haptics) applyCameraShake(cam, haptics.current, state.clock.elapsedTime, true)
   })
 
   const camHeading = useRef<number | null>(null)
-  useFrame((_, dt) => {
+  useFrame((state, dt) => {
     if (view !== 'follow') {
       camHeading.current = null
       return
@@ -151,6 +153,7 @@ function CameraRig({ view, profile, shown }: { view: SceneView; profile: TrackPr
       cam.far = 7000
       cam.updateProjectionMatrix()
     }
+    if (haptics) applyCameraShake(cam, haptics.current, state.clock.elapsedTime, false)
   })
 
   return <OrbitControls ref={controls} makeDefault enabled={view === 'overview'} enableDamping={false} />
@@ -183,10 +186,10 @@ function Car({ shown, steering, scale, ghost = false }: { shown: React.MutableRe
           <meshBasicMaterial color={ghost ? '#cbd5e1' : '#ff7a00'} transparent opacity={0.9} depthWrite={false} />
         </mesh>
       )}
-      {/* soft contact shadow */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[-0.1, 0.01, 0]}>
-        <planeGeometry args={[5.6, 2.3]} />
-        <meshBasicMaterial color="#000" transparent opacity={0.35} depthWrite={false} />
+      {/* soft contact shadow: grounds the car, with or without the sun's shadow map */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[-0.1, 0.012, 0]}>
+        <planeGeometry args={[6.6, 3.1]} />
+        <meshBasicMaterial map={contactShadow()} transparent depthWrite={false} opacity={ghost ? 0.4 : 1} />
       </mesh>
       {hasModel ? (
         <ModelBoundary fallback={builtIn}>
@@ -198,41 +201,6 @@ function Car({ shown, steering, scale, ghost = false }: { shown: React.MutableRe
         builtIn
       )}
     </group>
-  )
-}
-
-const RACING_LINE_WIDTH = 0.6 // metres
-const RACING_LINE_Y = 0.035 // above the asphalt (0.02), below the white edge lines (0.045)
-// Color() converts the sRGB hex to the renderer's linear working space, so
-// the stripe stays saturated instead of washing out.
-const THROTTLE_RGB = new Color('#22c55e').toArray() as [number, number, number]
-const BRAKE_RGB = new Color('#ef4444').toArray() as [number, number, number]
-
-// Painted guide line: green where the car model can accelerate, red where it
-// has to brake for the next corner (see racingLine.ts).
-function RacingLine({ profile }: { profile: TrackProfile }) {
-  const geometry = useMemo(() => {
-    const { points, phase } = computeRacingLine(profile)
-    const half = RACING_LINE_WIDTH / 2
-    const side = (sign: 1 | -1): Pt[] =>
-      points.map(([x, y], i) => {
-        const [ax, ay] = points[Math.max(0, i - 1)]
-        const [bx, by] = points[Math.min(points.length - 1, i + 1)]
-        const len = Math.hypot(bx - ax, by - ay) || 1
-        return [x - ((by - ay) / len) * half * sign, y + ((bx - ax) / len) * half * sign]
-      })
-    const strip = flatStrip(side(1), side(-1), RACING_LINE_Y, (i) => (phase[i] === 'brake' ? BRAKE_RGB : THROTTLE_RGB))
-    const g = new BufferGeometry()
-    g.setAttribute('position', new BufferAttribute(strip.positions, 3))
-    g.setAttribute('color', new BufferAttribute(strip.colors, 3))
-    g.setIndex(strip.indices)
-    return g
-  }, [profile])
-  useEffect(() => () => geometry.dispose(), [geometry])
-  return (
-    <mesh geometry={geometry}>
-      <meshBasicMaterial vertexColors transparent opacity={0.95} depthWrite={false} side={DoubleSide} />
-    </mesh>
   )
 }
 
@@ -289,9 +257,13 @@ interface SceneProps {
   ghost?: CarPose | null
   // replays: poses are already interpolated exactly; don't add smoothing lag
   exactPose?: boolean
+  // live driving: force feedback drives camera shake, sparks, smoke and skid marks
+  haptics?: React.MutableRefObject<HapticSignal>
+  // BRAKE shown: the corner it is for gets its braking zone painted on the road
+  brakeHazard?: HazardZone | null
 }
 
-export function Scene({ trackProfile, vehicleState, trail, previousLapTrail, view = 'overview', steering, showRacingLine = false, effects = true, ghost = null, exactPose = false }: SceneProps) {
+export function Scene({ trackProfile, vehicleState, trail, previousLapTrail, view = 'overview', steering, showRacingLine = false, effects = true, ghost = null, exactPose = false, haptics, brakeHazard = null }: SceneProps) {
   const start = useMemo<CarPose>(() => {
     if (!trackProfile) return { x: 0, y: 0, heading: 0 }
     const [x0, y0] = trackProfile.centerline[0]
@@ -299,37 +271,45 @@ export function Scene({ trackProfile, vehicleState, trail, previousLapTrail, vie
     return { x: x0, y: y0, heading: Math.atan2(y1 - y0, x1 - x0) }
   }, [trackProfile])
   const shown = useSmoothedPose(vehicleState ?? start, exactPose)
+  const shadows = useGraphicsMode() === 'quality'
   const ghostShown = useSmoothedPose(ghost ?? start, exactPose)
   const overview = view === 'overview'
 
   return (
     <>
       <color attach="background" args={[SKY_HORIZON]} />
-      {!overview && <fog attach="fog" args={[SKY_HORIZON, 350, 2900]} />}
-      <Sky distance={4500} sunPosition={[500, 150, 280]} turbidity={5} rayleigh={1.6} mieCoefficient={0.006} mieDirectionalG={0.85} />
+      {!overview && <fog attach="fog" args={[SKY_HORIZON, 450, 3400]} />}
+      <SkyDome />
+      {trackProfile && !overview && <Clouds profile={trackProfile} />}
       {/* offline studio-style reflections (no HDRI download): sky dome, sun strip and ground bounce */}
-      <Environment resolution={128} frames={1}>
+      {/* reflections and fill light only: too strong and every colour washes out to pastel */}
+      <Environment resolution={128} frames={1} environmentIntensity={0.55}>
         <Lightformer form="rect" intensity={0.9} color="#dfeeff" position={[0, 8, 0]} rotation-x={Math.PI / 2} scale={[30, 30, 1]} />
         <Lightformer form="rect" intensity={1.8} color="#fff1dc" position={[12, 5, 6]} scale={[10, 4, 1]} />
         <Lightformer form="rect" intensity={0.5} color="#9fb4c8" position={[-12, 3, -4]} scale={[14, 5, 1]} />
         <Lightformer form="rect" intensity={0.25} color="#5d6a45" position={[0, -6, 0]} rotation-x={-Math.PI / 2} scale={[30, 30, 1]} />
       </Environment>
-      <hemisphereLight args={['#cfe2f5', '#55613f', 0.45]} />
-      <directionalLight position={[500, 300, 280]} intensity={1.6} color="#fff1dc" />
+      <hemisphereLight args={['#bcd6f2', '#4d5a36', 0.55]} />
+      <Sun follow={shown} shadows={shadows && !overview} />
       {trackProfile && !overview && <Hills profile={trackProfile} />}
       {trackProfile && <TrackScenery profile={trackProfile} />}
+      {trackProfile && <RubberLine profile={trackProfile} />}
       {trackProfile && showRacingLine && <RacingLine profile={trackProfile} />}
       <Trail points={previousLapTrail} color="#9ca3af" opacity={0.5} />
       {overview && <Trail points={trail} color="#ff7a00" opacity={0.95} />}
       {ghost && <Car shown={ghostShown} scale={overview ? 8 : 1} ghost />}
       <Car shown={shown} steering={steering} scale={overview ? 8 : 1} cockpit={view === 'cockpit'} />
-      <CameraRig view={view} profile={trackProfile} shown={shown} />
+      {haptics && !overview && <DriveEffects pose={shown} signal={haptics} profile={trackProfile} brakeHazard={brakeHazard} />}
+      <CameraRig view={view} profile={trackProfile} shown={shown} haptics={haptics} />
       {!overview && effects && (
         // Film-style finish: soft glow on bright highlights (lights, sun glints), darker
         // corners, and edge anti-aliasing (the composer bypasses the canvas MSAA).
         <EffectComposer multisampling={0}>
           <SMAA />
           <Bloom intensity={0.35} luminanceThreshold={0.85} luminanceSmoothing={0.2} mipmapBlur />
+          {/* a light grade: a touch more contrast and colour, like broadcast footage */}
+          <BrightnessContrast contrast={0.07} />
+          <HueSaturation saturation={0.14} />
           <Vignette offset={0.3} darkness={0.55} />
         </EffectComposer>
       )}

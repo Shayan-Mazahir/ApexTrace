@@ -1,3 +1,5 @@
+import type { HapticEvent, Rumble } from '../haptics/haptics'
+
 // Every adapter (keyboard, gamepad/wheel, future hardware) reports raw axes
 // in this shared native range: steering roughly [-1, 1], pedals roughly
 // [0, 1]. Calibration/normalization (normalize.ts) is applied uniformly on
@@ -36,5 +38,10 @@ export interface InputAdapter {
   buttonPresses?(): Record<ButtonId, number>
   // latest game state for the device to display; the adapter decides when to send it
   setFeedback?(feedback: DeviceFeedback): void
+  // force feedback (ESP32 wheel servos, gamepad motors). setRumble is called
+  // at the state rate (20 Hz) with the current continuous rumble; hapticEvent
+  // once per jolt. Devices without motors leave both out.
+  setRumble?(rumble: Rumble): void
+  hapticEvent?(event: HapticEvent): void
   dispose?(): void
 }

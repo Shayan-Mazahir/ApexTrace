@@ -17,6 +17,7 @@ import { useEngineerSession } from '../engineer/useEngineerSession'
 import { Scene } from '../scene/Scene'
 import type { FaultType, StressScenario } from '../types/schemas'
 import './EngineerScreen.css'
+import { useGraphicsMode } from '../app/graphics'
 
 function Section({ title, children, tone }: { title: string; children: ReactNode; tone?: string }) {
   return (
@@ -31,6 +32,7 @@ let lastMode: 'scenario' | 'fault' = 'scenario'
 let lastJoinedId: string | null = null
 
 export function EngineerScreen() {
+  const lowGraphics = useGraphicsMode() === 'performance'
   const { driverSession } = useActiveSession()
   const { reportError } = useErrorContext()
   const engineer = useEngineerSession()
@@ -75,8 +77,9 @@ export function EngineerScreen() {
   return (
     <div className="engineer-screen">
       <div className="engineer-screen__view">
-        <Canvas camera={{ position: [400, 500, 400], fov: 50, near: 0.5, far: 8000 }}>
+        <Canvas shadows={lowGraphics ? false : 'percentage'} camera={{ position: [400, 500, 400], fov: 50, near: 0.5, far: 8000 }} dpr={lowGraphics ? 1 : [1, 2]}>
           <Scene
+            effects={!lowGraphics}
             trackProfile={engineer.trackProfile}
             vehicleState={v ? { x: v.x, y: v.y, heading: v.heading, speed: v.speed, drsOpen: v.drs_open, t: v.t } : null}
             trail={engineer.trail}

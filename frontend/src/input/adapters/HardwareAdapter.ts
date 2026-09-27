@@ -1,3 +1,4 @@
+import { NO_RUMBLE, type HapticEvent, type Rumble } from '../../haptics/haptics'
 import type { ButtonId, DeviceFeedback, InputAdapter, RawInputSample } from '../InputAdapter'
 import { clamp } from '../normalize'
 import { nextBackoffMs } from '../../stream/reconnect'
@@ -70,6 +71,26 @@ export function feedbackMessage(f: DeviceFeedback): string {
   })
 }
 
+// Rumble for the wheel's servos (via bridge.py -> "#R" lines). Sent the
+// moment it changes by a noticeable step, and re-sent on the 10 Hz heartbeat
+// while it lasts: the firmware stops the servos by itself 0.5 s after the last
+// one, so a closed tab or a dead bridge can't leave them buzzing.
+const rumbleKey = (r: Rumble) =>
+  r.effect === 'none' ? 'none' : `${r.effect}|${Math.round(r.strength * 10)}|${Math.round(r.rateHz)}`
+
+export function rumbleMessage(r: Rumble): string {
+  return JSON.stringify({
+    type: 'rumble',
+    effect: r.effect,
+    strength: Math.round(r.strength * 100) / 100,
+    rate_hz: Math.round(r.rateHz),
+  })
+}
+
+export function hapticEventMessage(e: HapticEvent): string {
+  return JSON.stringify({ type: 'haptic_event', kind: e.kind, strength: Math.round(e.strength * 100) / 100 })
+}
+
 function pedal(raw: number): number {
   if (!Number.isFinite(raw)) return 0
   const magnitude = clamp(raw, 0, 1)
@@ -104,6 +125,14 @@ export function createHardwareAdapter(onAvailabilityChange?: () => void): InputA
   let disposed = false
   let feedback = NO_FEEDBACK
   let sentKey: string | null = null
+  let rumble = NO_RUMBLE
+  let sentRumbleKey: string | null = null
+
+  const sendRumble = () => {
+    if (socket?.readyState !== WebSocket.OPEN) return
+    socket.send(rumbleMessage(rumble))
+    sentRumbleKey = rumbleKey(rumble)
+  }
 
   // Also the browser's heartbeat to the bridge: sent while the socket is open
   // whether or not the ESP32's own data is currently fresh.
@@ -133,6 +162,7 @@ export function createHardwareAdapter(onAvailabilityChange?: () => void): InputA
   const watchdog = setInterval(() => {
     refresh()
     sendFeedback()
+    if (rumble.effect !== 'none') sendRumble()  // keep-alive, see rumbleMessage
   }, AVAILABILITY_POLL_MS)
 
   function connect() {
@@ -143,6 +173,7 @@ export function createHardwareAdapter(onAvailabilityChange?: () => void): InputA
     ws.onopen = () => {
       if (disposed || socket !== ws) return
       attempt = 0
+      sentRumbleKey = null
       sendFeedback()  // the wheel's screen shouldn't wait a heartbeat to learn the state
     }
 
@@ -199,8 +230,19 @@ export function createHardwareAdapter(onAvailabilityChange?: () => void): InputA
       feedback = next
       if (feedbackKey(next) !== sentKey) sendFeedback()
     },
+    setRumble(next: Rumble) {
+      rumble = next
+      if (rumbleKey(next) !== sentRumbleKey) sendRumble()
+    },
+    hapticEvent(event: HapticEvent) {
+      if (socket?.readyState === WebSocket.OPEN) socket.send(hapticEventMessage(event))
+    },
     dispose() {
       disposed = true
+      if (rumble.effect !== 'none') {
+        rumble = NO_RUMBLE
+        sendRumble()  // stop now rather than on the firmware's timeout
+      }
       clearInterval(watchdog)
       clearTimeout(retry)
       if (socket) {

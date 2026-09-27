@@ -221,42 +221,133 @@ export function barkTexture(): Texture {
   })
 }
 
-/** Building facade: rows of windows, some lit. */
+/** Building facade: pale stone with floor slabs and a grid of glass panes, a
+ * few lit, the rest reflecting the sky in slightly different blues. */
 export function windowsTexture(): Texture {
-  return make('windows', 256, 512, (ctx) => {
-    ctx.fillStyle = '#c9b48c'
+  return make('windows2', 256, 512, (ctx) => {
+    const rnd = seeded(3)
+    ctx.fillStyle = '#e4ddcf'
     ctx.fillRect(0, 0, 256, 512)
-    let seed = 3
-    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
-    for (let y = 12; y < 512; y += 28) {
-      for (let x = 10; x < 256; x += 24) {
-        ctx.fillStyle = rnd() < 0.15 ? '#f5e6b8' : rnd() < 0.5 ? '#4b6a86' : '#3a5670'
-        ctx.fillRect(x, y, 14, 18)
+    const floorH = 26
+    for (let y = 0; y < 512; y += floorH) {
+      ctx.fillStyle = '#cfc6b4' // slab edge
+      ctx.fillRect(0, y, 256, 4)
+      for (let x = 6; x < 250; x += 31) {
+        const lit = rnd() < 0.08
+        const g = ctx.createLinearGradient(0, y + 6, 0, y + floorH - 2)
+        if (lit) {
+          g.addColorStop(0, '#fff1c9')
+          g.addColorStop(1, '#f2d48f')
+        } else {
+          const t = rnd()
+          g.addColorStop(0, t < 0.5 ? '#9cc0dd' : '#86aacb')
+          g.addColorStop(1, t < 0.5 ? '#46637f' : '#3c5670')
+        }
+        ctx.fillStyle = g
+        ctx.fillRect(x, y + 7, 25, floorH - 10)
+        ctx.fillStyle = 'rgba(255,255,255,0.18)' // mullion highlight
+        ctx.fillRect(x + 12, y + 7, 1, floorH - 10)
       }
     }
   })
 }
 
-function noise(key: string, base: [number, number, number], spread: number, size = 256, streak = false): Texture {
-  return make(key, size, size, (ctx) => {
-    const img = ctx.createImageData(size, size)
-    let seed = key.length * 997
-    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
-    for (let i = 0; i < size * size; i++) {
-      const y = Math.floor(i / size)
-      const v = (rnd() - 0.5) * spread + (streak ? Math.sin(y * 0.35) * spread * 0.25 : 0)
-      img.data[i * 4] = Math.max(0, Math.min(255, base[0] + v))
-      img.data[i * 4 + 1] = Math.max(0, Math.min(255, base[1] + v))
-      img.data[i * 4 + 2] = Math.max(0, Math.min(255, base[2] + v))
+// Seeded so every page load draws the same surfaces.
+function seeded(seed: number) {
+  return () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
+}
+
+/** Track asphalt: dark binder, pale stone chips, and soft patches of wear and repair. */
+export function asphaltTexture(): Texture {
+  return make('asphalt2', 512, 512, (ctx) => {
+    const rnd = seeded(41)
+    const img = ctx.createImageData(512, 512)
+    for (let i = 0; i < 512 * 512; i++) {
+      const v = 60 + (rnd() - 0.5) * 16
+      img.data[i * 4] = v
+      img.data[i * 4 + 1] = v + 1
+      img.data[i * 4 + 2] = v + 5
       img.data[i * 4 + 3] = 255
+    }
+    ctx.putImageData(img, 0, 0)
+    for (let i = 0; i < 14; i++) { // wear/repair patches, drawn tiling-safe (wrapped)
+      const x = rnd() * 512
+      const y = rnd() * 512
+      const r = 40 + rnd() * 110
+      const light = rnd() < 0.5
+      for (const [dx, dy] of [[0, 0], [-512, 0], [0, -512], [-512, -512]]) {
+        const g = ctx.createRadialGradient(x + dx, y + dy, 0, x + dx, y + dy, r)
+        g.addColorStop(0, light ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.09)')
+        g.addColorStop(1, 'rgba(0,0,0,0)')
+        ctx.fillStyle = g
+        ctx.fillRect(x + dx - r, y + dy - r, r * 2, r * 2)
+      }
+    }
+    for (let i = 0; i < 1800; i++) { // aggregate: faint pale chips and dark pits
+      const tone = rnd() < 0.6 ? 84 + rnd() * 26 : 30 + rnd() * 16
+      ctx.fillStyle = `rgb(${tone},${tone},${tone + 4})`
+      ctx.fillRect(rnd() * 512, rnd() * 512, 1 + rnd(), 1 + rnd())
+    }
+  })
+}
+
+/** Mown grass: a light and a dark stripe per tile (TrackScenery tiles it every
+ * 24 m, so the stripes run across the whole infield like a real circuit's),
+ * over fine blade noise and a few darker clumps. */
+export function grassTexture(): Texture {
+  return make('grass2', 512, 512, (ctx) => {
+    const rnd = seeded(17)
+    const img = ctx.createImageData(512, 512)
+    for (let i = 0; i < 512 * 512; i++) {
+      const y = Math.floor(i / 512)
+      // stripe: smooth light/dark band across the tile
+      const band = Math.cos((y / 512) * Math.PI * 2) * 11
+      const blade = (rnd() - 0.5) * 22
+      img.data[i * 4] = 58 + band * 0.7 + blade * 0.6
+      img.data[i * 4 + 1] = 116 + band + blade
+      img.data[i * 4 + 2] = 44 + band * 0.4 + blade * 0.4
+      img.data[i * 4 + 3] = 255
+    }
+    ctx.putImageData(img, 0, 0)
+    for (let i = 0; i < 60; i++) {
+      const x = rnd() * 512
+      const y = rnd() * 512
+      const r = 8 + rnd() * 26
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r)
+      g.addColorStop(0, rnd() < 0.5 ? 'rgba(20,50,10,0.16)' : 'rgba(180,200,90,0.08)')
+      g.addColorStop(1, 'rgba(0,0,0,0)')
+      ctx.fillStyle = g
+      ctx.fillRect(x - r, y - r, r * 2, r * 2)
+    }
+  })
+}
+
+/** City paving (Baku): laid stone slabs in running bond with dark joints and
+ * slightly different tones, instead of flat noise. */
+export function pavingTexture(): Texture {
+  return make('paving2', 512, 512, (ctx) => {
+    const rnd = seeded(29)
+    ctx.fillStyle = '#5d5a55'
+    ctx.fillRect(0, 0, 512, 512)
+    const rows = 8
+    const h = 512 / rows
+    for (let r = 0; r < rows; r++) {
+      const w = 128
+      for (let c = -1; c < 5; c++) {
+        const x = c * w + (r % 2 ? w / 2 : 0)
+        const tone = 150 + (rnd() - 0.5) * 26
+        ctx.fillStyle = `rgb(${tone + 4},${tone - 2},${tone - 12})`
+        ctx.fillRect(x + 2, r * h + 2, w - 4, h - 4)
+      }
+    }
+    const img = ctx.getImageData(0, 0, 512, 512)
+    for (let i = 0; i < 512 * 512; i++) {
+      const v = (rnd() - 0.5) * 14
+      for (let k = 0; k < 3; k++) img.data[i * 4 + k] = Math.max(0, Math.min(255, img.data[i * 4 + k] + v))
     }
     ctx.putImageData(img, 0, 0)
   })
 }
-
-export const asphaltTexture = () => noise('asphalt', [80, 81, 86], 24)
-export const grassTexture = () => noise('grass', [70, 112, 56], 34, 256, true)
-export const pavingTexture = () => noise('paving', [150, 142, 128], 26)
 
 /** Wordmark decal (transparent background) for the car and gantry. */
 export function wordmark(text: string, colour: string, key = `wm-${text}-${colour}`): Texture {

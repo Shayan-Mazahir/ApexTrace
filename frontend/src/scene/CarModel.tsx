@@ -100,6 +100,12 @@ function buildRig(source: Object3D, ghost: boolean): Rig {
     })
   }
 
+  // the sun's shadow (ghosts are see-through: no shadow)
+  inner.traverse((o) => {
+    const m = o as Mesh
+    if (m.isMesh) m.castShadow = !ghost
+  })
+
   // model forward (nose) -> scene +x
   const root = new Group()
   inner.rotation.y = noseSign > 0 ? Math.PI / 2 : -Math.PI / 2

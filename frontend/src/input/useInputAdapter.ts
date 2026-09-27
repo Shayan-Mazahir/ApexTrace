@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createGamepadAdapter, discoverGamepadIndex } from './adapters/GamepadAdapter'
 import { createHardwareAdapter } from './adapters/HardwareAdapter'
 import { createKeyboardAdapter } from './adapters/KeyboardAdapter'
+import { NO_RUMBLE, type HapticEvent, type Rumble } from '../haptics/haptics'
 import { BUTTON_IDS, type ButtonId, type DeviceFeedback, type InputAdapter, type RawInputSample } from './InputAdapter'
 import { normalizePedal, normalizeSteering } from './normalize'
 import { useCalibration } from './useCalibration'
@@ -100,6 +101,17 @@ export function useInputAdapter() {
     hardware?.setFeedback?.({ ...game, active: hardware !== null && adapterRef.current === hardware })
   }, [])
 
+  // Force feedback goes to the input that is driving. The ESP32 wheel is told
+  // to stop whenever it isn't (e.g. a gamepad was plugged in mid-rumble):
+  // otherwise its servos would keep buzzing on the last state it was sent.
+  const reportHaptics = useCallback((rumble: Rumble, events: HapticEvent[]) => {
+    const active = adapterRef.current
+    const hardware = hardwareRef.current
+    if (hardware && hardware !== active) hardware.setRumble?.(NO_RUMBLE)
+    active?.setRumble?.(rumble)
+    for (const event of events) active?.hapticEvent?.(event)
+  }, [])
+
   const normalized: NormalizedControls = {
     steering: normalizeSteering(raw.steeringRaw, calibration.center, calibration.deadzone),
     throttle: normalizePedal(raw.throttleRaw),
@@ -113,6 +125,7 @@ export function useInputAdapter() {
     buttonCounts,
     presses,
     reportGameState,
+    reportHaptics,
     calibration,
     setCenter: () => setCenter(raw.steeringRaw),
     setDeadzone,

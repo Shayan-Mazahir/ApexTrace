@@ -18,7 +18,6 @@ import {
   flatStrip,
   grandstandBack,
   grandstandSpan,
-  hexToRgb,
   indexAt,
   leftNormals,
   offset,
@@ -42,11 +41,12 @@ export interface TrackTheme {
 }
 
 export const THEMES: Record<TrackId, TrackTheme> = {
-  monza: { ground: 'grass', line: '#f2f2f2', kerbA: '#d7262e', kerbB: '#f4f4f4', barrierHeight: 1.0, fence: 'straight', props: 'trees' },
-  baku: { ground: 'paving', line: '#f2f2f2', kerbA: '#d7262e', kerbB: '#f4f4f4', barrierHeight: 1.3, fence: 'all', props: 'buildings' },
+  monza: { ground: 'grass', line: '#f2f2f2', kerbA: '#d4121e', kerbB: '#f4f4f4', barrierHeight: 1.0, fence: 'straight', props: 'trees' },
+  baku: { ground: 'paving', line: '#f2f2f2', kerbA: '#d4121e', kerbB: '#f4f4f4', barrierHeight: 1.3, fence: 'all', props: 'buildings' },
 }
 
 const BOARD_LENGTH = 16 // metres per board image
+const GRASS_TILE_M = 24 // one light and one dark mowing stripe
 
 function useStrip(strip: StripGeometry) {
   return useMemo(() => {
@@ -74,8 +74,8 @@ function useUv(strip: UvStrip) {
 function ColourStrip({ strip }: { strip: StripGeometry }) {
   const geometry = useStrip(strip)
   return (
-    <mesh geometry={geometry}>
-      <meshStandardMaterial vertexColors side={DoubleSide} roughness={0.85} />
+    <mesh geometry={geometry} receiveShadow>
+      <meshStandardMaterial vertexColors side={DoubleSide} roughness={0.7} />
     </mesh>
   )
 }
@@ -89,7 +89,7 @@ function TexturedStrip({ strip, map, colour = '#ffffff', transparent = false, ro
 }) {
   const geometry = useUv(strip)
   return (
-    <mesh geometry={geometry}>
+    <mesh geometry={geometry} receiveShadow>
       <meshStandardMaterial map={map} color={colour} side={DoubleSide} roughness={roughness}
         transparent={transparent} alphaTest={transparent ? 0.1 : 0} depthWrite={!transparent} />
     </mesh>
@@ -173,7 +173,7 @@ function buildingMinGap(profile: TrackProfile): number {
 function Buildings({ items }: { items: Prop[] }) {
   const ref = useRef<InstancedMesh>(null)
   const tints = useMemo(() => {
-    const palette = ['#f2e6cf', '#e6d5b0', '#ffffff', '#d9cdb8', '#cfe0ee', '#efe2c8']
+    const palette = ['#ffffff', '#f4eee4', '#dfe9f4', '#ffffff', '#ece4d4', '#d2e0ee']
     const c = new Color()
     const out = new Float32Array(items.length * 3)
     items.forEach((p, i) => {
@@ -199,7 +199,7 @@ function Buildings({ items }: { items: Prop[] }) {
     <instancedMesh ref={ref} args={[undefined, undefined, items.length]}>
       <boxGeometry args={[1, 1, 1]} />
       <instancedBufferAttribute attach="instanceColor" args={[tints, 3]} />
-      <meshStandardMaterial map={windowsTexture()} roughness={0.7} />
+      <meshStandardMaterial map={windowsTexture()} roughness={0.45} metalness={0.1} />
     </instancedMesh>
   )
 }
@@ -291,7 +291,7 @@ function StartFinish({ profile }: { profile: TrackProfile }) {
         const row = k % 2
         const col = Math.floor(k / 2)
         return (
-          <mesh key={k} rotation={[-Math.PI / 2, 0, 0]} position={[(row - 0.5) * size, 0, -w / 2 + (col + 0.5) * size]}>
+          <mesh key={k} rotation={[-Math.PI / 2, 0, 0]} position={[(row - 0.5) * size, 0, -w / 2 + (col + 0.5) * size]} receiveShadow>
             <planeGeometry args={[size, size]} />
             <meshStandardMaterial color={(row + col) % 2 ? '#111' : '#f5f5f5'} />
           </mesh>
@@ -325,9 +325,12 @@ export function TrackScenery({ profile }: { profile: TrackProfile }) {
     const left = profile.left_edge as Pt[]
     const right = profile.right_edge as Pt[]
     const mask = cornerMask(profile)
-    const line = hexToRgb(theme.line)
-    const kA = hexToRgb(theme.kerbA)
-    const kB = hexToRgb(theme.kerbB)
+    // vertex colours are read as linear: convert from the sRGB hex, or every
+    // painted colour comes out washed-out pastel (the red kerbs turned pink)
+    const linear = (hex: string) => new Color(hex).toArray() as [number, number, number]
+    const line = linear(theme.line)
+    const kA = linear(theme.kerbA)
+    const kB = linear(theme.kerbB)
     const out = (edge: Pt[], side: 1 | -1, d: number) => offset(edge, normals, d, side)
     const barrierL = out(left, 1, profile.barrier_offset)
     const barrierR = out(right, -1, profile.barrier_offset)
@@ -372,7 +375,8 @@ export function TrackScenery({ profile }: { profile: TrackProfile }) {
 
   const groundMap = useMemo(() => {
     const t = (theme.ground === 'grass' ? grassTexture() : pavingTexture()).clone()
-    t.repeat.set((parts.box.maxX - parts.box.minX + 3000) / 12, (parts.box.maxZ - parts.box.minZ + 3000) / 12)
+    const tile = theme.ground === 'grass' ? GRASS_TILE_M : 12
+    t.repeat.set((parts.box.maxX - parts.box.minX + 3000) / tile, (parts.box.maxZ - parts.box.minZ + 3000) / tile)
     t.needsUpdate = true
     return t
   }, [theme.ground, parts.box])
@@ -380,7 +384,7 @@ export function TrackScenery({ profile }: { profile: TrackProfile }) {
   const { box } = parts
   return (
     <group>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[box.cx, -0.02, box.cz]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[box.cx, -0.02, box.cz]} receiveShadow>
         <planeGeometry args={[box.maxX - box.minX + 3000, box.maxZ - box.minZ + 3000]} />
         <meshStandardMaterial map={groundMap} roughness={1} />
       </mesh>
@@ -390,7 +394,7 @@ export function TrackScenery({ profile }: { profile: TrackProfile }) {
           <TexturedStrip strip={parts.runoffR} map={asphaltTexture()} colour="#b9b2a4" />
         </>
       )}
-      <TexturedStrip strip={parts.road} map={asphaltTexture()} colour="#b8bbc2" roughness={0.95} />
+      <TexturedStrip strip={parts.road} map={asphaltTexture()} colour="#c4c7cc" roughness={0.82} />
       <ColourStrip strip={parts.lineL} />
       <ColourStrip strip={parts.lineR} />
       <ColourStrip strip={parts.kerbL} />

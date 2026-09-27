@@ -261,6 +261,45 @@ describe('ESP32 hardware adapter', () => {
     })
   })
 
+  describe('rumble for the wheel servos', () => {
+    const kerb = { effect: 'kerb' as const, strength: 0.8, rateHz: 12 }
+    const rumbles = (socket: FakeSocket) => socket.feedback().filter((m) => m.type === 'rumble')
+
+    it('sends a new rumble at once, and small wobbles in strength not at all', () => {
+      const h = harness()
+      h.adapter.setRumble?.(kerb)
+      expect(rumbles(h.socket)).toEqual([{ type: 'rumble', effect: 'kerb', strength: 0.8, rate_hz: 12 }])
+      h.adapter.setRumble?.({ ...kerb, strength: 0.81 })
+      expect(rumbles(h.socket)).toHaveLength(1)
+      h.adapter.setRumble?.({ effect: 'none', strength: 0, rateHz: 0 })
+      expect(rumbles(h.socket).at(-1)).toMatchObject({ effect: 'none' })
+    })
+
+    it('re-sends a held rumble on the heartbeat, and stays quiet once it stops', () => {
+      const h = harness()
+      h.adapter.setRumble?.(kerb)
+      vi.advanceTimersByTime(500)
+      expect(rumbles(h.socket)).toHaveLength(1 + 5) // firmware drops it 0.5 s after the last
+      h.adapter.setRumble?.({ effect: 'none', strength: 0, rateHz: 0 })
+      const after = rumbles(h.socket).length
+      vi.advanceTimersByTime(500)
+      expect(rumbles(h.socket)).toHaveLength(after)
+    })
+
+    it('sends jolts straight through', () => {
+      const h = harness()
+      h.adapter.hapticEvent?.({ kind: 'impact', strength: 0.9 })
+      expect(h.socket.feedback().at(-1)).toEqual({ type: 'haptic_event', kind: 'impact', strength: 0.9 })
+    })
+
+    it('stops the servos when disposed mid-rumble', () => {
+      const h = harness()
+      h.adapter.setRumble?.(kerb)
+      h.adapter.dispose?.()
+      expect(rumbles(h.socket).at(-1)).toMatchObject({ effect: 'none' })
+    })
+  })
+
   it('reconnects when the bridge restarts, and dispose() stops everything', () => {
     const h = harness()
     h.socket.drop()

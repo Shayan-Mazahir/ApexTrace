@@ -17,6 +17,7 @@ import { configKey, selectedIds } from '../garage/budgetMath'
 import { Scene, type SceneView } from '../scene/Scene'
 import { NO_UPGRADES, type ReplayResponse, type ReplayRun, type TestResult, type TrackProfile } from '../types/schemas'
 import './CompareScreen.css'
+import { useGraphicsMode } from '../app/graphics'
 
 function headline(r: TestResult): { icon: string; text: string; tone: 'good' | 'bad' | 'warn' } {
   if (r.passed) return { icon: '✓', text: 'Finished the lap safely', tone: 'good' }
@@ -59,6 +60,7 @@ function OutcomeCard({ run, who, tone }: { run: ReplayRun; who: string; tone: 'b
 }
 
 export function CompareScreen() {
+  const lowGraphics = useGraphicsMode() === 'performance'
   const { evaluation, selection } = useGarage()
   const { setScreen } = useScreen()
   const { reportError } = useErrorContext()
@@ -194,8 +196,9 @@ export function CompareScreen() {
 
           <section className="cmp-stage">
             <div className="cmp-view">
-              <Canvas camera={{ position: [400, 500, 400], fov: 50, near: 0.5, far: 8000 }} dpr={[1, 1.5]}>
+              <Canvas shadows={lowGraphics ? false : 'percentage'} camera={{ position: [400, 500, 400], fov: 50, near: 0.5, far: 8000 }} dpr={lowGraphics ? 1 : [1, 1.5]}>
                 <Scene
+                  effects={!lowGraphics}
                   view={view}
                   trackProfile={profile}
                   vehicleState={mp ? { x: mp.x, y: mp.y, heading: mp.heading, speed: mp.speed } : null}
