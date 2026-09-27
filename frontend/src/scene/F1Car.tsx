@@ -1,6 +1,6 @@
 import { useFrame } from '@react-three/fiber'
 import { useMemo, useRef } from 'react'
-import { DoubleSide, Shape, type Group } from 'three'
+import { DoubleSide, Quaternion, Shape, Vector2, Vector3, type Group } from 'three'
 import { wordmark } from './textures'
 
 export interface Livery {
@@ -50,6 +50,36 @@ function bodyShape(): Shape {
   return s
 }
 
+// Tyre cross-section revolved about the axle: rounded shoulders and a
+// slightly bulging sidewall instead of a plain cylinder.
+function tyreProfile(radius: number, width: number, rim: number): Vector2[] {
+  const h = width / 2
+  const pts: [number, number][] = [
+    [rim, -h * 0.9], [radius - 0.05, -h * 1.02], [radius - 0.018, -h * 0.98], [radius - 0.004, -h * 0.82],
+    [radius, -h * 0.55], [radius, h * 0.55], [radius - 0.004, h * 0.82], [radius - 0.018, h * 0.98],
+    [radius - 0.05, h * 1.02], [rim, h * 0.9],
+  ]
+  return pts.map(([r, y]) => new Vector2(r, y))
+}
+
+// Push-rod/wishbone: a thin carbon strut between two points.
+function Strut({ from, to, r = 0.012 }: { from: [number, number, number]; to: [number, number, number]; r?: number }) {
+  const { pos, quat, len } = useMemo(() => {
+    const a = new Vector3(...from)
+    const b = new Vector3(...to)
+    const dir = b.clone().sub(a)
+    const len = dir.length()
+    const quat = new Quaternion().setFromUnitVectors(new Vector3(0, 1, 0), dir.normalize())
+    return { pos: a.add(b).multiplyScalar(0.5), quat, len }
+  }, [from, to])
+  return (
+    <mesh position={pos} quaternion={quat}>
+      <cylinderGeometry args={[r, r, len, 8]} />
+      <meshStandardMaterial color={CARBON} roughness={0.5} metalness={0.3} />
+    </mesh>
+  )
+}
+
 function Wheel({ x, z, width, front, spin, steer }: {
   x: number
   z: number
@@ -70,8 +100,13 @@ function Wheel({ x, z, width, front, spin, steer }: {
     <group position={[x, WHEEL_R, z]} ref={steerGroup}>
       <group ref={spinGroup}>
         <mesh rotation={[Math.PI / 2, 0, 0]} castShadow>
-          <cylinderGeometry args={[WHEEL_R, WHEEL_R, width, 32]} />
-          <meshStandardMaterial color={TYRE} roughness={0.92} />
+          <latheGeometry args={[tyreProfile(WHEEL_R, width, rim * 0.98), 48]} />
+          <meshStandardMaterial color={TYRE} roughness={0.85} envMapIntensity={0.4} />
+        </mesh>
+        {/* tread contact patch: darker band so the tyre reads as rubber */}
+        <mesh rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[WHEEL_R + 0.001, WHEEL_R + 0.001, width * 0.62, 48, 1, true]} />
+          <meshStandardMaterial color="#0b0b0c" roughness={1} />
         </mesh>
         {/* tyre sidewall marking and rim */}
         <mesh position={[0, 0, outer * (width / 2 + 0.002)]}>
@@ -87,6 +122,58 @@ function Wheel({ x, z, width, front, spin, steer }: {
           <mesh key={k} position={[0, 0, outer * (width / 2 + 0.008)]} rotation={[0, 0, (k * Math.PI) / 3]}>
             <boxGeometry args={[rim * 1.9, 0.04, 0.012]} />
             <meshStandardMaterial color="#3a3d42" metalness={0.6} />
+          </mesh>
+        ))}
+      </group>
+    </group>
+  )
+}
+
+function SteeringWheel({ steer }: { steer: React.MutableRefObject<number> }) {
+  const wheel = useRef<Group>(null)
+  useFrame(() => {
+    // driver input -1..1 maps to about +/-140 degrees of hand-wheel rotation
+    if (wheel.current) wheel.current.rotation.x = steer.current * 2.4
+  })
+  const buttons: [number, number, string][] = [
+    [0.09, 0.05, '#22c55e'], [0.09, -0.05, '#ef4444'], [-0.02, 0.09, '#3b82f6'],
+    [-0.02, -0.09, '#facc15'], [0.09, 0.115, '#f97316'], [0.09, -0.115, '#e879f9'],
+  ]
+  return (
+    <group position={[0.6, 0.8, 0]} rotation={[0, 0, -0.35]} scale={1.5}>
+      <group ref={wheel}>
+        {/* carbon-fibre body */}
+        <mesh>
+          <boxGeometry args={[0.03, 0.13, 0.26]} />
+          <meshStandardMaterial color="#3a3f4a" roughness={0.35} metalness={0.7} envMapIntensity={1.4} />
+        </mesh>
+        {/* orange trim along the top edge */}
+        <mesh position={[-0.017, 0.068, 0]}>
+          <boxGeometry args={[0.006, 0.012, 0.26]} />
+          <meshStandardMaterial color="#ff8000" emissive="#ff6a00" emissiveIntensity={0.5} />
+        </mesh>
+        {/* lit display */}
+        <mesh position={[-0.02, 0.012, 0]}>
+          <boxGeometry args={[0.006, 0.06, 0.13]} />
+          <meshStandardMaterial color="#04121c" emissive="#38bdf8" emissiveIntensity={1.6} />
+        </mesh>
+        {/* shift-light strip */}
+        <mesh position={[-0.02, 0.055, 0]}>
+          <boxGeometry args={[0.006, 0.008, 0.12]} />
+          <meshStandardMaterial color="#000" emissive="#22c55e" emissiveIntensity={1.4} />
+        </mesh>
+        {/* rubber grips */}
+        {[1, -1].map((side) => (
+          <mesh key={side} position={[0, -0.01, side * 0.155]}>
+            <boxGeometry args={[0.055, 0.14, 0.055]} />
+            <meshStandardMaterial color="#565b66" roughness={0.9} />
+          </mesh>
+        ))}
+        {/* buttons and rotaries */}
+        {buttons.map(([y, z, c]) => (
+          <mesh key={`${y}${z}`} position={[-0.02, y * 0.5, z * 1.05]} rotation={[0, 0, Math.PI / 2]}>
+            <cylinderGeometry args={[0.014, 0.014, 0.012, 14]} />
+            <meshStandardMaterial color={c} emissive={c} emissiveIntensity={0.55} roughness={0.4} />
           </mesh>
         ))}
       </group>
@@ -158,7 +245,7 @@ export function F1Car({ livery = DEFAULT_LIVERY, speed, steering, aeroOpen, mark
     open.current += (aero - open.current) * Math.min(1, d * 8) // flaps actuate in ~0.3 s
   })
 
-  const body = { color: livery.primary, metalness: 0.3, roughness: 0.35 }
+  const body = { color: livery.primary, metalness: 0.45, roughness: 0.22, envMapIntensity: 1.3 }
 
   return (
     <group>
@@ -247,6 +334,20 @@ export function F1Car({ livery = DEFAULT_LIVERY, speed, steering, aeroOpen, mark
           <planeGeometry args={[1.0, 0.22]} />
           <meshStandardMaterial map={wordmark('LIMITLAB', '#121214')} transparent depthWrite={false} />
         </mesh>
+      ))}
+
+      {/* steering wheel: turns with the input, on a raked column */}
+      <SteeringWheel steer={steer} />
+
+      {/* front suspension: upper and lower wishbones + push-rod on each side */}
+      {[1, -1].map((side) => (
+        <group key={`susp${side}`}>
+          <Strut from={[1.55, 0.36, side * 0.2]} to={[FRONT_AXLE, 0.4, side * (FRONT_TRACK - 0.12)]} />
+          <Strut from={[1.9, 0.34, side * 0.2]} to={[FRONT_AXLE, 0.4, side * (FRONT_TRACK - 0.12)]} />
+          <Strut from={[1.55, 0.2, side * 0.25]} to={[FRONT_AXLE, 0.22, side * (FRONT_TRACK - 0.12)]} />
+          <Strut from={[1.9, 0.2, side * 0.25]} to={[FRONT_AXLE, 0.22, side * (FRONT_TRACK - 0.12)]} />
+          <Strut from={[1.72, 0.22, side * (FRONT_TRACK - 0.12)]} to={[1.25, 0.5, side * 0.12]} r={0.016} />
+        </group>
       ))}
 
       {/* cockpit: helmet + halo */}

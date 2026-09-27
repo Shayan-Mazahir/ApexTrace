@@ -14,6 +14,7 @@ Headless evaluation on the shared StressRun engine.
 from __future__ import annotations
 
 import math
+import os
 import random
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
@@ -155,6 +156,7 @@ def run_scenario(
     completed = summary["lap_complete"] or (scenario.segment_length_m is not None and not summary["track_exit"])
     passed = (not summary["track_exit"]) and completed and (summary["min_clearance_m"] or 0) >= MIN_CLEARANCE_M
     result = {
+        "exit_reason": ("hit the barrier" if summary.get("barrier_contacts") else "left the track") if summary["track_exit"] else None,
         "test_id": test_id or scenario.id,
         "scenario_id": scenario.id,
         "track": scenario.track,
@@ -256,6 +258,13 @@ SUITE_GROUPS: dict[str, dict[str, Any]] = {
 }
 
 
+def _low_priority() -> None:
+    try:
+        os.nice(10)
+    except OSError:
+        pass
+
+
 def _eval_config(args: tuple[dict, str]) -> dict[str, Any]:
     option_dict, kind = args
     option = UpgradeOption.model_validate(option_dict)
@@ -293,7 +302,10 @@ def evaluate_all(kind: str = "heldout", use_cache: bool = True, parallel: bool =
     raw = None
     if parallel:
         try:
-            with ProcessPoolExecutor() as pool:
+            # leave two cores free and run at low priority, so a live driving
+            # session (and the browser) stay smooth while the suite runs
+            workers = max(1, (os.cpu_count() or 4) - 2)
+            with ProcessPoolExecutor(max_workers=workers, initializer=_low_priority) as pool:
                 raw = list(pool.map(_eval_config, jobs))
         except Exception:
             raw = None
@@ -301,13 +313,23 @@ def evaluate_all(kind: str = "heldout", use_cache: bool = True, parallel: bool =
         raw = [_eval_config(j) for j in jobs]
     scenario_of = {tid: s.id for tid, s in SUITES[kind]}
     groups = {}
+    passed_by_any = {t["test_id"] for r in raw for t in r["tests"] if t["passed"]}
     for gid, g in SUITE_GROUPS.items():
         fams = g["families"]
         keep = [tid for tid, _ in SUITES[kind] if fams is None or scenario_of[tid] in fams]
+        # Tests that fail for EVERY configuration: no upgrade on offer changes them,
+        # so they cannot inform the purchase. Computed from the results, not hand-picked.
+        unsolved = [tid for tid in keep if tid not in passed_by_any]
+        configs = [aggregate(r["option"], [t for t in r["tests"] if t["test_id"] in keep]) for r in raw]
+        for c in configs:
+            c["passed_solvable"] = all(t["passed"] for t in c["tests"] if t["test_id"] not in unsolved)
+            c["solvable_passed_count"] = sum(t["passed"] for t in c["tests"] if t["test_id"] not in unsolved)
         groups[gid] = {
             "label": g["label"],
             "test_ids": keep,
-            "configs": [aggregate(r["option"], [t for t in r["tests"] if t["test_id"] in keep]) for r in raw],
+            "unsolved_test_ids": unsolved,
+            "solvable_count": len(keep) - len(unsolved),
+            "configs": configs,
         }
     response = {"suite": suite_info(kind), "groups": groups, "configs": groups["full"]["configs"]}
     if use_cache:

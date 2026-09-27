@@ -16,3 +16,8 @@ frontend/dist/
 # Generated datasets / runs (regenerable from scripts)
 data/
 runs/
+
+# raw 3D assets (hundreds of MB): the game uses baked impostors in frontend/public/textures
+frontend/public/*.glb
+frontend/e2e/tmp/
+frontend/public/models/

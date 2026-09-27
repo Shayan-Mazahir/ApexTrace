@@ -16,8 +16,8 @@
   --space-lg: 24px;
   --space-xl: 32px;
 
-  --font-base: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: ui-monospace, 'SF Mono', Consolas, monospace;
+  --font-base: 'Comfortaa', ui-rounded, 'SF Pro Rounded', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Comfortaa', ui-rounded, 'SF Pro Rounded', system-ui, sans-serif;
 
   --font-size-xs: 12px;
   --font-size-sm: 14px;

@@ -109,23 +109,114 @@ export function fenceTexture(): Texture {
   })
 }
 
-/** Grandstand crowd: dense speckle of shirt colours on dark rows. */
+/** Grandstand crowd: rows of seated/standing people (heads, shoulders, some with raised arms and flags). */
 export function crowdTexture(): Texture {
-  return make('crowd', 512, 256, (ctx) => {
-    ctx.fillStyle = '#2a2a2e'
-    ctx.fillRect(0, 0, 512, 256)
-    const colours = ['#d62828', '#f77f00', '#fcbf49', '#eae2b7', '#ffffff', '#1d3557', '#e63946', '#ff7a00', '#2a9d8f']
+  return make('crowd', 1024, 512, (ctx) => {
     let seed = 7
     const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
-    for (let row = 0; row < 16; row++) {
-      ctx.fillStyle = row % 2 ? '#34343a' : '#2c2c31'
-      ctx.fillRect(0, row * 16, 512, 16)
-      for (let x = 0; x < 512; x += 5) {
-        if (rnd() < 0.82) {
-          ctx.fillStyle = colours[Math.floor(rnd() * colours.length)]
-          ctx.fillRect(x + rnd() * 2, row * 16 + 3 + rnd() * 4, 4, 8)
+    const shirts = ['#d62828', '#f77f00', '#fcbf49', '#eae2b7', '#f4f4f4', '#1d3557', '#e63946', '#ff7a00', '#2a9d8f', '#264653', '#7b2cbf', '#0b132b']
+    const skins = ['#f1c9a5', '#e0ac82', '#c68642', '#8d5524', '#5c3a21', '#f7d7bd']
+    const hair = ['#1b1209', '#3b2a1a', '#6b4a2b', '#c9a24b', '#111111', '#7d7d7d']
+    ctx.fillStyle = '#26262b'
+    ctx.fillRect(0, 0, 1024, 512)
+    const ROWS = 16
+    const rowH = 512 / ROWS
+    for (let row = 0; row < ROWS; row++) {
+      const y0 = row * rowH
+      ctx.fillStyle = row % 2 ? '#303036' : '#2a2a30' // stepped seating
+      ctx.fillRect(0, y0, 1024, rowH)
+      ctx.fillStyle = 'rgba(0,0,0,0.35)'
+      ctx.fillRect(0, y0 + rowH - 3, 1024, 3)
+      for (let x = -6 + rnd() * 6; x < 1030; x += 15 + rnd() * 7) {
+        if (rnd() < 0.1) continue // empty seat
+        const shirt = shirts[Math.floor(rnd() * shirts.length)]
+        const skin = skins[Math.floor(rnd() * skins.length)]
+        const cx = x + 8
+        const base = y0 + rowH - 3
+        const headR = 4.2 + rnd() * 0.8
+        const bodyH = 11 + rnd() * 3
+        // torso with rounded shoulders
+        ctx.fillStyle = shirt
+        ctx.beginPath()
+        ctx.moveTo(cx - 8, base)
+        ctx.lineTo(cx - 7, base - bodyH + 3)
+        ctx.quadraticCurveTo(cx - 6, base - bodyH, cx, base - bodyH)
+        ctx.quadraticCurveTo(cx + 6, base - bodyH, cx + 7, base - bodyH + 3)
+        ctx.lineTo(cx + 8, base)
+        ctx.closePath()
+        ctx.fill()
+        // shading on one side for depth
+        ctx.fillStyle = 'rgba(0,0,0,0.18)'
+        ctx.fillRect(cx + 2, base - bodyH + 3, 6, bodyH - 3)
+        if (rnd() < 0.16) { // cheering: an arm up
+          ctx.strokeStyle = skin
+          ctx.lineWidth = 2.6
+          ctx.beginPath()
+          const side = rnd() < 0.5 ? -1 : 1
+          ctx.moveTo(cx + side * 6, base - bodyH + 4)
+          ctx.lineTo(cx + side * 9, base - bodyH - 9)
+          ctx.stroke()
+          if (rnd() < 0.35) { // small team flag
+            ctx.fillStyle = shirts[Math.floor(rnd() * shirts.length)]
+            ctx.fillRect(cx + side * 9, base - bodyH - 15, 7 * side, 6)
+          }
+        }
+        // head + hair
+        ctx.fillStyle = skin
+        ctx.beginPath()
+        ctx.arc(cx, base - bodyH - headR + 1, headR, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.fillStyle = hair[Math.floor(rnd() * hair.length)]
+        ctx.beginPath()
+        ctx.arc(cx, base - bodyH - headR - 0.5, headR, Math.PI, Math.PI * 2)
+        ctx.fill()
+        if (rnd() < 0.18) { // cap
+          ctx.fillStyle = shirts[Math.floor(rnd() * shirts.length)]
+          ctx.fillRect(cx - headR - 1, base - bodyH - headR * 1.5, headR * 2 + 2, 2.5)
         }
       }
+    }
+  })
+}
+
+/** Leaf cluster texture for tree crowns: many small leaves in layered greens with dark gaps. */
+export function foliageTexture(): Texture {
+  return make('foliage', 256, 256, (ctx) => {
+    let seed = 5
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
+    ctx.fillStyle = '#16321a'
+    ctx.fillRect(0, 0, 256, 256)
+    const greens = ['#1f4d24', '#2a6a2e', '#37803a', '#4a9645', '#5fa957', '#7dbb63']
+    for (let layer = 0; layer < 3; layer++) {
+      for (let i = 0; i < 900; i++) {
+        const x = rnd() * 256
+        const y = rnd() * 256
+        ctx.fillStyle = greens[Math.min(greens.length - 1, Math.floor(rnd() * (2 + layer * 2)))]
+        ctx.save()
+        ctx.translate(x, y)
+        ctx.rotate(rnd() * Math.PI)
+        ctx.beginPath()
+        ctx.ellipse(0, 0, 3 + rnd() * 4, 1.4 + rnd() * 1.8, 0, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.restore()
+      }
+    }
+  })
+}
+
+/** Bark: vertical streaks in browns/greys. */
+export function barkTexture(): Texture {
+  return make('bark', 128, 256, (ctx) => {
+    let seed = 9
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
+    ctx.fillStyle = '#4a3a2b'
+    ctx.fillRect(0, 0, 128, 256)
+    for (let i = 0; i < 260; i++) {
+      const x = rnd() * 128
+      const w = 1 + rnd() * 3
+      const tone = 40 + Math.floor(rnd() * 50)
+      ctx.fillStyle = `rgb(${tone + 22},${tone + 12},${tone})`
+      ctx.fillRect(x, rnd() * 256, w, 20 + rnd() * 90)
     }
   })
 }

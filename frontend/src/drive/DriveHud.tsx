@@ -53,92 +53,97 @@ export function DriveHud({ normalized, vehicleState: v, profile, sessionId }: Dr
   const battery = Math.max(0, Math.min(100, v?.battery_pct ?? 100))
   const deploy = v?.ers_deploy_kw ?? 0
 
+  const throttle = Math.round(normalized.throttle * 100)
+  const brake = Math.round(normalized.brake * 100)
+  const rpmFrac = Math.max(0, Math.min(1, (rpm - 4_000) / (RPM_SHIFT - 4_000)))
+
   return (
     <div className="f1-hud" aria-label="Driver display">
-      <div className={`f1-hud__leds ${shiftNow ? 'f1-hud__leds--shift' : ''}`} aria-label={`${Math.round(rpm)} rpm`}>
-        {Array.from({ length: LEDS }, (_, i) => (
-          <span key={i} className={`f1-hud__led f1-hud__led--${i < 5 ? 'g' : i < 10 ? 'r' : 'b'} ${i < lit ? 'on' : ''}`} />
-        ))}
-      </div>
-
-      <div className="f1-hud__body">
-        <div className="f1-hud__col">
-          <div className="f1-hud__field">
-            <span>Lap {v?.lap ?? 1}</span>
-            <strong className={lapValid ? '' : 'f1-hud__invalid'}>{formatLapTime(v?.lap_time_s ?? 0)}</strong>
-            {!lapValid && <em className="f1-hud__flag">LAP INVALID</em>}
-          </div>
-          <div className="f1-hud__field">
-            <span>Delta</span>
-            <strong className={delta == null ? '' : delta < 0 ? 'f1-hud__ahead' : 'f1-hud__behind'}>{formatDelta(delta)}</strong>
-          </div>
+      <div className="f1-timing">
+        <div className="f1-timing__head">
+          <b>LAP {v?.lap ?? 1}</b>
+          {!lapValid && <em className="f1-hud__flag">INVALID</em>}
         </div>
-
-        <div className="f1-hud__centre">
-          <div className="f1-hud__gear" aria-label="Gear">{gearLabel(v?.gear)}</div>
-          <div className="f1-hud__speed">
-            <strong>{kmh}</strong>
-            <span>km/h</span>
-          </div>
-          <div className="f1-hud__rpm">{Math.round(rpm).toLocaleString('en-US')} rpm</div>
+        <div className="f1-timing__row">
+          <span>Time</span>
+          <strong className={lapValid ? '' : 'f1-hud__invalid'}>{formatLapTime(v?.lap_time_s ?? 0)}</strong>
         </div>
-
-        <div className="f1-hud__col f1-hud__col--right">
-          <div className="f1-hud__field">
-            <span>Last</span>
-            <strong className={v?.last_lap_valid === false ? 'f1-hud__invalid' : ''}>{formatLapTime(v?.last_lap_s)}</strong>
-          </div>
-          <div className="f1-hud__field f1-hud__best">
-            <span>Best</span>
-            <strong>{formatLapTime(v?.session_best_lap_s ?? v?.best_lap_s)}</strong>
-          </div>
+        <div className="f1-timing__row">
+          <span>Delta</span>
+          <strong className={delta == null ? '' : delta < 0 ? 'f1-hud__ahead' : 'f1-hud__behind'}>{formatDelta(delta)}</strong>
+        </div>
+        <div className="f1-timing__row">
+          <span>Last</span>
+          <strong className={v?.last_lap_valid === false ? 'f1-hud__invalid' : ''}>{formatLapTime(v?.last_lap_s)}</strong>
         </div>
       </div>
 
-      <div className="f1-hud__systems">
-        <div className="f1-hud__ers" title="Battery state of charge">
-          <span>ERS {setup ? ERS_LABEL[setup.ers_mode] : ''}</span>
-          <div className="f1-hud__ers-bar">
-            <div className={`f1-hud__ers-fill ${battery < 15 ? 'low' : ''}`} style={{ width: `${battery}%` }} />
-          </div>
-          <b>
-            {Math.round(battery)}% {deploy > 5 ? '▲' : deploy < -5 ? '▼' : ''}
-          </b>
-        </div>
-        <div className={`f1-hud__chip ${v?.drs_open ? 'f1-hud__chip--drs' : v?.drs_available ? 'f1-hud__chip--avail' : ''}`}>
-          {v?.drs_open ? 'X-MODE' : 'Z-MODE'}
-          <small>{setup?.drs_mode === 'off' ? 'DRS OFF' : v?.drs_available ? 'DRS AVAIL' : `DRS ${setup?.drs_mode?.toUpperCase() ?? ''}`}</small>
-        </div>
-        <div className={`f1-hud__chip ${v?.tc_active ? 'f1-hud__chip--act' : ''} ${v?.wheelspin ? 'f1-hud__chip--warn' : ''}`}>
-          TC {setup ? TC_LABEL[setup.traction_control] : ''}
-          <small>{v?.wheelspin ? 'WHEELSPIN' : v?.tc_active ? 'ACTIVE' : ' '}</small>
-        </div>
-        <div className={`f1-hud__chip ${v?.lockup ? 'f1-hud__chip--warn' : ''}`}>
-          ABS {setup?.abs === false ? 'OFF' : 'ON'}
-          <small>{v?.lockup ? 'LOCK-UP' : ' '}</small>
-        </div>
-        <div className="f1-hud__chip">
-          {setup?.gearbox === 'manual' ? 'MANUAL' : 'AUTO'}
-          <small>GEARBOX</small>
-        </div>
+      <div className="f1-best">
+        <span>BEST</span>
+        <strong>{formatLapTime(v?.session_best_lap_s ?? v?.best_lap_s)}</strong>
       </div>
 
-      <div className="f1-hud__footer">
-        <div className="f1-hud__sectors">
-          {sectors.map((s) => (
-            <div key={s.index} className={`f1-hud__sector ${s.index === current ? 'f1-hud__sector--on' : ''} ${s.index < current ? 'f1-hud__sector--done' : ''}`}>
-              S{s.index + 1}
+      <div className="f1-dash">
+        <div className="f1-dash__pedal" title="Brake">
+          <div className="f1-dash__pedal-fill f1-dash__pedal-fill--brake" style={{ height: `${brake}%` }} />
+        </div>
+        <div className="f1-dash__core">
+          <div className={`f1-dash__rev ${shiftNow ? 'f1-dash__rev--shift' : ''}`} aria-label={`${Math.round(rpm)} rpm`}>
+            <div className="f1-dash__rev-fill" style={{ width: `${rpmFrac * 100}%` }} />
+            {Array.from({ length: LEDS }, (_, i) => (
+              <span key={i} className={`f1-dash__tick ${i < lit ? 'on' : ''} f1-dash__tick--${i < 5 ? 'g' : i < 10 ? 'r' : 'b'}`} />
+            ))}
+          </div>
+          <div className="f1-dash__lapline">
+            <b>LAP {v?.lap ?? 1}</b>
+            <span>{formatLapTime(v?.lap_time_s ?? 0)}</span>
+            {(v?.laps_completed ?? 0) > 0 && <span>{v?.laps_completed} done</span>}
+          </div>
+          <div className="f1-dash__main">
+            <div className="f1-dash__side">
+              <div className={`f1-dash__battery ${battery < 15 ? 'low' : ''}`} title="Battery state of charge">
+                <b>{Math.round(battery)}%</b>
+                <span>{setup ? ERS_LABEL[setup.ers_mode] : 'ERS'} {deploy > 5 ? '▲' : deploy < -5 ? '▼' : ''}</span>
+              </div>
             </div>
-          ))}
+            <div className="f1-dash__gear" aria-label="Gear">{gearLabel(v?.gear)}</div>
+            <div className="f1-dash__side f1-dash__side--right">
+              <div className="f1-dash__speed">
+                <strong>{kmh}</strong>
+                <span>km/h</span>
+              </div>
+            </div>
+          </div>
+          <div className="f1-dash__chips">
+            <span className={`f1-dash__chip ${v?.drs_open ? 'is-drs' : v?.drs_available ? 'is-avail' : ''}`}>
+              {v?.drs_open ? 'X-MODE' : 'Z-MODE'}
+            </span>
+            <span className={`f1-dash__chip ${v?.tc_active ? 'is-act' : ''} ${v?.wheelspin ? 'is-warn' : ''}`}>
+              TC {setup ? TC_LABEL[setup.traction_control] : ''}{v?.wheelspin ? ' · SPIN' : ''}
+            </span>
+            <span className={`f1-dash__chip ${v?.lockup ? 'is-warn' : ''}`}>ABS {setup?.abs === false ? 'OFF' : 'ON'}{v?.lockup ? ' · LOCK' : ''}</span>
+            <span className="f1-dash__chip">{setup?.gearbox === 'manual' ? 'MANUAL' : 'AUTO'}</span>
+            <span className="f1-dash__chip f1-dash__chip--rpm">{Math.round(rpm).toLocaleString('en-US')} rpm</span>
+          </div>
+          <div className="f1-dash__footer">
+            <div className="f1-hud__sectors">
+              {sectors.map((s) => (
+                <div key={s.index} className={`f1-hud__sector ${s.index === current ? 'f1-hud__sector--on' : ''} ${s.index < current ? 'f1-hud__sector--done' : ''}`}>
+                  S{s.index + 1}
+                </div>
+              ))}
+            </div>
+            <div className="f1-hud__next">
+              {v?.next_hazard_zone ? (
+                <>Next <strong>{v.next_hazard_zone}</strong> {Math.round(v.next_hazard_distance ?? 0)} m</>
+              ) : (
+                'Next —'
+              )}
+            </div>
+          </div>
         </div>
-        <div className="f1-hud__next">
-          {v?.next_hazard_zone ? (
-            <>
-              Next <strong>{v.next_hazard_zone}</strong> {Math.round(v.next_hazard_distance ?? 0)} m
-            </>
-          ) : (
-            'Next —'
-          )}
+        <div className="f1-dash__pedal" title="Throttle">
+          <div className="f1-dash__pedal-fill f1-dash__pedal-fill--throttle" style={{ height: `${throttle}%` }} />
         </div>
       </div>
 

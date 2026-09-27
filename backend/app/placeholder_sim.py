@@ -465,10 +465,13 @@ class DemoVehicleState:
     ax: float = 0.0
     ay: float = 0.0
     ers_deploy_kw: float = 0.0
+    stop_hold: float = 0.0
+    brake_reverse: bool = False
 
     def car_state(self) -> CarState:
         return CarState(vx=self.speed, vy=self.vy, yaw_rate=self.yaw_rate, gear=self.gear, rpm=self.rpm,
-                        battery=self.battery, drs_open=self.drs_open, ax=self.ax, ay=self.ay)
+                        battery=self.battery, drs_open=self.drs_open, ax=self.ax, ay=self.ay,
+                        stop_hold=self.stop_hold, brake_reverse=self.brake_reverse)
 
 
 def start_heading(profile: TrackProfile) -> float:
@@ -615,4 +618,6 @@ def step(
         ax=car.ax,
         ay=car.ay,
         ers_deploy_kw=car.ers_deploy_kw,
+        stop_hold=car.stop_hold,
+        brake_reverse=car.brake_reverse,
     )

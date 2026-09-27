@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { FaultSpec, FaultType, TrackProfile, TriggerKind } from '../types/schemas'
 import './FaultBuilder.css'
 
@@ -11,17 +11,35 @@ interface FaultBuilderProps {
 
 let counter = 0
 
+const LAYER: Record<string, string> = {
+  world: 'Road',
+  vehicle: 'Car (brakes, steering)',
+  sensor: 'Sensors',
+  uplink: 'Car to pit wall link',
+  warning_service: 'Warning computer',
+  downlink: 'Pit wall to driver link',
+  driver: 'Driver',
+}
+
+// Survives leaving the Engineer screen and coming back (the screen unmounts).
+const draft: { type: string; params: Record<string, number>; kind: TriggerKind; zone: string; pad: number; start: number; end: number | '' } = {
+  type: '', params: {}, kind: 'always', zone: '', pad: 100, start: 0, end: '',
+}
+
 export function FaultBuilder({ catalog, profile, disabled, onAdd }: FaultBuilderProps) {
   const implemented = useMemo(() => catalog.filter((c) => c.status === 'implemented'), [catalog])
   const unavailable = useMemo(() => catalog.filter((c) => c.status !== 'implemented'), [catalog])
-  const [type, setType] = useState('')
+  const [type, setType] = useState(draft.type)
   const ft = implemented.find((c) => c.type === type)
-  const [params, setParams] = useState<Record<string, number>>({})
-  const [kind, setKind] = useState<TriggerKind>('always')
-  const [zone, setZone] = useState('')
-  const [pad, setPad] = useState(100)
-  const [start, setStart] = useState(0)
-  const [end, setEnd] = useState<number | ''>('')
+  const [params, setParams] = useState<Record<string, number>>(draft.params)
+  const [kind, setKind] = useState<TriggerKind>(draft.kind)
+  const [zone, setZone] = useState(draft.zone)
+  const [pad, setPad] = useState(draft.pad)
+  const [start, setStart] = useState(draft.start)
+  const [end, setEnd] = useState<number | ''>(draft.end)
+  useEffect(() => {
+    Object.assign(draft, { type, params, kind, zone, pad, start, end })
+  }, [type, params, kind, zone, pad, start, end])
 
   const choose = (t: string) => {
     setType(t)
@@ -48,7 +66,7 @@ export function FaultBuilder({ catalog, profile, disabled, onAdd }: FaultBuilder
         <select value={type} disabled={disabled} onChange={(e) => choose(e.target.value)}>
           <option value="">— choose —</option>
           {['world', 'vehicle', 'sensor', 'uplink', 'warning_service', 'downlink', 'driver'].map((target) => (
-            <optgroup key={target} label={`${target} layer`}>
+            <optgroup key={target} label={LAYER[target] ?? target}>
               {implemented
                 .filter((c) => c.target === target)
                 .map((c) => (

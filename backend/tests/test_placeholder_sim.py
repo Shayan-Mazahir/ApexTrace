@@ -248,12 +248,22 @@ def test_grip_loss_lowers_the_speed_a_corner_can_be_taken_at():
     assert abs(wet.heading) < abs(full.heading)
 
 
-def test_full_braking_reduces_cornering_grip():
+def test_braking_shares_grip_with_cornering_but_the_car_still_turns():
     profile = TRACK_PRESETS["monza"]
-    state = DemoVehicleState(speed=40.0)
-    coasting = step(state, 1.0, 0.0, 0.0, 0.05, profile)
-    braking = step(state, 1.0, 0.0, 1.0, 0.05, profile)
-    assert abs(braking.heading) < abs(coasting.heading)
+
+    def run(brake):
+        s = DemoVehicleState(speed=40.0)
+        lat = []
+        for _ in range(20):  # 1 s at full lock
+            s = step(s, 1.0, 0.0, brake, 0.05, profile)
+            lat.append(abs(s.ay))
+        return s, sum(lat) / len(lat)
+
+    coast, coast_lat = run(0.0)
+    brake, brake_lat = run(1.0)
+    assert brake_lat < coast_lat  # friction ellipse: braking leaves less grip for turning
+    assert math.degrees(abs(brake.heading)) > 20  # but ABS keeps the car steerable (no straight-on plough)
+    assert brake.speed < coast.speed
 
 
 def test_grip_loss_also_limits_braking():
@@ -320,3 +330,30 @@ def test_windowed_nearest_matches_full_scan_along_a_lap():
         assert math.hypot(x - centerline[hint][0], y - centerline[hint][1]) == math.hypot(
             x - centerline[full][0], y - centerline[full][1]
         )
+
+
+def test_after_hitting_a_barrier_holding_brake_reverses_the_car_away():
+    import math
+    from dataclasses import replace
+
+    from app import placeholder_sim as ps
+
+    prof = ps.TRACK_PRESETS["monza"]
+    cx, cy = prof.centerline[20]
+    lx, ly = prof.left_edge[20]
+    nx, ny = lx - cx, ly - cy
+    norm = math.hypot(nx, ny)
+    s = replace(ps.initial_state(prof), x=cx, y=cy, heading=math.atan2(ny, nx), speed=30.0,
+                nearest_point_index=20, gear=4)
+    for _ in range(80):
+        s = ps.step(s, 0.0, 1.0, 0.0, 0.05, prof)
+    assert s.in_contact and s.speed == 0.0
+    hit = (s.x, s.y)
+    for _ in range(40):  # 2 s on the brake pedal
+        s = ps.step(s, 0.0, 0.0, 1.0, 0.05, prof)
+    assert s.gear == -1 and s.speed < 0
+    assert math.hypot(s.x - hit[0], s.y - hit[1]) > 2.0  # it actually backed away from the wall
+    assert not s.in_contact
+    for _ in range(80):  # throttle stops the car, then selects drive again
+        s = ps.step(s, 0.0, 0.6, 0.0, 0.05, prof)
+    assert s.gear >= 1

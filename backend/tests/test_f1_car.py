@@ -196,3 +196,39 @@ def test_state_message_reports_car_telemetry():
 def test_new_session_starts_stationary_on_the_grid():
     v = initial_state(TRACK_PRESETS["baku"])
     assert v.speed == 0 and v.gear == 0 and v.battery == CAR.battery_capacity
+
+
+def test_automatic_holding_brake_at_standstill_selects_reverse_then_drive():
+    s = CarState(gear=1)
+    x = 0.0
+    for _ in range(60):  # 3 s stopped, brake held
+        s, _, dx, _ = step_car(s, 0.0, 0.0, 0.0, 1.0, 0.05)
+        x += dx
+    assert s.gear == -1 and s.brake_reverse and x < -3.0 and s.vx < 0  # reversing on the brake pedal
+    for _ in range(60):  # brake released, throttle stops the car (it never re-selects drive while moving)
+        s, *_ = step_car(s, 0.0, 0.0, 0.5, 0.0, 0.05)
+        if abs(s.vx) < 0.5:
+            break
+        assert s.gear == -1
+    assert abs(s.vx) < 0.5
+    s, *_ = step_car(s, 0.0, 0.0, 1.0, 0.0, 0.05)  # throttle from standstill: drive
+    assert s.gear == 1 and not s.brake_reverse
+
+
+def test_braking_to_a_stop_only_selects_reverse_once_stopped():
+    s = CarState(vx=30.0, gear=3)
+    for _ in range(200):
+        s, *_ = step_car(s, 0.0, 0.0, 0.0, 1.0, 0.05)
+        if s.vx > 0.3:
+            assert s.gear >= 1  # reverse is only ever selected once stopped
+
+
+def test_full_traction_control_keeps_the_rear_under_trail_braking():
+    import math
+
+    s = CarState(vx=70.0, gear=0)
+    h, worst = 0.0, 0.0
+    for i in range(60):
+        s, h, *_ = step_car(s, h, 0.1 * min(1, i / 10), 0.0, 0.4, 0.05)
+        worst = max(worst, abs(math.atan2(s.vy - CAR.cg_to_rear * s.yaw_rate, max(s.vx, 1.0))))
+    assert math.degrees(worst) < 8.0

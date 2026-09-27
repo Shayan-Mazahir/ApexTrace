@@ -245,6 +245,7 @@ export interface FaultSummary {
   parameters: Record<string, number>
   activations: number
   remaining_m: number | null
+  starts_at_m?: number | null
 }
 
 export interface EffectiveValues {
@@ -454,6 +455,7 @@ export interface TestResult {
   barrier_contacts: number
   lap_time_s: number | null
   driver_ignored: number
+  exit_reason?: string | null
 }
 
 export interface ConfigResult {
@@ -467,6 +469,8 @@ export interface ConfigResult {
   min_warning_margin_m: number | null
   unnecessary_warnings: number
   passed: boolean
+  passed_solvable?: boolean
+  solvable_passed_count?: number
   failed_test_ids: string[]
   tests: TestResult[]
 }
@@ -474,6 +478,9 @@ export interface ConfigResult {
 export interface SuiteGroup {
   label: string
   test_ids: string[]
+  // tests that fail for every configuration: no upgrade on offer changes them
+  unsolved_test_ids?: string[]
+  solvable_count?: number
   configs: ConfigResult[]
 }
 
