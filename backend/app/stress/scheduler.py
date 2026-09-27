@@ -133,8 +133,15 @@ class FaultScheduler:
                 "parameters": f.spec.parameters,
                 "activations": f.activations,
                 "remaining_m": None,
+                "starts_at_m": None,  # lap distance where a zone/distance trigger switches it on
             }
             tr = f.spec.trigger
+            if tr.kind == "zone":
+                zone = next((h for h in self.profile.hazard_zones if h.id == tr.zone_id), None)
+                if zone:
+                    item["starts_at_m"] = round((zone.start_distance - tr.pad_m) % self.profile.total_length, 1)
+            elif tr.kind == "distance":
+                item["starts_at_m"] = round(tr.start % self.profile.total_length, 1)
             if f.level > 0 and tr.kind == "zone":
                 zone = next((h for h in self.profile.hazard_zones if h.id == tr.zone_id), None)
                 if zone:

@@ -68,7 +68,7 @@ export function EngineerScreen() {
         <Canvas camera={{ position: [400, 500, 400], fov: 50, near: 0.5, far: 8000 }}>
           <Scene
             trackProfile={engineer.trackProfile}
-            vehicleState={v ? { x: v.x, y: v.y, heading: v.heading, speed: v.speed, drsOpen: v.drs_open } : null}
+            vehicleState={v ? { x: v.x, y: v.y, heading: v.heading, speed: v.speed, drsOpen: v.drs_open, t: v.t } : null}
             trail={engineer.trail}
             previousLapTrail={engineer.previousLapTrail}
           />

@@ -8,6 +8,7 @@ import { StatusBadge, type StatusTone } from '../components/StatusBadge'
 import { BrakeWarning } from '../drive/BrakeWarning'
 import { CarSetupPanel } from '../drive/CarSetupPanel'
 import { DriveHud } from '../drive/DriveHud'
+import { FaultHeadsUp } from '../drive/FaultHeadsUp'
 import { RunStateBanner } from '../drive/RunStateBanner'
 import { TelemetryPanel } from '../drive/TelemetryPanel'
 import { TrackPicker } from '../drive/TrackPicker'
@@ -83,7 +84,7 @@ export function DriveScreen() {
         <Scene
           view={view}
           trackProfile={profile}
-          vehicleState={v ? { x: v.x, y: v.y, heading: v.heading, speed: v.speed, drsOpen: v.drs_open } : null}
+          vehicleState={v ? { x: v.x, y: v.y, heading: v.heading, speed: v.speed, drsOpen: v.drs_open, t: v.t } : null}
           trail={session.trail}
           previousLapTrail={session.previousLapTrail}
           steering={steeringRef}
@@ -126,6 +127,7 @@ export function DriveScreen() {
             {info && <StatusBadge tone="neutral" label={`Upgrades: ${carLabel(info.upgrades)}`} />}
           </div>
 
+          <FaultHeadsUp faults={session.faultState?.faults ?? []} profile={profile} distanceAlongLap={v?.distance_along_lap ?? 0} />
           <BrakeWarning warning={session.warning} />
           <RunStateBanner vehicleState={v} />
           <DriveHud normalized={input.normalized} vehicleState={v} profile={profile} sessionId={session.sessionId} />

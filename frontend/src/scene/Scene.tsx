@@ -1,8 +1,10 @@
 import { Environment, Lightformer, Line, OrbitControls, Sky } from '@react-three/drei'
+import { Bloom, EffectComposer, SMAA, Vignette } from '@react-three/postprocessing'
 import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useMemo, useRef, type ElementRef } from 'react'
 import { BufferAttribute, BufferGeometry, Color, DoubleSide, Vector3, type Group, type PerspectiveCamera } from 'three'
 import type { TrackProfile } from '../types/schemas'
+import { PoseBuffer } from './poseBuffer'
 import { F1Car } from './F1Car'
 import { computeRacingLine } from './racingLine'
 import { bounds, flatStrip, type Pt } from './trackGeometry'
@@ -14,6 +16,7 @@ export interface CarPose {
   heading: number
   speed?: number
   drsOpen?: boolean
+  t?: number // server time: enables jitter-free interpolation
 }
 
 export type SceneView = 'cockpit' | 'follow' | 'overview'
@@ -36,19 +39,31 @@ function useSmoothedPose(pose: CarPose) {
   const target = useRef(pose)
   target.current = pose
   const shown = useRef<ShownPose>({ x: pose.x, y: pose.y, heading: pose.heading, speed: pose.speed ?? 0, drsOpen: false })
+  const buffer = useMemo(() => new PoseBuffer(), [])
   const first = useRef(true)
+  useEffect(() => {
+    if (pose.t !== undefined) buffer.push({ t: pose.t, x: pose.x, y: pose.y, heading: pose.heading })
+  }, [pose.t, pose.x, pose.y, pose.heading, buffer])
   useFrame((_, dt) => {
     const t = target.current
     const s = shown.current
-    const jump = Math.hypot(t.x - s.x, t.y - s.y) > 60 // reset / new track: snap
+    s.speed = t.speed ?? 0
+    s.drsOpen = t.drsOpen ?? false
+    const p = t.t !== undefined ? buffer.sample(Math.min(dt, 0.1)) : null
+    if (p) {
+      s.x = p.x
+      s.y = p.y
+      s.heading = p.heading
+      return
+    }
+    // no server timestamps (replays, idle): exponential follow
+    const jump = Math.hypot(t.x - s.x, t.y - s.y) > 60
     const k = first.current || jump ? 1 : 1 - Math.exp(-Math.min(dt, 0.1) * 18)
     first.current = false
     s.x += (t.x - s.x) * k
     s.y += (t.y - s.y) * k
     const dh = ((((t.heading - s.heading + Math.PI) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) - Math.PI
     s.heading += dh * k
-    s.speed = t.speed ?? 0
-    s.drsOpen = t.drsOpen ?? false
   })
   return shown
 }
@@ -279,6 +294,15 @@ export function Scene({ trackProfile, vehicleState, trail, previousLapTrail, vie
       {overview && <Trail points={trail} color="#ff7a00" opacity={0.95} />}
       <Car shown={shown} steering={steering} scale={overview ? 8 : 1} cockpit={view === 'cockpit'} />
       <CameraRig view={view} profile={trackProfile} shown={shown} />
+      {!overview && (
+        // Film-style finish: soft glow on bright highlights (lights, sun glints), darker
+        // corners, and edge anti-aliasing (the composer bypasses the canvas MSAA).
+        <EffectComposer multisampling={0}>
+          <SMAA />
+          <Bloom intensity={0.35} luminanceThreshold={0.85} luminanceSmoothing={0.2} mipmapBlur />
+          <Vignette offset={0.3} darkness={0.55} />
+        </EffectComposer>
+      )}
     </>
   )
 }

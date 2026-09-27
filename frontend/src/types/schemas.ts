@@ -245,6 +245,7 @@ export interface FaultSummary {
   parameters: Record<string, number>
   activations: number
   remaining_m: number | null
+  starts_at_m?: number | null
 }
 
 export interface EffectiveValues {
