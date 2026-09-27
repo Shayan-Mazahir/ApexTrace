@@ -4,7 +4,7 @@
 
 # ApexTrace
 
-### Break the warning before it breaks the driver.
+### Find the failure before the wall does.
 
 ![Python](https://img.shields.io/badge/Python-FastAPI-3776AB?logo=python&logoColor=white)
 ![React](https://img.shields.io/badge/React-Three.js-61DAFB?logo=react&logoColor=black)
