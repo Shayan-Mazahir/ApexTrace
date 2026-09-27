@@ -175,8 +175,11 @@ export function bounds(line: Pt[]) {
 
 export function formatLapTime(seconds: number | null | undefined): string {
   if (seconds === null || seconds === undefined || !Number.isFinite(seconds)) return '—'
-  const m = Math.floor(seconds / 60)
-  const s = seconds - m * 60
+  // round to whole milliseconds first: rounding after splitting off the
+  // minutes turned 59.9996 s into "0:60.000"
+  const ms = Math.round(Math.max(0, seconds) * 1000)
+  const m = Math.floor(ms / 60000)
+  const s = (ms - m * 60000) / 1000
   return `${m}:${s.toFixed(3).padStart(6, '0')}`
 }
 

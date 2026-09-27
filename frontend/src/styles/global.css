@@ -20,3 +20,13 @@ body {
   width: 100vw;
   height: 100vh;
 }
+
+/* Dark, thin scrollbars everywhere: the browser default is a bright white bar
+   down the side of the dark pages (Firefox, Linux). */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+}
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.22); border-radius: 8px; }
+::-webkit-scrollbar-track { background: transparent; }

@@ -130,3 +130,13 @@ describe('uv strips', () => {
     expect(indexAt(p, -10)).toBe(90)
   })
 })
+
+describe('formatLapTime rounding', () => {
+  it('never shows 60 seconds', () => {
+    expect(formatLapTime(59.9996)).toBe('1:00.000')
+    expect(formatLapTime(119.9999)).toBe('2:00.000')
+    expect(formatLapTime(84.2)).toBe('1:24.200')
+    expect(formatLapTime(5.05)).toBe('0:05.050')
+    expect(formatLapTime(null)).toBe('—')
+  })
+})

@@ -130,7 +130,8 @@
 .session-report__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .session-report__me { outline: 2px solid var(--color-orange); background: rgba(255, 140, 0, 0.12) !important; }
 
-.session-report__actions { display: flex; justify-content: flex-end; gap: var(--space-sm); }
+.session-report__actions { display: flex; justify-content: flex-end; gap: var(--space-sm); flex-wrap: wrap; }
+.session-report__download { margin-right: auto; }
 
 @media (max-width: 640px) {
   .session-report { padding: var(--space-md); }

@@ -1,30 +1,30 @@
 import { useEffect, useMemo, useState } from 'react'
 import { getLeaderboard, submitScore, type LeaderboardResponse } from '../api/leaderboard'
+import { formatLapTime } from '../scene/trackGeometry'
 import type { TrackId } from '../types/schemas'
-import { ASSUMED_REACTION_S, summarise, type DriverReport } from './driverReport'
+import { ASSUMED_REACTION_S, reportCsv, summarise, type DriverReport } from './driverReport'
 import './SessionReport.css'
 
 const NAME_KEY = 'limitlab.driverName'
 
-function lap(s: number | null): string {
-  if (s === null) return '—'
-  const m = Math.floor(s / 60)
-  return `${m}:${(s - m * 60).toFixed(3).padStart(6, '0')}`
-}
+const lap = formatLapTime
 
 const secs = (s: number | null) => (s === null ? '—' : `${s.toFixed(2)} s`)
 
-function ScoreRing({ score, grade }: { score: number; grade: string }) {
+function ScoreRing({ score, grade }: { score: number | null; grade: string | null }) {
   const r = 52
   const c = 2 * Math.PI * r
-  const tone = score >= 85 ? '#22c55e' : score >= 70 ? '#2dd4bf' : score >= 50 ? '#f59e0b' : '#ef4444'
+  const tone = score === null ? '#64748b' : score >= 85 ? '#22c55e' : score >= 70 ? '#2dd4bf' : score >= 50 ? '#f59e0b' : '#ef4444'
   return (
-    <svg className="session-report__ring" viewBox="0 0 128 128" role="img" aria-label={`Safety score ${score} of 100, grade ${grade}`}>
+    <svg className="session-report__ring" viewBox="0 0 128 128" role="img"
+      aria-label={score === null ? 'Not scored yet' : `Safety score ${score} of 100, grade ${grade}`}>
       <circle cx="64" cy="64" r={r} stroke="rgba(255,255,255,0.1)" strokeWidth="10" fill="none" />
-      <circle cx="64" cy="64" r={r} stroke={tone} strokeWidth="10" fill="none" strokeLinecap="round"
-        strokeDasharray={`${(c * score) / 100} ${c}`} transform="rotate(-90 64 64)" />
-      <text x="64" y="62" textAnchor="middle" className="session-report__ring-score">{score}</text>
-      <text x="64" y="86" textAnchor="middle" className="session-report__ring-grade">grade {grade}</text>
+      {score !== null && (
+        <circle cx="64" cy="64" r={r} stroke={tone} strokeWidth="10" fill="none" strokeLinecap="round"
+          strokeDasharray={`${(c * score) / 100} ${c}`} transform="rotate(-90 64 64)" />
+      )}
+      <text x="64" y="62" textAnchor="middle" className="session-report__ring-score">{score ?? '—'}</text>
+      <text x="64" y="86" textAnchor="middle" className="session-report__ring-grade">{grade ? `grade ${grade}` : 'not scored'}</text>
     </svg>
   )
 }
@@ -87,7 +87,7 @@ export function SessionReport({ report, track, trackName, onClose, onEnd }: Prop
 
   const save = async () => {
     const trimmed = name.trim()
-    if (!trimmed || saving) return
+    if (!trimmed || saving || s.score === null) return
     setSaving(true)
     setError(null)
     try {
@@ -100,7 +100,7 @@ export function SessionReport({ report, track, trackName, onClose, onEnd }: Prop
         await submitScore({
           name: trimmed,
           track,
-          score: s.score,
+          score: s.score,  // non-null: checked above
           best_lap_s: report.bestLapS,
           reaction_avg_s: s.reactionAvgS === null ? null : Math.round(s.reactionAvgS * 1000) / 1000,
           warnings: s.warnings,
@@ -126,7 +126,17 @@ export function SessionReport({ report, track, trackName, onClose, onEnd }: Prop
           <ScoreRing score={s.score} grade={s.grade} />
           <div>
             <p className="session-report__kicker">Driver safety report · {trackName}</p>
-            <h2>{s.score >= 85 ? 'Race-ready reactions' : s.score >= 70 ? 'Solid, with margin to find' : s.score >= 50 ? 'Some close calls' : 'The warnings needed you sooner'}</h2>
+            <h2>
+              {s.score === null
+                ? 'Not tested yet'
+                : s.score >= 85
+                  ? 'Race-ready reactions'
+                  : s.score >= 70
+                    ? 'Solid, with margin to find'
+                    : s.score >= 50
+                      ? 'Some close calls'
+                      : 'The warnings needed you sooner'}
+            </h2>
             <p className="session-report__verdict">{s.verdict}</p>
           </div>
         </header>
@@ -165,7 +175,10 @@ export function SessionReport({ report, track, trackName, onClose, onEnd }: Prop
               <span className="session-report__legend">all drivers so far: {board.reaction_avg_s.toFixed(2)} s avg reaction ({board.total})</span>
             )}
           </h3>
-          {!saved && (
+          {!saved && s.score === null && (
+            <p className="session-report__empty">Scores are posted once you have met a BRAKE warning: take a corner at speed.</p>
+          )}
+          {!saved && s.score !== null && (
             <form
               className="session-report__save"
               onSubmit={(e) => {
@@ -197,6 +210,21 @@ export function SessionReport({ report, track, trackName, onClose, onEnd }: Prop
         </section>
 
         <footer className="session-report__actions">
+          <button
+            type="button"
+            className="session-report__download"
+            disabled={report.responses.length === 0 && report.laps === 0}
+            onClick={() => {
+              const url = URL.createObjectURL(new Blob([reportCsv(report, trackName)], { type: 'text/csv' }))
+              const a = document.createElement('a')
+              a.href = url
+              a.download = `limitlab-${track}-safety-report-${new Date().toISOString().slice(0, 16).replace(':', '')}.csv`
+              a.click()
+              setTimeout(() => URL.revokeObjectURL(url), 1000)
+            }}
+          >
+            Download my data (CSV)
+          </button>
           <button type="button" onClick={onClose}>Keep driving</button>
           <button type="button" className="session-report__end" onClick={onEnd}>End session</button>
         </footer>

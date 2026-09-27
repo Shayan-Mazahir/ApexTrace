@@ -10,9 +10,10 @@ interface UpgradeCardProps {
   blocked: boolean
   onToggle: () => void
   measured?: MeasuredFix | null
+  groupLabel?: string // the test group `measured` was counted in (every seed must pass)
 }
 
-export function UpgradeCard({ spec, selected, blocked, onToggle, measured }: UpgradeCardProps) {
+export function UpgradeCard({ spec, selected, blocked, onToggle, measured, groupLabel }: UpgradeCardProps) {
   const copy = UPGRADE_COPY[spec.id]
   return (
     <article className={`upgrade-card ${selected ? 'upgrade-card--selected' : ''} ${blocked ? 'upgrade-card--blocked' : ''}`}>
@@ -28,7 +29,7 @@ export function UpgradeCard({ spec, selected, blocked, onToggle, measured }: Upg
       </p>
       {measured && (
         <div className={`upgrade-card__measured ${measured.fixed.length ? '' : 'is-zero'}`}>
-          <b>Tested on its own: fixes {measured.fixed.length} of {measured.problems} problem scenarios</b>
+          <b>Tested on its own: fully fixes {measured.fixed.length} of {measured.problems} problem scenarios{groupLabel ? ` in “${groupLabel}”` : ''}</b>
           {measured.fixed.length > 0 && <span>{measured.fixed.join(' · ')}</span>}
         </div>
       )}

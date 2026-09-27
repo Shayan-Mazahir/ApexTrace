@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { IGNORED_AFTER_S, newReport, stepReport, summarise, type ReportInput } from './driverReport'
+import { IGNORED_AFTER_S, newReport, reportCsv, stepReport, summarise, type ReportInput } from './driverReport'
 
 const car = (over: Partial<NonNullable<ReportInput['vehicle']>> = {}) => ({
   speed: 80,
@@ -86,6 +86,11 @@ describe('summary', () => {
     expect(s.verdict).toMatch(/25 m further/)
   })
 
+  it('gives no score before the first warning: nothing has been tested', () => {
+    const r = step(newReport(0), 0, { vehicle: car({ barrier_contacts: 0 }) })
+    expect(summarise(r)).toMatchObject({ warnings: 0, score: null, grade: null })
+  })
+
   it('penalises ignored warnings and crashes', () => {
     let r = step(newReport(0), 1000, { warningActive: true, warningSince: 1000, hazard: 'T' })
     r = step(r, 1500)
@@ -94,5 +99,17 @@ describe('summary', () => {
     expect(s.ignored).toBe(1)
     expect(s.score).toBe(0)
     expect(s.grade).toBe('D')
+  })
+})
+
+describe('reportCsv', () => {
+  it('has a row per warning and the session totals, with commas in names quoted', () => {
+    let r = step(newReport(0), 1000, { warningActive: true, warningSince: 1000, hazard: 'Turn 1, Rettifilo' })
+    r = step(r, 1450, { warningActive: true, warningSince: 1000, brake: 1 })
+    const lines = reportCsv(r, 'Monza').trim().split('\n')
+    expect(lines[0]).toBe('warning,corner,shown_at_iso,speed_kmh,outcome,reaction_s,assumed_reaction_s')
+    expect(lines[1]).toBe('1,"Turn 1, Rettifilo",1970-01-01T00:00:01.000Z,288.0,reacted,0.450,0.25-0.4')
+    expect(lines).toContain('reaction_avg_s,0.450')
+    expect(lines).toContain('warnings,1')
   })
 })

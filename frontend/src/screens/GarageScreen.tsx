@@ -74,7 +74,7 @@ export function GarageScreen() {
               if (!spec) return null
               return (
                 <UpgradeCard key={id} spec={spec} selected={selection[id]} blocked={!canAdd(id, selection, specs, available)}
-                  onToggle={() => garage.toggleUpgrade(id)} measured={measured?.[id] ?? null} />
+                  onToggle={() => garage.toggleUpgrade(id)} measured={measured?.[id] ?? null} groupLabel={group?.label} />
               )
             })}
           </div>

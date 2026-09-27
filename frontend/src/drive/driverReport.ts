@@ -130,8 +130,8 @@ export interface ReportSummary {
   ignored: number
   reactionAvgS: number | null // over measured reactions (anticipated excluded)
   reactionBestS: number | null
-  score: number // 0..100
-  grade: 'A' | 'B' | 'C' | 'D'
+  score: number | null // 0..100; null until the driver has had a BRAKE warning to respond to
+  grade: 'A' | 'B' | 'C' | 'D' | null
   verdict: string
   extraBrakingM: number | null // extra travel vs the suite's slowest assumed driver, at the average warning speed
 }
@@ -139,6 +139,8 @@ export interface ReportSummary {
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v))
 
 // Score = reactions (40) + heeding the warnings (30) + no incidents (30).
+// No warnings yet means nothing was tested: no score (a default for the
+// untested parts made a driver who never met a corner a solid "B").
 export function summarise(r: DriverReport): ReportSummary {
   const all = r.pending ? [...r.responses, { ...r.pending, outcome: 'ignored' as const, reactionS: null }] : r.responses
   const warnings = all.length
@@ -149,11 +151,11 @@ export function summarise(r: DriverReport): ReportSummary {
   const reactionBestS = measured.length ? Math.min(...measured) : null
 
   const [fast, slow] = ASSUMED_REACTION_S
-  const reactionPart = warnings === 0 ? 20 : reactionAvgS === null ? (heeded ? 40 : 0) : 40 * clamp01((1.0 - reactionAvgS) / (1.0 - fast))
-  const heedPart = warnings === 0 ? 30 : 30 * (heeded / warnings)
+  const reactionPart = reactionAvgS === null ? (heeded ? 40 : 0) : 40 * clamp01((1.0 - reactionAvgS) / (1.0 - fast))
+  const heedPart = warnings === 0 ? 0 : 30 * (heeded / warnings)
   const incidentPart = Math.max(0, 30 - 10 * r.barrierHits - 5 * r.trackExits)
-  const score = Math.round(reactionPart + heedPart + incidentPart)
-  const grade = score >= 85 ? 'A' : score >= 70 ? 'B' : score >= 50 ? 'C' : 'D'
+  const score = warnings === 0 ? null : Math.round(reactionPart + heedPart + incidentPart)
+  const grade = score === null ? null : score >= 85 ? 'A' : score >= 70 ? 'B' : score >= 50 ? 'C' : 'D'
 
   let verdict: string
   let extraBrakingM: number | null = null
@@ -172,4 +174,37 @@ export function summarise(r: DriverReport): ReportSummary {
     }
   }
   return { warnings, heeded, ignored, reactionAvgS, reactionBestS, score, grade, verdict, extraBrakingM }
+}
+
+// The session as CSV: one row per BRAKE warning, then the session totals, so
+// the numbers behind the report can be taken away and analysed.
+export function reportCsv(r: DriverReport, track: string): string {
+  const s = summarise(r)
+  const q = (v: string) => `"${v.replaceAll('"', '""')}"`
+  const rows = [
+    ['warning', 'corner', 'shown_at_iso', 'speed_kmh', 'outcome', 'reaction_s', 'assumed_reaction_s'].join(','),
+    ...r.responses.map((x, i) =>
+      [i + 1, q(x.hazard), new Date(x.shownAt).toISOString(), x.speedKmh.toFixed(1), x.outcome,
+        x.reactionS === null ? '' : x.reactionS.toFixed(3), `${ASSUMED_REACTION_S[0]}-${ASSUMED_REACTION_S[1]}`].join(','),
+    ),
+    '',
+    'metric,value',
+    `track,${q(track)}`,
+    `score,${s.score ?? ''}`,
+    `grade,${s.grade ?? ''}`,
+    `warnings,${s.warnings}`,
+    `heeded,${s.heeded}`,
+    `ignored,${s.ignored}`,
+    `reaction_avg_s,${s.reactionAvgS === null ? '' : s.reactionAvgS.toFixed(3)}`,
+    `reaction_best_s,${s.reactionBestS === null ? '' : s.reactionBestS.toFixed(3)}`,
+    `extra_braking_distance_m,${s.extraBrakingM === null ? '' : s.extraBrakingM.toFixed(1)}`,
+    `min_clearance_m,${r.minClearanceM === null ? '' : r.minClearanceM.toFixed(2)}`,
+    `barrier_hits,${r.barrierHits}`,
+    `track_exits,${r.trackExits}`,
+    `laps,${r.laps}`,
+    `best_lap_s,${r.bestLapS === null ? '' : r.bestLapS.toFixed(3)}`,
+    `top_speed_kmh,${r.topSpeedKmh.toFixed(1)}`,
+    `peak_g,${r.maxG.toFixed(2)}`,
+  ]
+  return rows.join('\n') + '\n'
 }

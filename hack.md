@@ -97,6 +97,11 @@ and TELUS**. All four are genuinely covered.
   - the closest call, walls, off-tracks, best lap and peak g
   - a plain verdict, for example "you travel 39 m further before braking than
     it tests for"
+- **Download my data (CSV):** from the report, one row per BRAKE warning
+  (corner, speed, reaction, outcome) plus the session totals. Useful for the
+  Ollon pitch: the data is real and leaves the app.
+- **No free scores:** a driver who never met a BRAKE warning gets "Not tested
+  yet", not a grade, and can't post to the leaderboard.
 - **Leaderboard:** per track, including the average reaction of everyone who
   has driven. **If real people are slower than 0.40 s, the suite's warning
   margins are optimistic: a genuine safety finding.** Get judges to drive and
