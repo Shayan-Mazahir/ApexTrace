@@ -20,9 +20,11 @@ export type SceneView = 'cockpit' | 'follow' | 'overview'
 
 // Driver's eye in car-local coordinates (x forward, y up): just above the
 // helmet, under the halo, so the halo and nose frame the view like an onboard.
-const EYE = { x: 0.25, y: 1.1 }
-const EYE_LOOK_AHEAD = 40 // metres
-const EYE_LOOK_HEIGHT = 0.3
+// Raised camera behind the helmet (like a sim's halo/roll-hoop cam) so the nose,
+// front wheels, suspension, halo and steering wheel are all visible.
+const EYE = { x: -0.55, y: 1.42 }
+const EYE_LOOK_AHEAD = 9 // metres
+const EYE_LOOK_HEIGHT = -0.75
 
 const SKY_HORIZON = '#bcd3e6'
 
@@ -94,7 +96,7 @@ function CameraRig({ view, profile, shown }: { view: SceneView; profile: TrackPr
     cam.position.set(p.x + fx * EYE.x, EYE.y, p.y + fz * EYE.x)
     scratch.look.set(p.x + fx * EYE_LOOK_AHEAD, EYE_LOOK_HEIGHT, p.y + fz * EYE_LOOK_AHEAD)
     cam.lookAt(scratch.look)
-    const fov = 72 + Math.min(p.speed, 88) * 0.1 // widen a little with speed
+    const fov = 74 + Math.min(p.speed, 88) * 0.1 // widen a little with speed
     if (Math.abs(cam.fov - fov) > 0.05 || cam.near !== 0.25 || cam.far !== 7000) {
       cam.fov += (fov - cam.fov) * Math.min(1, dt * 3)
       // The halo is ~0.34 m from the eye. Going much nearer than this costs the
@@ -129,7 +131,7 @@ function CameraRig({ view, profile, shown }: { view: SceneView; profile: TrackPr
   return <OrbitControls ref={controls} makeDefault enabled={view === 'overview'} enableDamping={false} />
 }
 
-function Car({ shown, steering, scale, cockpit }: { shown: React.MutableRefObject<ShownPose>; steering?: React.MutableRefObject<number>; scale: number; cockpit: boolean }) {
+function Car({ shown, steering, scale }: { shown: React.MutableRefObject<ShownPose>; steering?: React.MutableRefObject<number>; scale: number; cockpit?: boolean }) {
   const group = useRef<Group>(null)
   const speed = useRef(0)
   const aeroOpen = useRef(false)
@@ -156,7 +158,7 @@ function Car({ shown, steering, scale, cockpit }: { shown: React.MutableRefObjec
         <planeGeometry args={[5.6, 2.3]} />
         <meshBasicMaterial color="#000" transparent opacity={0.35} depthWrite={false} />
       </mesh>
-      <F1Car speed={speed} steering={steering} aeroOpen={aeroOpen} hideDriver={cockpit} />
+      <F1Car speed={speed} steering={steering} aeroOpen={aeroOpen} hideDriver={false} />
     </group>
   )
 }

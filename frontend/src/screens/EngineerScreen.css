@@ -83,3 +83,21 @@
   flex-wrap: wrap;
   gap: 4px;
 }
+
+.engineer-screen__tabs { display: flex; gap: 6px; }
+.engineer-screen__panel .engineer-screen__tabs button {
+  flex: 1;
+  border-radius: 999px;
+  border-color: rgba(255, 255, 255, 0.18);
+  color: var(--color-white);
+  padding: 7px 10px;
+}
+.engineer-screen__panel .engineer-screen__tabs button.on {
+  background: var(--color-orange);
+  color: #1a1206;
+  border-color: var(--color-orange);
+  font-weight: 700;
+}
+.engineer-screen__more { border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 6px 10px; }
+.engineer-screen__more summary { cursor: pointer; font-size: 13px; color: #b9c0cb; padding: 4px 0; }
+.engineer-screen__more .engineer-screen__section { margin-top: 8px; }

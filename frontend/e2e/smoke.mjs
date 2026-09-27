@@ -158,7 +158,11 @@ const browser = await puppeteer.launch({
   executablePath: CHROME,
   headless: 'new',
   defaultViewport: { width: 1440, height: 900 },
-  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-first-run'],
+  // GPU-backed by default (the scene is ~28 fps there, ~2 fps in software GL).
+  // E2E_SOFTWARE_GL=1 forces SwiftShader for machines without a usable GPU.
+  args: process.env.E2E_SOFTWARE_GL
+    ? ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-first-run']
+    : ['--use-gl=angle', '--use-angle=metal', '--ignore-gpu-blocklist', '--no-first-run'],
 })
 
 async function newPage(name) {
@@ -328,17 +332,20 @@ try {
     await clickButton(engineer, 'Join', { exact: true })
     await waitText(engineer, 'Connected')
     await waitText(engineer, sessionId)
+    await engineer.evaluate(() => { document.querySelector('.engineer-screen__more').open = true })
     const info = await engineer.$eval('.run-info', (e) => e.innerText)
     assert(/Seed/.test(info) && /Run ID/.test(info), `run info: ${info}`)
     await waitText(drive, 'Engineer connected')
   })
 
   await step('engineer: a manual uplink-delay fault reaches the driver and is labelled simulated', async () => {
+    await clickButton(engineer, 'Single fault')
     await engineer.select('.fault-builder select', 'uplink_delay')
     await setInput(engineer, '.fault-builder input[type=range]', 0, 300)
     await clickButton(engineer, 'Add fault', { exact: true })
     await waitText(drive, 'Simulated connection fault')
     await waitText(engineer, 'Simulated connection fault')
+    await engineer.evaluate(() => { document.querySelector('.engineer-screen__more').open = true })
     const link = await engineer.$eval('.link-indicators', (e) => e.innerText)
     assert(link.includes('Sim: injected uplink delay') && link.includes('+300 ms'), `link: ${link}`)
     assert(link.includes('Real: driver control age'), 'the real link must be shown separately')
@@ -347,8 +354,9 @@ try {
 
   await step('engineer: arming a stress scenario restarts the run; name and faults shown', async () => {
     const before = await engineer.$eval('.run-info', (e) => e.innerText)
+    await clickButton(engineer, 'Saved scenario')
     await engineer.select('.scenario-panel select', 'monza_high_speed_blackout')
-    await clickButton(engineer, 'Arm scenario')
+    await clickButton(engineer, 'Arm only')
     // The preset name is already visible in the selector before the server
     // responds. Wait for the run update, not that existing option text.
     await engineer.waitForFunction(
@@ -422,7 +430,7 @@ try {
 
   await step('baku: late-warning-delivery scenario arms and reaches the driver', async () => {
     await engineer2.select('.scenario-panel select', 'baku_late_warning_delivery')
-    await clickButton(engineer2, 'Arm scenario')
+    await clickButton(engineer2, 'Arm only')
     for (let i = 0; i < 40 && !bakuFrames.some((f) => f.includes('"scenario_id":"baku_late_warning_delivery"')); i++) await sleep(250)
     assert(bakuFrames.some((f) => f.includes('"scenario_id":"baku_late_warning_delivery"')), 'driver never received the baku scenario')
     await shot(engineer2, '9-engineer-baku')

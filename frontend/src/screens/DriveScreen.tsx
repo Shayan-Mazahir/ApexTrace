@@ -21,7 +21,7 @@ import './DriveScreen.css'
 function carLabel(upgrades: UpgradeConfig): string {
   const names = { brake_servicing: 'serviced brakes', comms_improvement: 'improved comms', local_fallback: 'local fallback' }
   const on = UPGRADE_IDS.filter((id) => upgrades[id]).map((id) => names[id])
-  return on.length ? on.join(' + ') : 'baseline (worn brakes)'
+  return on.length ? on.join(' + ') : 'stock car, no upgrades'
 }
 
 // The view button cycles cockpit -> chase -> overview -> cockpit; its label names the next view.

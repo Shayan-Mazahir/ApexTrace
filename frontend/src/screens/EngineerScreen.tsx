@@ -2,6 +2,7 @@ import { Canvas } from '@react-three/fiber'
 import { useEffect, useState, type ReactNode } from 'react'
 import { getFaultCatalog, listScenarios } from '../api/session'
 import { useActiveSession } from '../app/ActiveSessionContext'
+import { useScreen } from '../app/ScreenContext'
 import { useErrorContext } from '../app/ErrorContext'
 import { SimulatedFaultLabel } from '../components/SimulatedFaultLabel'
 import { StatusBadge } from '../components/StatusBadge'
@@ -33,10 +34,20 @@ export function EngineerScreen() {
   const { reportError } = useErrorContext()
   const engineer = useEngineerSession()
   const { send } = engineer
+  const { setScreen } = useScreen()
+  const [mode, setMode] = useState<'scenario' | 'fault'>('scenario')
 
   const [sessionIdInput, setSessionIdInput] = useState(driverSession?.id ?? '')
   const [scenarios, setScenarios] = useState<StressScenario[]>([])
   const [catalog, setCatalog] = useState<FaultType[]>([])
+
+  // Coming back from another tab: the driver's session (and whatever is armed on
+  // it) still lives on the server, so rejoin it instead of asking for the code again.
+  const { join: rejoin, joined } = engineer
+  useEffect(() => {
+    if (!joined && driverSession) void rejoin(driverSession.id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     listScenarios()
@@ -90,6 +101,17 @@ export function EngineerScreen() {
               </button>
             )}
           </form>
+          <div className="engineer-screen__warning">
+            <StatusBadge
+              tone={connected ? 'success' : engineer.joined ? 'warning' : 'neutral'}
+              label={connected ? 'Connected' : engineer.joined ? 'Connecting…' : 'Not joined'}
+            />
+            {engineer.joined && <StatusBadge tone="neutral" label={`Session ${engineer.joined.id}`} />}
+            {engineer.joined && (
+              <StatusBadge tone={engineer.sessionInfo?.driver_connected ? 'success' : 'warning'}
+                label={engineer.sessionInfo?.driver_connected ? 'Driver online' : 'Driver offline'} />
+            )}
+          </div>
           <SimulatedFaultLabel delayMs={v?.injected_delay_ms ?? 0} />
           <div className="engineer-screen__warning">
             {w.active && <StatusBadge tone="danger" label={`Driver sees BRAKE — ${w.hazardZone} (${w.source})`} />}
@@ -98,70 +120,78 @@ export function EngineerScreen() {
           </div>
         </Section>
 
-        <Section title="Link">
-          <LinkIndicators connection={engineer.connection} vehicleState={v} lastMessageAt={engineer.lastMessageAt} />
-        </Section>
-
-        <Section title="Run">
-          <RunInfo info={engineer.sessionInfo} />
-          <div className="engineer-screen__actions">
-            <button type="button" disabled={!connected} onClick={() => send({ type: 'pause' })}>
-              Pause
-            </button>
-            <button type="button" disabled={!connected} onClick={() => send({ type: 'resume' })}>
-              Resume
-            </button>
-          </div>
-        </Section>
-
-        <Section title="Stress scenario">
-          <HelpNote title="What is this screen? Read this first" open>
+        <Section title="1 · What do you want to break?">
+          <HelpNote title="How this screen works (30 seconds)" open={false}>
             <p>
-              You are the <b>engineer</b> at the pit wall. A driver is driving the car on the <b>Drive</b> tab (same session code).
-              Here you break things on purpose and watch whether the car&apos;s <b>brake warning system</b> still keeps it on the track.
+              You are the pit-wall <b>engineer</b>. The driver drives on the <b>Drive</b> tab. You inject failures and see whether the
+              car&apos;s brake-warning system still keeps the car on track.
             </p>
             <ol>
-              <li><b>Nothing runs automatically.</b> The car drives normally until you arm a scenario or add a fault.</li>
-              <li><b>Scenario</b> (first dropdown) = a ready-made bundle of faults, e.g. &quot;wet braking zone&quot;. Pick one and press <b>Arm scenario</b>: the driver&apos;s lap restarts from the scenario start and the faults switch on by themselves when the car reaches their trigger zone.</li>
-              <li><b>Add a fault</b> (second dropdown) = one single fault you build by hand (what breaks, how much, and where/when it starts). Use it to experiment on top of, or instead of, a scenario.</li>
-              <li>Watch <b>Faults (actual state)</b>: each fault goes waiting, active, then completed. <b>Reset experiment</b> puts everything back to the start.</li>
+              <li><b>Scenario</b> = a saved bundle of faults with a short story (recommended).</li>
+              <li><b>Single fault</b> = build one fault yourself (what breaks, how much, when).</li>
+              <li>Press <b>Arm &amp; go drive</b>. The lap restarts, you land on the Drive tab, and the fault switches on when you reach its trigger zone. Nothing else changes.</li>
+              <li>Come back here to see the fault turn <i>waiting</i>, <i>active</i>, <i>completed</i>, and watch the event log.</li>
             </ol>
+            <p>Want to watch live? Open a second browser tab on <b>/#engineer</b> and join with the code shown on the Drive screen.</p>
           </HelpNote>
-          <ScenarioPanel
-            scenarios={scenarios}
-            profile={engineer.trackProfile}
-            activeScenarioId={engineer.sessionInfo?.scenario_id ?? null}
-            disabled={!connected}
-            onArm={(id, overrides) => send({ type: 'arm_scenario', scenario_id: id, overrides })}
-            onCancel={() => send({ type: 'cancel_scenario' })}
-            onReset={() => send({ type: 'reset' })}
-          />
+          <div className="engineer-screen__tabs" role="tablist">
+            <button type="button" role="tab" aria-selected={mode === 'scenario'} className={mode === 'scenario' ? 'on' : ''} onClick={() => setMode('scenario')}>
+              Saved scenario
+            </button>
+            <button type="button" role="tab" aria-selected={mode === 'fault'} className={mode === 'fault' ? 'on' : ''} onClick={() => setMode('fault')}>
+              Single fault
+            </button>
+          </div>
+          {mode === 'scenario' ? (
+            <ScenarioPanel
+              scenarios={scenarios}
+              profile={engineer.trackProfile}
+              activeScenarioId={engineer.sessionInfo?.scenario_id ?? null}
+              disabled={!connected}
+              onArm={(id, overrides) => send({ type: 'arm_scenario', scenario_id: id, overrides })}
+              onArmAndDrive={(id, overrides) => {
+                send({ type: 'arm_scenario', scenario_id: id, overrides })
+                setScreen('drive')
+              }}
+              onCancel={() => send({ type: 'cancel_scenario' })}
+              onReset={() => send({ type: 'reset' })}
+            />
+          ) : (
+            <FaultBuilder catalog={catalog} profile={engineer.trackProfile} disabled={!connected}
+              onAdd={(fault) => send({ type: 'add_fault', fault })} />
+          )}
         </Section>
 
-        <Section title="Faults (actual state)">
+        <Section title="2 · What is happening now">
           <ActiveFaults
             faults={engineer.faultState?.faults ?? []}
             disabled={!connected}
             onCancel={(id) => send({ type: 'cancel_fault', fault_id: id })}
           />
-        </Section>
-
-        <Section title="Add a fault">
-          <FaultBuilder catalog={catalog} profile={engineer.trackProfile} disabled={!connected}
-            onAdd={(fault) => send({ type: 'add_fault', fault })} />
-        </Section>
-
-        <Section title="Fault timeline (this lap)">
           <FaultTimeline profile={engineer.trackProfile} events={engineer.faultEvents} carDistance={v?.distance_along_lap ?? 0} />
+          <div className="engineer-screen__actions">
+            <button type="button" disabled={!connected} onClick={() => send({ type: 'reset' })}>Reset run</button>
+            <button type="button" disabled={!connected} onClick={() => send({ type: 'pause' })}>Pause</button>
+            <button type="button" disabled={!connected} onClick={() => send({ type: 'resume' })}>Resume</button>
+          </div>
         </Section>
 
-        <Section title="TCN risk observer">
-          <TcnPanel status={engineer.sessionInfo?.tcn ?? null} vehicleState={v} />
-        </Section>
-
-        <Section title="Event log">
+        <Section title="3 · Evidence">
           <EventLog entries={engineer.eventLog} />
         </Section>
+
+        <details className="engineer-screen__more">
+          <summary>Connection, run details and AI risk model</summary>
+          <Section title="Link">
+            <LinkIndicators connection={engineer.connection} vehicleState={v} lastMessageAt={engineer.lastMessageAt} />
+          </Section>
+          <Section title="Run">
+            <RunInfo info={engineer.sessionInfo} />
+          </Section>
+          <Section title="TCN risk observer">
+            <TcnPanel status={engineer.sessionInfo?.tcn ?? null} vehicleState={v} />
+          </Section>
+        </details>
       </aside>
     </div>
   )

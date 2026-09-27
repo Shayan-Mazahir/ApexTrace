@@ -1,8 +1,10 @@
 import { useLayoutEffect, useMemo, useRef } from 'react'
-import { BufferAttribute, BufferGeometry, Color, DoubleSide, Object3D, type InstancedMesh, type Texture } from 'three'
+import { BufferAttribute, BufferGeometry, Color, DoubleSide, IcosahedronGeometry, Object3D, Vector3, type InstancedMesh, type Texture } from 'three'
 import type { TrackId, TrackProfile } from '../types/schemas'
 import {
   asphaltTexture,
+  barkTexture,
+  foliageTexture,
   crowdTexture,
   fenceTexture,
   grassTexture,
@@ -96,23 +98,52 @@ function TexturedStrip({ strip, map, colour = '#ffffff', transparent = false, ro
 }
 
 // offsets of the three foliage blobs relative to the crown centre
+// Crown clusters (offset in crown radii, size): three overlapping lumps give an
+// irregular canopy silhouette instead of a single ball.
 const BLOBS: [number, number, number, number][] = [
-  [0, 0, 0, 1],
-  [0.55, -0.35, 0.3, 0.78],
-  [-0.5, -0.25, -0.35, 0.72],
+  [0, 0.1, 0, 1],
+  [0.62, -0.28, 0.25, 0.72],
+  [-0.58, -0.22, -0.3, 0.7],
 ]
+
+// A lumpy, smooth-shaded foliage ball: an icosphere with vertices pushed in
+// and out by layered noise, and darker underneath (light barely reaches there).
+function makeCrownGeometry(): BufferGeometry {
+  const g = new IcosahedronGeometry(1, 2)
+  const pos = g.getAttribute('position')
+  const colors = new Float32Array(pos.count * 3)
+  const v = new Vector3()
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i)
+    const n =
+      Math.sin(v.x * 3.1 + v.y * 1.7) * Math.cos(v.z * 2.9 - v.x * 1.3) * 0.13 +
+      Math.sin(v.x * 7.3 + v.z * 5.1) * Math.cos(v.y * 6.7) * 0.07
+    v.multiplyScalar(1 + n)
+    v.y *= 0.88
+    pos.setXYZ(i, v.x, v.y, v.z)
+    const shade = 0.62 + 0.38 * Math.max(0, Math.min(1, (v.y + 0.9) / 1.6))
+    colors.set([shade, shade, shade], i * 3)
+  }
+  g.setAttribute('color', new BufferAttribute(colors, 3))
+  g.computeVertexNormals()
+  return g
+}
 
 function Trees({ items }: { items: Prop[] }) {
   const trunks = useRef<InstancedMesh>(null)
-  const crown0 = useRef<InstancedMesh>(null)
-  const crown1 = useRef<InstancedMesh>(null)
-  const crown2 = useRef<InstancedMesh>(null)
-  const crowns = [crown0, crown1, crown2]
+  const crownRefs = useRef<(InstancedMesh | null)[]>([])
+  const crownGeometry = useMemo(makeCrownGeometry, [])
+  const leaves = useMemo(() => {
+    const t = foliageTexture().clone()
+    t.repeat.set(3, 3)
+    t.needsUpdate = true
+    return t
+  }, [])
   const colours = useMemo(() => {
     const c = new Color()
     const out = new Float32Array(items.length * 3)
     items.forEach((p, i) => {
-      c.setHSL(0.25 + (p.rotation % 0.07), 0.42 + (p.scale - 0.7) * 0.2, 0.2 + (p.rotation % 0.3) * 0.25)
+      c.setHSL(0.24 + (p.rotation % 0.08), 0.45 + (p.scale - 0.7) * 0.15, 0.62 + (p.rotation % 0.3) * 0.25)
       out.set([c.r, c.g, c.b], i * 3)
     })
     return out
@@ -120,39 +151,46 @@ function Trees({ items }: { items: Prop[] }) {
 
   useLayoutEffect(() => {
     const o = new Object3D()
-    const refs = [crown0, crown1, crown2]
     items.forEach((p, i) => {
       const h = p.height * p.scale
-      o.position.set(p.x, h * 0.35, p.z)
+      o.position.set(p.x, h * 0.36, p.z)
       o.rotation.set(0, p.rotation, 0)
-      o.scale.set(p.scale, h * 0.7, p.scale)
+      o.scale.set(p.scale, h * 0.72, p.scale)
       o.updateMatrix()
       trunks.current?.setMatrixAt(i, o.matrix)
-      const r = 2.6 * p.scale + h * 0.18
+      const r = 2.7 * p.scale + h * 0.2
       BLOBS.forEach(([dx, dy, dz, s], k) => {
-        o.position.set(p.x + dx * r, h * 0.78 + dy * r, p.z + dz * r)
-        o.rotation.set(p.rotation, p.rotation * 2, 0)
-        o.scale.set(r * s, r * s * 0.9, r * s)
+        const c = Math.cos(p.rotation)
+        const sn = Math.sin(p.rotation)
+        o.position.set(p.x + (dx * c - dz * sn) * r, h * 0.8 + dy * r, p.z + (dx * sn + dz * c) * r)
+        o.rotation.set(0, p.rotation * 3 + k, 0)
+        o.scale.set(r * s, r * s, r * s)
         o.updateMatrix()
-        refs[k].current?.setMatrixAt(i, o.matrix)
+        crownRefs.current[k]?.setMatrixAt(i, o.matrix)
       })
     })
     if (trunks.current) trunks.current.instanceMatrix.needsUpdate = true
-    for (const c of refs) if (c.current) c.current.instanceMatrix.needsUpdate = true
+    for (const c of crownRefs.current) if (c) c.instanceMatrix.needsUpdate = true
   }, [items])
+
+  const bark = useMemo(() => {
+    const t = barkTexture().clone()
+    t.repeat.set(1, 3)
+    t.needsUpdate = true
+    return t
+  }, [])
 
   if (items.length === 0) return null
   return (
     <>
       <instancedMesh ref={trunks} args={[undefined, undefined, items.length]}>
-        <cylinderGeometry args={[0.18, 0.32, 1, 6]} />
-        <meshStandardMaterial color="#5a4330" roughness={1} />
+        <cylinderGeometry args={[0.14, 0.34, 1, 8]} />
+        <meshStandardMaterial map={bark} roughness={1} />
       </instancedMesh>
-      {crowns.map((ref, k) => (
-        <instancedMesh key={k} ref={ref} args={[undefined, undefined, items.length]}>
-          <icosahedronGeometry args={[1, 1]} />
+      {BLOBS.map((_, k) => (
+        <instancedMesh key={k} ref={(m) => { crownRefs.current[k] = m }} args={[crownGeometry, undefined, items.length]}>
           <instancedBufferAttribute attach="instanceColor" args={[colours, 3]} />
-          <meshStandardMaterial roughness={1} flatShading />
+          <meshStandardMaterial map={leaves} vertexColors roughness={0.95} />
         </instancedMesh>
       ))}
     </>

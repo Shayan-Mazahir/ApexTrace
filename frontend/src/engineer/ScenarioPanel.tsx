@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { SCENARIO_GUIDE } from './scenarioGuide'
 import type { ScenarioOverrides, StressScenario, TrackProfile } from '../types/schemas'
 import './ScenarioPanel.css'
 
@@ -8,13 +9,14 @@ interface ScenarioPanelProps {
   activeScenarioId: string | null
   disabled: boolean
   onArm: (id: string, overrides: ScenarioOverrides) => void
+  onArmAndDrive?: (id: string, overrides: ScenarioOverrides) => void
   onCancel: () => void
   onReset: () => void
 }
 
 const SOURCE_LABEL: Record<string, string> = { preset: 'Presets', sac: 'Discovered by SAC', random: 'Random search', manual: 'Manual' }
 
-export function ScenarioPanel({ scenarios, profile, activeScenarioId, disabled, onArm, onCancel, onReset }: ScenarioPanelProps) {
+export function ScenarioPanel({ scenarios, profile, activeScenarioId, disabled, onArm, onArmAndDrive, onCancel, onReset }: ScenarioPanelProps) {
   const forTrack = scenarios.filter((s) => s.track === profile?.id)
   const [selectedId, setSelectedId] = useState('')
   const selected = forTrack.find((s) => s.id === selectedId)
@@ -22,6 +24,11 @@ export function ScenarioPanel({ scenarios, profile, activeScenarioId, disabled, 
   const [severity, setSeverity] = useState(1)
   const [duration, setDuration] = useState('')
   const [seed, setSeed] = useState('')
+
+  // returning to this screen: show the scenario the session already has armed
+  useEffect(() => {
+    if (activeScenarioId && forTrack.some((x) => x.id === activeScenarioId)) setSelectedId((cur) => cur || activeScenarioId)
+  }, [activeScenarioId, forTrack])
 
   useEffect(() => {
     setZone('')
@@ -38,14 +45,16 @@ export function ScenarioPanel({ scenarios, profile, activeScenarioId, disabled, 
     }, {}),
   )
 
-  const arm = () => {
-    if (!selected) return
+  const overridesNow = (): ScenarioOverrides => {
     const overrides: ScenarioOverrides = { severity }
     if (zone) overrides.zone_id = zone
     if (duration) overrides.duration_s = Number(duration)
     if (seed) overrides.seed = Number(seed)
-    onArm(selected.id, overrides)
+    return overrides
   }
+  const arm = () => selected && onArm(selected.id, overridesNow())
+  const armAndDrive = () => selected && onArmAndDrive?.(selected.id, overridesNow())
+  const guide = selected ? SCENARIO_GUIDE[selected.id] : undefined
 
   return (
     <div className="scenario-panel">
@@ -67,7 +76,14 @@ export function ScenarioPanel({ scenarios, profile, activeScenarioId, disabled, 
 
       {selected && (
         <>
-          <p className="scenario-panel__description">{selected.description}</p>
+          {guide ? (
+            <div className="scenario-panel__guide">
+              <p><b>What happens:</b> {guide.story}</p>
+              <p><b>What to watch:</b> {guide.watch}</p>
+            </div>
+          ) : (
+            <p className="scenario-panel__description">{selected.description}</p>
+          )}
           <ul className="scenario-panel__faults">
             {selected.faults.map((f) => (
               <li key={f.id}>
@@ -108,8 +124,13 @@ export function ScenarioPanel({ scenarios, profile, activeScenarioId, disabled, 
       )}
 
       <div className="scenario-panel__actions">
+        {onArmAndDrive && (
+          <button type="button" className="scenario-panel__primary" disabled={disabled || !selected} onClick={armAndDrive}>
+            Arm &amp; go drive
+          </button>
+        )}
         <button type="button" disabled={disabled || !selected} onClick={arm}>
-          Arm scenario
+          Arm only
         </button>
         <button type="button" disabled={disabled || !activeScenarioId} onClick={onCancel}>
           Cancel scenario
@@ -118,10 +139,14 @@ export function ScenarioPanel({ scenarios, profile, activeScenarioId, disabled, 
           Reset experiment
         </button>
       </div>
-      <p className="scenario-panel__note">
-        Arming restarts the run from the scenario&apos;s start with its seed. Faults then wait for their own triggers —
-        arming does not switch them all on.
-      </p>
+      {activeScenarioId ? (
+        <p className="scenario-panel__armed">Armed on this session: <b>{selected?.name ?? activeScenarioId}</b>. Go to the Drive tab and drive; faults switch on at their triggers.</p>
+      ) : (
+        <p className="scenario-panel__note">
+          Arming restarts the driver&apos;s lap from the scenario&apos;s start with its seed. Faults then wait for their own
+          triggers, so arming does not switch them all on at once.
+        </p>
+      )}
     </div>
   )
 }
