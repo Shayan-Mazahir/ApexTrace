@@ -1,4 +1,5 @@
 import type {
+  CarSetupConfig,
   FaultType,
   StressScenario,
   SessionCreateResponse,
@@ -24,11 +25,12 @@ export async function createSession(
   role: SessionRole = 'driver',
   seed?: number,
   upgrades?: UpgradeConfig,
+  setup?: CarSetupConfig,
 ): Promise<SessionCreateResponse> {
   const response = await fetch(`${API_BASE_URL}/sessions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ track, role, seed, upgrades }),
+    body: JSON.stringify({ track, role, seed, upgrades, setup }),
   })
   if (!response.ok) {
     throw new Error(`Failed to create session: ${response.status}`)

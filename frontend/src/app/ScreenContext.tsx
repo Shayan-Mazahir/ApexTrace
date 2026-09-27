@@ -1,8 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 
-export type Screen = 'drive' | 'engineer' | 'garage' | 'compare'
+export type Screen = 'home' | 'drive' | 'engineer' | 'garage' | 'compare'
 
-export const SCREENS: Screen[] = ['drive', 'engineer', 'garage', 'compare']
+export const SCREENS: Screen[] = ['home', 'drive', 'engineer', 'garage', 'compare']
 
 interface ScreenContextValue {
   screen: Screen
@@ -18,7 +18,7 @@ export function screenFromHash(hash: string): Screen | null {
 
 // The hash mirrors the current screen so a reload (or a shared link) lands on it.
 export function ScreenProvider({ children }: { children: ReactNode }) {
-  const [screen, setScreenState] = useState<Screen>(() => screenFromHash(window.location.hash) ?? 'drive')
+  const [screen, setScreenState] = useState<Screen>(() => screenFromHash(window.location.hash) ?? 'home')
 
   const setScreen = useCallback((next: Screen) => {
     setScreenState(next)

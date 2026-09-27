@@ -108,3 +108,15 @@
   color: var(--color-neutral);
   text-align: center;
 }
+
+.track-picker__setup {
+  padding: 10px 16px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.track-picker__setup:hover { border-color: #fde047; color: #fde047; }

@@ -49,7 +49,8 @@ async def run_evaluation(kind: str = "heldout") -> dict[str, Any]:
 async def run_replay(body: ReplayRequest) -> dict[str, Any]:
     if evaluation.find_test(body.test_id) is None:
         raise HTTPException(status_code=404, detail="unknown test id")
-    result = await asyncio.to_thread(evaluation.replay, body.test_id, body.baseline, body.upgraded)
+    # shallow copy: the cached replay is shared between requests
+    result = dict(await asyncio.to_thread(evaluation.replay, body.test_id, body.baseline, body.upgraded))
     from app.ml import risk
 
     risk.annotate_replay(result)

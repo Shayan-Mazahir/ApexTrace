@@ -197,9 +197,9 @@ def _pure_pursuit(state, profile, lookahead_m=10.0):
     dx, dy = tx - state.x, ty - state.y
     alpha = _wrap_angle(math.atan2(dy, dx) - state.heading)
     wanted = 2 * math.sin(alpha) / max(math.hypot(dx, dy), 1.0)
-    from app.placeholder_sim import G_LAT, MAX_CURVATURE
-    capacity = min(MAX_CURVATURE, G_LAT / max(state.speed**2, 1.0))
-    return max(-1.0, min(1.0, wanted / capacity))
+    from app.f1_car import steering_for_curvature
+
+    return steering_for_curvature(state.speed, wanted)
 
 
 def test_pure_pursuit_at_a_safe_speed_completes_clean_laps_and_times_them():
@@ -248,12 +248,22 @@ def test_grip_loss_lowers_the_speed_a_corner_can_be_taken_at():
     assert abs(wet.heading) < abs(full.heading)
 
 
-def test_full_braking_reduces_cornering_grip():
+def test_braking_shares_grip_with_cornering_but_the_car_still_turns():
     profile = TRACK_PRESETS["monza"]
-    state = DemoVehicleState(speed=40.0)
-    coasting = step(state, 1.0, 0.0, 0.0, 0.05, profile)
-    braking = step(state, 1.0, 0.0, 1.0, 0.05, profile)
-    assert abs(braking.heading) < abs(coasting.heading)
+
+    def run(brake):
+        s = DemoVehicleState(speed=40.0)
+        lat = []
+        for _ in range(20):  # 1 s at full lock
+            s = step(s, 1.0, 0.0, brake, 0.05, profile)
+            lat.append(abs(s.ay))
+        return s, sum(lat) / len(lat)
+
+    coast, coast_lat = run(0.0)
+    brake, brake_lat = run(1.0)
+    assert brake_lat < coast_lat  # friction ellipse: braking leaves less grip for turning
+    assert math.degrees(abs(brake.heading)) > 20  # but ABS keeps the car steerable (no straight-on plough)
+    assert brake.speed < coast.speed
 
 
 def test_grip_loss_also_limits_braking():
@@ -320,3 +330,66 @@ def test_windowed_nearest_matches_full_scan_along_a_lap():
         assert math.hypot(x - centerline[hint][0], y - centerline[hint][1]) == math.hypot(
             x - centerline[full][0], y - centerline[full][1]
         )
+
+
+def test_after_hitting_a_barrier_holding_brake_reverses_the_car_away():
+    import math
+    from dataclasses import replace
+
+    from app import placeholder_sim as ps
+
+    prof = ps.TRACK_PRESETS["monza"]
+    cx, cy = prof.centerline[20]
+    lx, ly = prof.left_edge[20]
+    nx, ny = lx - cx, ly - cy
+    norm = math.hypot(nx, ny)
+    s = replace(ps.initial_state(prof), x=cx, y=cy, heading=math.atan2(ny, nx), speed=30.0,
+                nearest_point_index=20, gear=4)
+    for _ in range(80):
+        s = ps.step(s, 0.0, 1.0, 0.0, 0.05, prof)
+    assert s.in_contact and s.speed == 0.0
+    hit = (s.x, s.y)
+    for _ in range(40):  # 2 s on the brake pedal
+        s = ps.step(s, 0.0, 0.0, 1.0, 0.05, prof)
+    assert s.gear == -1 and s.speed < 0
+    assert math.hypot(s.x - hit[0], s.y - hit[1]) > 2.0  # it actually backed away from the wall
+    assert not s.in_contact
+    for _ in range(80):  # throttle stops the car, then selects drive again
+        s = ps.step(s, 0.0, 0.6, 0.0, 0.05, prof)
+    assert s.gear >= 1
+
+
+def _offset_state(profile, lateral, speed=60.0, index=0):
+    """A car `lateral` metres left of the centreline at sample `index`, heading along it."""
+    line = profile.centerline
+    (x0, y0), (x1, y1) = line[index], line[index + 1]
+    heading = math.atan2(y1 - y0, x1 - x0)
+    return DemoVehicleState(x=x0 - math.sin(heading) * lateral, y=y0 + math.cos(heading) * lateral,
+                            heading=heading, speed=speed, nearest_point_index=index,
+                            distance_along_lap=index * profile.total_length / len(line),
+                            off_track=True, track_exit=True, track_exits=1)
+
+
+def test_surface_matches_what_is_drawn_beside_the_line():
+    from app.placeholder_sim import CAR_HALF_WIDTH, KERB_WIDTH_M, surface_at
+
+    monza, baku = TRACK_PRESETS["monza"], TRACK_PRESETS["baku"]
+    corner = monza.hazard_zones[0].start_distance + 5
+    straight = monza.hazard_zones[0].start_distance - 200
+    assert surface_at(0.5, corner, monza) == "track"
+    assert surface_at(-(KERB_WIDTH_M + CAR_HALF_WIDTH) + 0.1, corner, monza) == "kerb"
+    assert surface_at(-1.0, straight, monza) == "runoff"  # no kerbs on straights
+    assert surface_at(-6.0, straight, monza) == "grass"  # past Monza's 4 m of asphalt
+    assert surface_at(-baku.barrier_offset - 0.5, 10.0, baku) == "runoff"  # Baku is paved to the wall
+
+
+def test_runoff_keeps_more_speed_than_grass():
+    profile = TRACK_PRESETS["monza"]
+    straight = int(len(profile.centerline) * (profile.hazard_zones[0].start_distance - 250) / profile.total_length)
+    half = profile.track_width / 2
+    paved = _offset_state(profile, half + 1.0, index=straight)
+    grass = _offset_state(profile, half + 7.0, index=straight)
+    for _ in range(10):
+        paved = step(paved, 0.0, 0.0, 0.0, 0.1, profile)
+        grass = step(grass, 0.0, 0.0, 0.0, 0.1, profile)
+    assert paved.speed > grass.speed + 10

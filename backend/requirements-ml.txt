@@ -4,3 +4,5 @@ torch==2.5.1
 numpy<2.2
 gymnasium==1.0.0
 stable-baselines3==2.4.0
+# TPE fallback for the lap simulator scenario search (app/ai/search/tpe.py).
+optuna==5.0.0

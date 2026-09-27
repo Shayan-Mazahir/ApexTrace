@@ -28,3 +28,6 @@
   color: var(--color-white);
   text-align: right;
 }
+
+.link-indicators__key { margin: 6px 0 8px; font-size: 12px; line-height: 1.5; color: #b9c0cb; }
+.link-indicators__key b { color: #f3f4f6; }

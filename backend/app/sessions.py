@@ -77,6 +77,7 @@ def create_session(body: SessionCreateRequest) -> SessionCreateResponse:
         track_profile=track_profile,
         seed=seed,
         upgrades=body.upgrades,
+        setup=body.setup,
     )
     SESSIONS[session_id] = session
     return SessionCreateResponse(

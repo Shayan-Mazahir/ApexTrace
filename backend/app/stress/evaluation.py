@@ -14,13 +14,18 @@ Headless evaluation on the shared StressRun engine.
 from __future__ import annotations
 
 import math
+import os
 import random
+import threading
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
+from app import result_cache
 from app.budget import config_label, enumerate_configs
-from app.placeholder_sim import G_LAT, MAX_CURVATURE, TRACK_PRESETS, DemoVehicleState, loop_size, signed_clearance
+from app.worker_guard import exit_with_parent
+from app.f1_car import max_lateral_accel, steering_for_curvature
+from app.placeholder_sim import TRACK_PRESETS, DemoVehicleState, loop_size, signed_clearance
 from app.schemas import UpgradeConfig, UpgradeOption
 from app.stress.run import TICK_DT, RunConfig, StressRun
 from app.stress.spec import DriverConfig, StartConfig, StressScenario
@@ -76,15 +81,18 @@ class ScriptedDriver:
         dx, dy = tx - v.x, ty - v.y
         alpha = (math.atan2(dy, dx) - v.heading + math.pi) % (2 * math.pi) - math.pi
         wanted = 2 * math.sin(alpha) / max(math.hypot(dx, dy), 1.0)
-        capacity = min(MAX_CURVATURE, G_LAT / max(v.speed**2, 1.0))
-        steering = max(-1.0, min(1.0, wanted / capacity))
+        steering = steering_for_curvature(v.speed, wanted)
+        # Throttle and cornering share the rear tyres' grip: feed the power in
+        # as the corner opens up instead of flooring it at the apex.
+        lateral_use = min(1.0, v.speed * v.speed * abs(wanted) / max_lateral_accel(v.speed))
+        power = 0.8 * max(0.1, 1.0 - lateral_use**2)
 
         error = target - v.speed
         if error < -0.3:
             return steering, 0.0, max_brake
         if error > 0.3:
-            return steering, 0.8, 0.0
-        return steering, 0.3, 0.0
+            return steering, power, 0.0
+        return steering, min(power, 0.3), 0.0
 
 
 @dataclass
@@ -151,6 +159,7 @@ def run_scenario(
     completed = summary["lap_complete"] or (scenario.segment_length_m is not None and not summary["track_exit"])
     passed = (not summary["track_exit"]) and completed and (summary["min_clearance_m"] or 0) >= MIN_CLEARANCE_M
     result = {
+        "exit_reason": ("hit the barrier" if summary.get("barrier_contacts") else "left the track") if summary["track_exit"] else None,
         "test_id": test_id or scenario.id,
         "scenario_id": scenario.id,
         "track": scenario.track,
@@ -252,6 +261,14 @@ SUITE_GROUPS: dict[str, dict[str, Any]] = {
 }
 
 
+def _low_priority() -> None:
+    exit_with_parent()  # don't keep evaluating if the server is killed mid-run
+    try:
+        os.nice(10)
+    except OSError:
+        pass
+
+
 def _eval_config(args: tuple[dict, str]) -> dict[str, Any]:
     option_dict, kind = args
     option = UpgradeOption.model_validate(option_dict)
@@ -282,14 +299,26 @@ _CACHE: dict[str, dict[str, Any]] = {}
 
 def evaluate_all(kind: str = "heldout", use_cache: bool = True, parallel: bool = True) -> dict[str, Any]:
     """Every upgrade combination on every test of the suite, then aggregated
-    per suite group. Deterministic, so cached."""
+    per suite group. Deterministic, so cached in memory and on disk (a
+    restart reads the stored suite instead of re-running ~340 laps)."""
     if use_cache and kind in _CACHE:
         return _CACHE[kind]
+    if not use_cache:
+        return _evaluate_all(kind, parallel)
+    response = result_cache.cached("evaluation", {"kind": kind}, lambda: _evaluate_all(kind, parallel))
+    _CACHE[kind] = response
+    return response
+
+
+def _evaluate_all(kind: str, parallel: bool) -> dict[str, Any]:
     jobs = [(o.model_dump(), kind) for o in enumerate_configs()]
     raw = None
     if parallel:
         try:
-            with ProcessPoolExecutor() as pool:
+            # leave two cores free and run at low priority, so a live driving
+            # session (and the browser) stay smooth while the suite runs
+            workers = max(1, (os.cpu_count() or 4) - 2)
+            with ProcessPoolExecutor(max_workers=workers, initializer=_low_priority) as pool:
                 raw = list(pool.map(_eval_config, jobs))
         except Exception:
             raw = None
@@ -297,18 +326,25 @@ def evaluate_all(kind: str = "heldout", use_cache: bool = True, parallel: bool =
         raw = [_eval_config(j) for j in jobs]
     scenario_of = {tid: s.id for tid, s in SUITES[kind]}
     groups = {}
+    passed_by_any = {t["test_id"] for r in raw for t in r["tests"] if t["passed"]}
     for gid, g in SUITE_GROUPS.items():
         fams = g["families"]
         keep = [tid for tid, _ in SUITES[kind] if fams is None or scenario_of[tid] in fams]
+        # Tests that fail for EVERY configuration: no upgrade on offer changes them,
+        # so they cannot inform the purchase. Computed from the results, not hand-picked.
+        unsolved = [tid for tid in keep if tid not in passed_by_any]
+        configs = [aggregate(r["option"], [t for t in r["tests"] if t["test_id"] in keep]) for r in raw]
+        for c in configs:
+            c["passed_solvable"] = all(t["passed"] for t in c["tests"] if t["test_id"] not in unsolved)
+            c["solvable_passed_count"] = sum(t["passed"] for t in c["tests"] if t["test_id"] not in unsolved)
         groups[gid] = {
             "label": g["label"],
             "test_ids": keep,
-            "configs": [aggregate(r["option"], [t for t in r["tests"] if t["test_id"] in keep]) for r in raw],
+            "unsolved_test_ids": unsolved,
+            "solvable_count": len(keep) - len(unsolved),
+            "configs": configs,
         }
-    response = {"suite": suite_info(kind), "groups": groups, "configs": groups["full"]["configs"]}
-    if use_cache:
-        _CACHE[kind] = response
-    return response
+    return {"suite": suite_info(kind), "groups": groups, "configs": groups["full"]["configs"]}
 
 
 def find_test(test_id: str) -> StressScenario | None:
@@ -320,9 +356,23 @@ def find_test(test_id: str) -> StressScenario | None:
 
 
 def replay(test_id: str, baseline: UpgradeConfig, upgraded: UpgradeConfig) -> dict[str, Any]:
-    scenario = find_test(test_id)
-    if scenario is None:
+    """Baseline vs upgraded run of one suite test, with 10 Hz frames. Deterministic
+    (the TCN overlay too, when its models load), so cached in memory and on disk."""
+    if find_test(test_id) is None:
         raise KeyError(test_id)
+    return result_cache.cached("replay", _replay_key(test_id, baseline, upgraded),
+                               lambda: _replay(test_id, baseline, upgraded))
+
+
+def _replay_key(test_id: str, baseline: UpgradeConfig, upgraded: UpgradeConfig) -> dict[str, Any]:
+    from app.ml import risk
+
+    return {"test_id": test_id, "baseline": baseline.model_dump(mode="json"),
+            "upgraded": upgraded.model_dump(mode="json"), "tcn": risk.status()["available"]}
+
+
+def _replay(test_id: str, baseline: UpgradeConfig, upgraded: UpgradeConfig) -> dict[str, Any]:
+    scenario = find_test(test_id)
     from app.ml import risk
     from app.ml.features import vector
 
@@ -364,3 +414,65 @@ def paired(scenario: StressScenario, upgrade: UpgradeConfig) -> dict[str, Any]:
         out = run_scenario(s, cfg, test_id=f"{scenario.id}:{key}")
         rows.append({"key": key, "label": label, "upgrades": cfg.model_dump(), "result": out.result})
     return {"scenario_id": scenario.id, "scenario_name": scenario.name, "seed": scenario.seed, "rows": rows}
+
+
+# --------------------------------------------------------------------------
+# replay pre-warming
+
+
+def default_test(baseline: list[dict[str, Any]], upgraded: list[dict[str, Any]]) -> str | None:
+    """The test the Compare screen opens first (mirrors pickDefaultTest in
+    frontend/src/compare/compareLogic.ts): the tightest test the upgrade fixes,
+    else the tightest baseline failure, else the tightest test overall."""
+    def tightest(tests: list[dict[str, Any]]) -> str:
+        return min(tests, key=lambda t: t["min_clearance_m"])["test_id"]
+
+    if not baseline:
+        return None
+    passed_upgraded = {t["test_id"] for t in upgraded if t["passed"]}
+    fixed = [t for t in baseline if not t["passed"] and t["test_id"] in passed_upgraded]
+    failed = [t for t in baseline if not t["passed"]]
+    return tightest(fixed or failed or baseline)
+
+
+def replay_warm_order(kind: str = "heldout") -> list[tuple[str, dict[str, Any]]]:
+    """Every (test, upgrade set) the Compare screen can ask for (always against
+    no upgrades), most likely first: each set's default test, then the tests
+    the baseline fails, then the rest."""
+    configs = evaluate_all(kind)["configs"]
+    base = next(c for c in configs if not any(c["upgrades"].values()))
+    others = [c for c in configs if c is not base]
+    failing = sorted(base["tests"], key=lambda t: (t["passed"], t["min_clearance_m"]))
+    ordered = [(default_test(base["tests"], c["tests"]), c["upgrades"]) for c in others]
+    ordered += [(t["test_id"], c["upgrades"]) for t in failing for c in others]
+    seen, jobs = set(), []
+    for test_id, upgrades in ordered:
+        mark = (test_id, tuple(sorted(upgrades.items())))
+        if test_id is not None and mark not in seen:
+            seen.add(mark)
+            jobs.append((test_id, upgrades))
+    return jobs
+
+
+def _warm_replay(job: tuple[str, dict[str, Any]]) -> None:
+    test_id, upgrades = job
+    replay(test_id, UpgradeConfig(), UpgradeConfig.model_validate(upgrades))  # stored on disk by the cache
+
+
+def prewarm_replays(kind: str = "heldout", stop: threading.Event | None = None) -> int:
+    """Compute and store every Compare replay not yet cached, one at a time in a
+    single low-priority worker process (a thread here would compete with live
+    sessions for the GIL). Checks `stop` between replays; returns how many ran."""
+    if not result_cache.enabled() or os.environ.get("LIMITLAB_PREWARM", "1") == "0":
+        return 0
+    jobs = [(tid, up) for tid, up in replay_warm_order(kind)
+            if not result_cache.contains("replay", _replay_key(tid, UpgradeConfig(), UpgradeConfig.model_validate(up)))]
+    done = 0
+    if jobs:
+        with ProcessPoolExecutor(max_workers=1, initializer=_low_priority) as pool:
+            for job in jobs:
+                if stop is not None and stop.is_set():
+                    break
+                pool.submit(_warm_replay, job).result()
+                done += 1
+    return done

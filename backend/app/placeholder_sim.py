@@ -14,36 +14,38 @@ closure; the seam can have a heading kink — fine for a low-poly demo).
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
+from app import f1_car
 from app.barriers import constrain_motion
+from app.f1_car import CarSetup, CarState, DriverRequests
 from app.schemas import HazardKind, HazardZone, Sector, TrackId, TrackProfile
 from app.track_layouts import LAYOUTS, Layout
 
 SAMPLE_STEP = 4.0  # meters between resampled centerline points
 
-# Toy F1-ish numbers (not a real car model): ~317 km/h top speed, ~4 g
-# braking, ~3.5 g lateral grip, quadratic drag so the car pulls hard at low
-# speed and tops out at MAX_SPEED.
-MAX_SPEED = 88.0
-ACCEL = 12.0
-BRAKE_DECEL = 40.0
-DRAG = 12.0
-# Bicycle-model-ish: yaw rate = steering * curvature * speed. Curvature is
-# capped by the steering lock (MAX_CURVATURE) and by grip: lateral accel
-# v^2 * curvature can't exceed grip * G_LAT. So every corner has a real speed
-# limit, and braking (or not) before it decides whether the car stays on.
-MAX_CURVATURE = 1 / 8.0
-G_LAT = 35.0
-# Combined grip: braking uses up cornering grip (friction ellipse). At full
-# braking 1 - COMBINED_GRIP of the lateral grip squared is gone, so a late
-# brake into a corner makes the car run wide — which is what late warnings
-# should cost. Kept below 1 so a keyboard driver can still trail-brake.
-COMBINED_GRIP = 0.85
-# Off the track (runoff/grass): no grip for power, heavy drag, speed capped.
+# Vehicle dynamics live in app/f1_car.py (2026-spec bicycle model with tyre
+# slip, downforce, power unit and gearbox). The constants below are derived
+# summaries used by corner detection and the warning system.
+MAX_SPEED = f1_car.top_speed_estimate(drs_open=True)  # ~343 km/h in X-mode
+# Representative full-braking deceleration of the new car (~3.3 g averaged
+# over a typical stop; the real value is speed dependent, see
+# f1_car.braking_decel). The baseline warning assumes this for healthy brakes.
+BRAKE_DECEL = 32.0
+# Off the track (grass): less grip and power, heavy drag above a crawl.
 RUNOFF_MAX_SPEED = 22.0
 RUNOFF_DECEL = 18.0
-CAR_HALF_WIDTH = 1.0
+# What is actually beside the edge line, matching what the Drive screen draws
+# (frontend TrackScenery): kerbs 1.4 m wide at corners (within 20 m of a
+# hazard zone), then paved runoff (Monza: 4 m of asphalt; Baku: paving right up
+# to the wall), then grass. Before, anything past the line drove like grass,
+# so putting two wheels on a kerb halved the grip.
+KERB_WIDTH_M = 1.4
+KERB_PAD_M = 20.0
+PAVED_RUNOFF_M = {"monza": 4.0}  # tracks not listed are paved to the barrier
+# (grip, power) multipliers per surface; grass also gets RUNOFF drag.
+SURFACE_GRIP = {"track": (1.0, 1.0), "kerb": (0.93, 1.0), "runoff": (0.8, 0.9), "grass": (0.5, 0.35)}
+CAR_HALF_WIDTH = 0.95  # 2026 car: 1.9 m wide
 
 # Corner detection from the smoothed centerline.
 HAZARD_RADIUS_M = 260.0  # tighter than this counts as a corner
@@ -202,7 +204,7 @@ def build_profile_from_layout(layout: Layout, seed: int = 1, sector_count: int =
     for lo, hi in runs:
         seg_curv = curv[lo : hi + 1]
         min_radius = 1 / max(abs(c) for c in seg_curv)
-        corner_speed = min(MAX_SPEED, math.sqrt(G_LAT * min_radius))
+        corner_speed = f1_car.corner_speed_for_radius(min_radius, cap=MAX_SPEED)
         if corner_speed >= MAX_SPEED * 0.97:
             continue  # flat-out kink, not a braking corner
         names = [w.corner for i, w in marker_index if w.corner and lo - 6 <= i <= hi + 6]
@@ -303,8 +305,16 @@ def _distance_to_segment(px: float, py: float, a: tuple[float, float], b: tuple[
     return math.hypot(px - (a[0] + t * abx), py - (a[1] + t * aby))
 
 
+def half_width_at(idx: int, profile: TrackProfile) -> float:
+    """Local half width from the drawn edges. `track_width` is the nominal
+    width only; Baku's castle section narrows to 7.6 m."""
+    n = loop_size(profile.centerline)
+    (cx, cy), (lx, ly) = profile.centerline[idx % n], profile.left_edge[idx % n]
+    return math.hypot(lx - cx, ly - cy)
+
+
 def _clearance_at_index(x: float, y: float, idx: int, profile: TrackProfile) -> float:
-    """Half the track width minus the distance to the centerline *polyline*
+    """Local half width minus the distance to the centerline *polyline*
     (the two segments touching the nearest sample), not just the nearest
     sample point — sample spacing is as large as the clearances we report."""
     line = profile.centerline
@@ -314,7 +324,7 @@ def _clearance_at_index(x: float, y: float, idx: int, profile: TrackProfile) -> 
         _distance_to_segment(x, y, line[(idx - 1) % n], here),
         _distance_to_segment(x, y, here, line[(idx + 1) % n]),
     )
-    return profile.track_width / 2 - distance
+    return half_width_at(idx, profile) - distance
 
 
 def signed_lateral(x: float, y: float, idx: int, profile: TrackProfile) -> float:
@@ -446,9 +456,32 @@ class DemoVehicleState:
     lap_time: float = 0.0
     last_lap_time: float | None = None
     best_lap_time: float | None = None
-    lap_clean: bool = True  # current lap has no track exit
+    lap_clean: bool = True  # current lap within track limits (see step)
+    last_lap_valid: bool | None = None
     barrier_contacts: int = 0
     in_contact: bool = False
+    # vehicle dynamics (app/f1_car.py)
+    vy: float = 0.0
+    yaw_rate: float = 0.0
+    gear: int = 0
+    rpm: float = 4_000.0
+    battery: float = f1_car.CAR.battery_capacity
+    drs_open: bool = False
+    drs_available: bool = False
+    tc_cut: float = 0.0
+    wheelspin: bool = False
+    front_lock: bool = False
+    rear_lock: bool = False
+    ax: float = 0.0
+    ay: float = 0.0
+    ers_deploy_kw: float = 0.0
+    stop_hold: float = 0.0
+    brake_reverse: bool = False
+
+    def car_state(self) -> CarState:
+        return CarState(vx=self.speed, vy=self.vy, yaw_rate=self.yaw_rate, gear=self.gear, rpm=self.rpm,
+                        battery=self.battery, drs_open=self.drs_open, ax=self.ax, ay=self.ay,
+                        stop_hold=self.stop_hold, brake_reverse=self.brake_reverse)
 
 
 def start_heading(profile: TrackProfile) -> float:
@@ -468,6 +501,35 @@ def initial_state(profile: TrackProfile, lateral_offset: float = 0.0) -> DemoVeh
     )
 
 
+def on_straight(distance_along_lap: float, profile: TrackProfile, clearance_m: float = 100.0) -> bool:
+    """True away from every corner zone: X-mode (low-drag aero) may open here."""
+    d = distance_along_lap % profile.total_length
+    for h in profile.hazard_zones:
+        if h.start_distance - clearance_m <= d <= h.end_distance:
+            return False
+        if (h.start_distance - d) % profile.total_length <= clearance_m:
+            return False
+    return True
+
+
+def surface_at(clearance: float, distance_along_lap: float, profile: TrackProfile) -> str:
+    """The surface under the car, from its centre's clearance to the edge line.
+
+    Only used for how the car drives off the line: whether it has *left the
+    track* (the safety metric) is still decided by the edge line alone."""
+    if clearance >= 0:
+        return "track"
+    depth = -clearance
+    d = distance_along_lap % profile.total_length
+    at_corner = any(h.start_distance - KERB_PAD_M <= d <= h.end_distance + KERB_PAD_M for h in profile.hazard_zones)
+    # the car is on the kerb while its inner wheels are (centre within half a car of the kerb's outer edge)
+    if at_corner and depth < KERB_WIDTH_M + CAR_HALF_WIDTH:
+        return "kerb"
+    if depth < PAVED_RUNOFF_M.get(profile.id, profile.barrier_offset) + CAR_HALF_WIDTH:
+        return "runoff"
+    return "grass"
+
+
 def step(
     state: DemoVehicleState,
     steering: float,
@@ -477,25 +539,32 @@ def step(
     profile: TrackProfile,
     grip: float = 1.0,
     brake_wear: float = 1.0,
+    setup: CarSetup = f1_car.DEFAULT_SETUP,
+    requests: DriverRequests = f1_car.NO_REQUESTS,
 ) -> DemoVehicleState:
     """One tick. Leaving the track is recorded (off_track / track_exit /
     track_exits) but never freezes the car: runoff slows it and the driver can
-    rejoin. Laps keep counting; the evaluation stops a run at the first exit."""
-    surface_grip = grip * (0.5 if state.off_track else 1.0)
-    power = throttle * ACCEL * (0.35 if state.off_track else 1.0)
-    drag = DRAG * (state.speed / MAX_SPEED) ** 2
-    if state.off_track and state.speed > RUNOFF_MAX_SPEED:
-        drag += RUNOFF_DECEL
-    brake_limit = surface_grip * BRAKE_DECEL  # tyres, not just the brakes, cap braking
-    braking = min(brake * BRAKE_DECEL * brake_wear, brake_limit)
-    accel = power - braking - drag
-    speed = max(0.0, min(MAX_SPEED, state.speed + accel * dt))
-    used = braking / brake_limit if brake_limit > 0 else 0.0
-    lateral_grip = surface_grip * G_LAT * math.sqrt(max(0.0, 1.0 - COMBINED_GRIP * used * used))
-    curvature = min(MAX_CURVATURE, lateral_grip / max(speed * speed, 1.0))
-    heading = state.heading + steering * curvature * speed * dt
-    x = state.x + math.cos(heading) * speed * dt
-    y = state.y + math.sin(heading) * speed * dt
+    rejoin. Laps keep counting; the evaluation stops a run at the first exit.
+
+    Laps are timed against track limits: a lap is invalid (and cannot set a
+    best time) once the whole car is past an edge line or touches a barrier."""
+    offroad = state.off_track
+    surface = surface_at(_clearance_at_index(state.x, state.y, state.nearest_point_index, profile),
+                         state.distance_along_lap, profile) if offroad else "track"
+    grip_scale, power_scale = SURFACE_GRIP[surface]
+    car, heading, dx, dy = f1_car.step_car(
+        state.car_state(), state.heading, steering, throttle, brake, dt,
+        grip=grip * grip_scale,
+        brake_scale=brake_wear,
+        power_scale=power_scale,
+        offroad_drag=RUNOFF_DECEL * f1_car.CAR.mass if surface == "grass" and state.speed > RUNOFF_MAX_SPEED else 0.0,
+        setup=setup,
+        requests=requests,
+        drs_allowed=on_straight(state.distance_along_lap, profile) and state.speed > 30.0 and not offroad,
+    )
+    speed = car.vx
+    x = state.x + dx
+    y = state.y + dy
 
     line = profile.centerline
     n = loop_size(line)
@@ -510,6 +579,7 @@ def step(
     barrier_contacts = state.barrier_contacts
     if in_contact:
         speed = 0.0
+        car = replace(car, vx=0.0, vy=0.0, yaw_rate=0.0, ax=0.0, ay=0.0)
         if not state.in_contact:
             barrier_contacts += 1
         idx = nearest_index(x, y, line, hint=state.nearest_point_index)
@@ -528,18 +598,22 @@ def step(
     distance_along_lap = state.distance_along_lap + delta_idx * sample_step
 
     newly_off = off_track and not state.off_track
+    # Track limits: the lap only counts if some part of the car stays on the
+    # track (F1 rule), so running a wheel or two wide does not void it.
+    beyond_limits = _clearance_at_index(x, y, idx, profile) < -CAR_HALF_WIDTH or in_contact
     laps_completed = state.laps_completed
     lap_time = state.lap_time + dt
     last_lap, best_lap, lap_clean = state.last_lap_time, state.best_lap_time, state.lap_clean
-    if newly_off:
+    last_valid = state.last_lap_valid
+    if beyond_limits:
         lap_clean = False
     if distance_along_lap >= (laps_completed + 1) * profile.total_length:
         laps_completed += 1
-        last_lap = lap_time
+        last_lap, last_valid = lap_time, lap_clean
         if lap_clean and (best_lap is None or lap_time < best_lap):
             best_lap = lap_time
         lap_time = 0.0
-        lap_clean = not off_track
+        lap_clean = not beyond_limits
 
     return DemoVehicleState(
         x=x,
@@ -558,6 +632,23 @@ def step(
         last_lap_time=last_lap,
         best_lap_time=best_lap,
         lap_clean=lap_clean,
+        last_lap_valid=last_valid,
         barrier_contacts=barrier_contacts,
         in_contact=in_contact,
+        vy=car.vy,
+        yaw_rate=car.yaw_rate,
+        gear=car.gear,
+        rpm=car.rpm,
+        battery=car.battery,
+        drs_open=car.drs_open,
+        drs_available=car.drs_available,
+        tc_cut=car.tc_cut,
+        wheelspin=car.wheelspin,
+        front_lock=car.front_lock,
+        rear_lock=car.rear_lock,
+        ax=car.ax,
+        ay=car.ay,
+        ers_deploy_kw=car.ers_deploy_kw,
+        stop_hold=car.stop_hold,
+        brake_reverse=car.brake_reverse,
     )

@@ -1,7 +1,10 @@
 # Python
 backend/venv/
+backend/.cache/
+backend/.data/
 __pycache__/
 *.pyc
+.pytest_cache/
 
 # Node
 frontend/node_modules/
@@ -11,5 +14,12 @@ frontend/dist/
 .DS_Store
 .vscode/
 .idea/
+
+# Generated datasets / runs (regenerable from scripts)
 data/
 runs/
+
+# raw 3D assets (hundreds of MB): the game uses baked impostors in frontend/public/textures
+frontend/public/*.glb
+frontend/e2e/tmp/
+frontend/public/models/

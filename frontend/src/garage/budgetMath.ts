@@ -60,7 +60,8 @@ export function classifyConfigs(configs: ConfigResult[], budget: BudgetInputs): 
       return {
         result,
         affordable,
-        feasible: affordable && result.passed,
+        // judged on the tests some upgrade can change (tests every configuration fails are reported separately)
+        feasible: affordable && (result.passed_solvable ?? result.passed),
         remaining: available - result.cost_cad,
       }
     })

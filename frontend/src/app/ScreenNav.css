@@ -5,7 +5,8 @@
   z-index: 10;
   display: flex;
   gap: var(--space-xs);
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(8px);
   padding: var(--space-xs);
   border-radius: 6px;
 }

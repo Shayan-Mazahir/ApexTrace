@@ -247,7 +247,7 @@ class WarningPolicyConfig(BaseModel):
     lookahead_m: float = Field(1500.0, ge=100, le=4000)
     local_fallback: bool = False
     fallback_after_ms: float = Field(150.0, ge=0, le=5000)
-    nominal_brake_decel: float = Field(40.0, gt=0)
+    nominal_brake_decel: float = Field(32.0, gt=0)  # ~3.3 g: representative of the 2026 car (app/f1_car.py)
 
 
 class StartConfig(BaseModel):

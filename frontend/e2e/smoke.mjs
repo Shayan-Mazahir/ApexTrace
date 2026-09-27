@@ -72,6 +72,17 @@ async function setInput(page, selector, index, value) {
   )
 }
 
+// Selects the cheapest passing configuration if the evaluation found one;
+// otherwise (a legitimate result) picks the Local warning fallback card by hand.
+async function selectSomeUpgrade(page) {
+  const passing = await page.evaluate(() => [...document.querySelectorAll('button')].some((b) => !b.disabled && b.textContent.trim() === 'Select it'))
+  if (passing) return clickButton(page, 'Select it', { exact: true })
+  await page.evaluate(() => {
+    const card = [...document.querySelectorAll('.upgrade-card')].find((c) => c.innerText.includes('Local warning fallback'))
+    card.querySelector('footer button').click()
+  })
+}
+
 function restartBackend() {
   spawn('bash', ['-c', 'cd ../backend && source venv/bin/activate && exec uvicorn app.main:app --host 0.0.0.0 --port 8000'], {
     detached: true,
@@ -147,7 +158,11 @@ const browser = await puppeteer.launch({
   executablePath: CHROME,
   headless: 'new',
   defaultViewport: { width: 1440, height: 900 },
-  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-first-run'],
+  // GPU-backed by default (the scene is ~28 fps there, ~2 fps in software GL).
+  // E2E_SOFTWARE_GL=1 forces SwiftShader for machines without a usable GPU.
+  args: process.env.E2E_SOFTWARE_GL
+    ? ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-first-run']
+    : ['--use-gl=angle', '--use-angle=metal', '--ignore-gpu-blocklist', '--no-first-run'],
 })
 
 async function newPage(name) {
@@ -165,7 +180,7 @@ try {
   await garage.goto(`${BASE}/#garage`)
 
   await step('garage: sample budget shows CAD 4,000 available', async () => {
-    await waitText(garage, 'Upgrade garage')
+    await waitText(garage, 'Your budget')
     await garage.waitForSelector('.upgrade-card')
     const available = await garage.$eval('.budget-panel__available strong', (e) => e.textContent)
     assert(available.includes('4,000'), `available was "${available}"`)
@@ -204,15 +219,17 @@ try {
   })
 
   await step('garage: fixed evaluation suite runs all 8 configurations', async () => {
-    await clickButton(garage, 'Run fixed evaluation suite')
+    await clickButton(garage, 'Run the tests')
     await garage.waitForSelector('.results-table', { timeout: 90000 })
-    await waitText(garage, 'cheapest configuration that passed', 5000).catch(async () => {
+    await garage.waitForSelector('.sgrid', { timeout: 90000 })
+    await waitText(garage, 'Buy:', 5000).catch(async () => {
       await waitText(garage, 'No affordable configuration passed', 5000)
     })
     const criteria = await garage.$eval('.results-table__criteria', (e) => e.textContent)
     const suite = await (await fetch(`${API}/evaluation/suite?kind=heldout`)).json()
     assert(new RegExp(`\\b\\d+ tests`).test(criteria) && suite.tests.length > 0, `criteria text: ${criteria}`)
-    await waitText(garage, 'of 8 configurations pass') // full-suite summary alongside the selected group
+    const cols = await garage.$$eval('.sgrid__row--head .sgrid__col', (e) => e.length)
+    assert(cols === 8, `expected 8 combination columns, got ${cols}`)
     await garage.$eval('.results-table__filter input', (e) => e.click())
     const rows = (await garage.$$('.results-table tbody tr')).length
     assert(rows === 8, `expected 8 rows with the filter off, got ${rows}`)
@@ -222,7 +239,7 @@ try {
   await step('garage: never shows a generic SAFE verdict', async () => {
     const text = await bodyText(garage)
     assert(!/\bSAFE\b/.test(text), 'found a bare SAFE')
-    assert(text.includes('Passed this test suite') || text.includes('No affordable configuration'), 'no scoped verdict wording')
+    assert(text.includes('Buy:') || text.includes('Nothing to buy') || text.includes('No affordable configuration'), 'no verdict')
   })
 
   await step('garage: shows "No affordable configuration passed" when nothing feasible', async () => {
@@ -233,38 +250,37 @@ try {
 
   await step('garage: cost and money remaining are shown for the recommendation', async () => {
     const verdict = await garage.$eval('#garage-verdict', (e) => e.textContent)
-    assert(/CAD [\d,]+/.test(verdict), `verdict: ${verdict}`)
-    await clickButton(garage, 'Select cheapest passing')
+    assert(/CAD [\d,]+/.test(verdict) || verdict.includes('No affordable configuration passed'), `verdict: ${verdict}`)
+    await selectSomeUpgrade(garage)
     const summary = await garage.$eval('.garage-screen__summary', (e) => e.innerText)
-    assert(summary.includes('Remaining after commitments, reserve and upgrades'), summary)
+    assert(summary.includes('Left to spend') && /CAD [\d,]+/.test(summary), summary)
   })
   await shot(garage, '1-garage-results')
 
   // --------------------------------------------------------------- Compare
-  await step('compare: synchronized baseline and upgraded replays', async () => {
-    await clickButton(garage, 'Compare baseline vs selected')
-    await garage.waitForSelector('.replay-panel canvas', { timeout: 60000 })
-    await waitText(garage, 'Automated replay')
-    assert((await garage.$$('.replay-panel')).length === 2, 'expected two replay panels')
-    const labels = await garage.$$eval('.replay-panel h2', (els) => els.map((e) => e.textContent))
-    assert(labels[0].startsWith('Baseline') && labels[1].startsWith('Upgraded'), `labels: ${labels}`)
-    assert((await garage.$$('.replay-timeline')).length === 2, 'expected two timelines')
-    await assertRendered(garage, '.replay-panel:nth-child(1) canvas', 'baseline replay view')
-    await assertRendered(garage, '.replay-panel:nth-child(2) canvas', 'upgraded replay view')
-    const before = await garage.$eval('.compare-screen__time', (e) => e.textContent)
+  await step('compare: both runs replay together in one view with plain outcomes', async () => {
+    await clickButton(garage, 'Watch a replay')
+    await garage.waitForSelector('.cmp-view canvas', { timeout: 60000 })
+    const who = await garage.$$eval('.cmp-card__who', (els) => els.map((e) => e.textContent.trim()))
+    assert(who.length === 2 && who[0].startsWith('No upgrades') && who[1].startsWith('Your car'), `cards: ${who}`)
+    const heads = await garage.$$eval('.cmp-card h2', (els) => els.map((e) => e.textContent))
+    assert(heads.every((h) => /Finished|off the track|Hit the wall|Too close/.test(h)), `outcomes: ${heads}`)
+    assert((await garage.$$('.schart svg path.schart__line')).length === 2, 'expected both speed lines')
+    await assertRendered(garage, '.cmp-view canvas', 'replay view')
+    const before = await garage.$eval('.cmp-time', (e) => e.textContent)
     await clickButton(garage, 'Play', { exact: true })
     await sleep(1500)
-    const after = await garage.$eval('.compare-screen__time', (e) => e.textContent)
+    const after = await garage.$eval('.cmp-time', (e) => e.textContent)
     assert(before !== after, `playback did not advance (${before} -> ${after})`)
     await sleep(800)
     await shot(garage, '2-compare-playing')
   })
 
-  await step('compare: scrubber moves both replays together', async () => {
+  await step('compare: scrubber moves the replay', async () => {
     await clickButton(garage, 'Pause', { exact: true })
-    await setInput(garage, '.compare-screen__controls input[type=range]', 0, 20)
+    await setInput(garage, '.cmp-controls input[type=range]', 0, 20)
     await sleep(300)
-    const t = await garage.$eval('.compare-screen__time', (e) => e.textContent)
+    const t = await garage.$eval('.cmp-time', (e) => e.textContent)
     assert(t.startsWith('20.0'), `time label: ${t}`)
   })
   await garage.close()
@@ -297,7 +313,7 @@ try {
     assert(/^[0-9a-f]{8}$/.test(sessionId), `session id "${sessionId}"`)
     await drive.keyboard.down('w')
     await sleep(2500)
-    const speed = await drive.$eval('.f1-hud__speed strong', (e) => parseFloat(e.textContent))
+    const speed = await drive.$eval('.f1-dash__speed strong', (e) => parseFloat(e.textContent))
     await drive.keyboard.up('w')
     assert(speed > 7, `speed (km/h) after holding W: ${speed}`)
     const hud = await drive.$eval('.f1-hud', (e) => e.innerText)
@@ -317,17 +333,20 @@ try {
     await clickButton(engineer, 'Join', { exact: true })
     await waitText(engineer, 'Connected')
     await waitText(engineer, sessionId)
+    await engineer.evaluate(() => { document.querySelector('.engineer-screen__more').open = true })
     const info = await engineer.$eval('.run-info', (e) => e.innerText)
     assert(/Seed/.test(info) && /Run ID/.test(info), `run info: ${info}`)
     await waitText(drive, 'Engineer connected')
   })
 
   await step('engineer: a manual uplink-delay fault reaches the driver and is labelled simulated', async () => {
+    await clickButton(engineer, 'Single fault')
     await engineer.select('.fault-builder select', 'uplink_delay')
     await setInput(engineer, '.fault-builder input[type=range]', 0, 300)
     await clickButton(engineer, 'Add fault', { exact: true })
     await waitText(drive, 'Simulated connection fault')
     await waitText(engineer, 'Simulated connection fault')
+    await engineer.evaluate(() => { document.querySelector('.engineer-screen__more').open = true })
     const link = await engineer.$eval('.link-indicators', (e) => e.innerText)
     assert(link.includes('Sim: injected uplink delay') && link.includes('+300 ms'), `link: ${link}`)
     assert(link.includes('Real: driver control age'), 'the real link must be shown separately')
@@ -336,8 +355,9 @@ try {
 
   await step('engineer: arming a stress scenario restarts the run; name and faults shown', async () => {
     const before = await engineer.$eval('.run-info', (e) => e.innerText)
+    await clickButton(engineer, 'Saved scenario')
     await engineer.select('.scenario-panel select', 'monza_high_speed_blackout')
-    await clickButton(engineer, 'Arm scenario')
+    await clickButton(engineer, 'Arm only')
     // The preset name is already visible in the selector before the server
     // responds. Wait for the run update, not that existing option text.
     await engineer.waitForFunction(
@@ -356,9 +376,9 @@ try {
     await shot(engineer, '4-engineer')
   })
 
-  await step('drive: shows engineer disconnected after the engineer leaves', async () => {
+  await step('drive: engineer badge goes away after the engineer leaves', async () => {
     await engineer.close()
-    await waitText(drive, 'Engineer disconnected', 8000)
+    await drive.waitForFunction(() => !document.body.innerText.includes('Engineer connected'), { timeout: 8000, polling: 250 })
   })
 
   await step('recovery: a dropped socket resumes the same session (server stayed up)', async () => {
@@ -411,8 +431,8 @@ try {
 
   await step('baku: late-warning-delivery scenario arms and reaches the driver', async () => {
     await engineer2.select('.scenario-panel select', 'baku_late_warning_delivery')
-    await clickButton(engineer2, 'Arm scenario')
-    await sleep(800)
+    await clickButton(engineer2, 'Arm only')
+    for (let i = 0; i < 40 && !bakuFrames.some((f) => f.includes('"scenario_id":"baku_late_warning_delivery"')); i++) await sleep(250)
     assert(bakuFrames.some((f) => f.includes('"scenario_id":"baku_late_warning_delivery"')), 'driver never received the baku scenario')
     await shot(engineer2, '9-engineer-baku')
   })
@@ -433,16 +453,15 @@ try {
       const p = await newPage('backup')
       try {
         await p.goto(`${BASE}/#garage`)
-        await clickButton(p, 'Run fixed evaluation suite')
+        await clickButton(p, 'Run the tests')
         await p.waitForSelector('.results-table', { timeout: 90000 })
-        await clickButton(p, 'Select cheapest passing')
+        await selectSomeUpgrade(p)
         execSync('lsof -ti tcp:8000 -sTCP:LISTEN | xargs kill -9')
-        await clickButton(p, 'Compare baseline vs selected')
+        await clickButton(p, 'Watch a replay')
         await waitText(p, 'backup recording', 20000)
-        await p.waitForSelector('.replay-panel canvas', { timeout: 20000 })
-        assert((await p.$$('.replay-panel')).length === 2, 'expected two replay panels from the backup')
-        await assertRendered(p, '.replay-panel:nth-child(1) canvas', 'backup baseline view')
-        await assertRendered(p, '.replay-panel:nth-child(2) canvas', 'backup upgraded view')
+        await p.waitForSelector('.cmp-view canvas', { timeout: 20000 })
+        assert((await p.$$('.cmp-card')).length === 2, 'expected both outcome cards from the backup')
+        await assertRendered(p, '.cmp-view canvas', 'backup replay view')
         await waitText(p, 'Backend unreachable', 8000)
         await shot(p, '10-compare-backup')
       } finally {
@@ -486,7 +505,7 @@ try {
         assert(demoFrames.some((f) => f.includes('"scenario_id":"monza_high_speed_blackout"')), 'demo engineer never launched the scenario')
       }
       if (i === 2) {
-        await demo.waitForSelector('.replay-panel canvas', { timeout: 60000 })
+        await demo.waitForSelector('.cmp-view canvas', { timeout: 60000 })
         await shot(demo, '6-demo-inspect')
       }
       if (i === 3) {

@@ -45,6 +45,9 @@
 }
 
 .calibration-panel {
+  /* right-hand side, under the inputs panel: clear of the Drive dock (left)
+     and the dashboard (bottom centre) at every laptop size */
   bottom: calc(var(--space-md) + var(--demo-bar-height, 0px));
-  left: 180px;
+  left: auto;
+  right: var(--space-md);
 }

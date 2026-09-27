@@ -1,7 +1,7 @@
 {
   "id": "recovery_test",
   "name": "Recovery test",
-  "description": "A blackout and a grip loss both clear mid-lap; checks that data freshness and warning state recover.",
+  "description": "A 4 s blackout and a moderate grip loss (85%) both clear mid-lap; checks that data freshness and warning state recover (recalibrated for the 2026 car model).",
   "track": "monza",
   "seed": 33,
   "faults": [
@@ -43,7 +43,7 @@
       },
       "duration_s": null,
       "parameters": {
-        "grip_multiplier": 0.75
+        "grip_multiplier": 0.85
       },
       "ramp_in_s": 0.0,
       "ramp_out_s": 0.0,
