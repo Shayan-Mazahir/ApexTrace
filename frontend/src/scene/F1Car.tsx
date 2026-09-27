@@ -133,7 +133,7 @@ function SteeringWheel({ steer }: { steer: React.MutableRefObject<number> }) {
   const wheel = useRef<Group>(null)
   useFrame(() => {
     // driver input -1..1 maps to about +/-140 degrees of hand-wheel rotation
-    if (wheel.current) wheel.current.rotation.x = -steer.current * 2.4
+    if (wheel.current) wheel.current.rotation.x = steer.current * 2.4
   })
   const buttons: [number, number, string][] = [
     [0.09, 0.05, '#22c55e'], [0.09, -0.05, '#ef4444'], [-0.02, 0.09, '#3b82f6'],

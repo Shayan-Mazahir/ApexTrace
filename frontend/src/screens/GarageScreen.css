@@ -175,3 +175,20 @@
 .garage-verdict__limits { font-size: 13px; color: #fcd34d; }
 .garage-screen__details { margin-top: 6px; }
 .garage-screen__details summary { cursor: pointer; color: #b9c0cb; padding: 6px 0; }
+
+/* ---- colour and separation pass ---- */
+.garage-screen { background: radial-gradient(1200px 500px at 15% -10%, rgba(255, 138, 26, 0.12), transparent 60%), radial-gradient(900px 500px at 100% 20%, rgba(56, 189, 248, 0.08), transparent 60%), #0e1117; }
+.garage-screen__header h1 { font-size: 36px; margin-bottom: 4px; }
+.gstep { border: 1px solid rgba(255, 255, 255, 0.12); background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.02)); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25); border-radius: 18px; }
+.gstep:nth-of-type(1) { border-top: 3px solid #ff8a1a; }
+.gstep:nth-of-type(2) { border-top: 3px solid #38bdf8; }
+.gstep:nth-of-type(3) { border-top: 3px solid #a78bfa; }
+.gstep:nth-of-type(4) { border-top: 3px solid #4ade80; }
+.gstep:nth-of-type(2) .gstep__n { background: #38bdf8; }
+.gstep:nth-of-type(3) .gstep__n { background: #a78bfa; }
+.gstep:nth-of-type(4) .gstep__n { background: #4ade80; }
+.garage-screen .upgrade-card { border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 16px; background: linear-gradient(165deg, #1b2130, #13161e); }
+.garage-screen .upgrade-card--selected { border-color: #ff8a1a; box-shadow: 0 0 0 1px #ff8a1a inset, 0 8px 24px rgba(255, 138, 26, 0.15); }
+.garage-screen .budget-panel__field, .garage-screen .budget-panel__available { border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 14px; padding: 12px 14px; background: rgba(255, 255, 255, 0.03); }
+.garage-screen__summary > div { border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 14px; padding: 10px 14px; background: rgba(255, 255, 255, 0.03); }
+.garage-screen__suites button { border-radius: 999px; }

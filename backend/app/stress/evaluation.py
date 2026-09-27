@@ -14,6 +14,7 @@ Headless evaluation on the shared StressRun engine.
 from __future__ import annotations
 
 import math
+import os
 import random
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
@@ -257,6 +258,13 @@ SUITE_GROUPS: dict[str, dict[str, Any]] = {
 }
 
 
+def _low_priority() -> None:
+    try:
+        os.nice(10)
+    except OSError:
+        pass
+
+
 def _eval_config(args: tuple[dict, str]) -> dict[str, Any]:
     option_dict, kind = args
     option = UpgradeOption.model_validate(option_dict)
@@ -294,7 +302,10 @@ def evaluate_all(kind: str = "heldout", use_cache: bool = True, parallel: bool =
     raw = None
     if parallel:
         try:
-            with ProcessPoolExecutor() as pool:
+            # leave two cores free and run at low priority, so a live driving
+            # session (and the browser) stay smooth while the suite runs
+            workers = max(1, (os.cpu_count() or 4) - 2)
+            with ProcessPoolExecutor(max_workers=workers, initializer=_low_priority) as pool:
                 raw = list(pool.map(_eval_config, jobs))
         except Exception:
             raw = None

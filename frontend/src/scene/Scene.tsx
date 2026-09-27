@@ -131,7 +131,7 @@ function CameraRig({ view, profile, shown }: { view: SceneView; profile: TrackPr
     const back = 8.5 + p.speed * 0.02
     scratch.target.set(p.x - fx * back, 2.6 + p.speed * 0.006, p.y - fz * back)
     if (cam.position.distanceTo(scratch.target) > 150) cam.position.copy(scratch.target) // coming from overview: snap
-    else cam.position.lerp(scratch.target, 1 - Math.exp(-Math.min(dt, 0.1) * 7))
+    else cam.position.lerp(scratch.target, 1 - Math.exp(-Math.min(dt, 0.1) * 12))
     scratch.look.set(p.x + fx * 10, 0.9, p.y + fz * 10)
     cam.lookAt(scratch.look)
     const fov = 58 + Math.min(p.speed, 88) * 0.14 // widen with speed
@@ -146,7 +146,9 @@ function CameraRig({ view, profile, shown }: { view: SceneView; profile: TrackPr
   return <OrbitControls ref={controls} makeDefault enabled={view === 'overview'} enableDamping={false} />
 }
 
-function Car({ shown, steering, scale }: { shown: React.MutableRefObject<ShownPose>; steering?: React.MutableRefObject<number>; scale: number; cockpit?: boolean }) {
+const GHOST_LIVERY = { primary: '#9aa3ad', secondary: '#3a3f47', accent: '#cbd5e1' }
+
+function Car({ shown, steering, scale, ghost = false }: { shown: React.MutableRefObject<ShownPose>; steering?: React.MutableRefObject<number>; scale: number; cockpit?: boolean; ghost?: boolean }) {
   const group = useRef<Group>(null)
   const speed = useRef(0)
   const aeroOpen = useRef(false)
@@ -165,7 +167,7 @@ function Car({ shown, steering, scale }: { shown: React.MutableRefObject<ShownPo
         // position ring so the car is findable when the whole lap is in view
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.3, 0]}>
           <ringGeometry args={[3.2, 4.4, 40]} />
-          <meshBasicMaterial color="#ff7a00" transparent opacity={0.9} depthWrite={false} />
+          <meshBasicMaterial color={ghost ? '#cbd5e1' : '#ff7a00'} transparent opacity={0.9} depthWrite={false} />
         </mesh>
       )}
       {/* soft contact shadow */}
@@ -173,7 +175,7 @@ function Car({ shown, steering, scale }: { shown: React.MutableRefObject<ShownPo
         <planeGeometry args={[5.6, 2.3]} />
         <meshBasicMaterial color="#000" transparent opacity={0.35} depthWrite={false} />
       </mesh>
-      <F1Car speed={speed} steering={steering} aeroOpen={aeroOpen} hideDriver={false} />
+      <F1Car speed={speed} steering={steering} aeroOpen={aeroOpen} hideDriver={false} livery={ghost ? GHOST_LIVERY : undefined} />
     </group>
   )
 }
@@ -261,9 +263,12 @@ interface SceneProps {
   view?: SceneView
   steering?: React.MutableRefObject<number>
   showRacingLine?: boolean
+  effects?: boolean
+  // a second car drawn in grey (e.g. the no-upgrades run in a replay)
+  ghost?: CarPose | null
 }
 
-export function Scene({ trackProfile, vehicleState, trail, previousLapTrail, view = 'overview', steering, showRacingLine = false }: SceneProps) {
+export function Scene({ trackProfile, vehicleState, trail, previousLapTrail, view = 'overview', steering, showRacingLine = false, effects = true, ghost = null }: SceneProps) {
   const start = useMemo<CarPose>(() => {
     if (!trackProfile) return { x: 0, y: 0, heading: 0 }
     const [x0, y0] = trackProfile.centerline[0]
@@ -271,6 +276,7 @@ export function Scene({ trackProfile, vehicleState, trail, previousLapTrail, vie
     return { x: x0, y: y0, heading: Math.atan2(y1 - y0, x1 - x0) }
   }, [trackProfile])
   const shown = useSmoothedPose(vehicleState ?? start)
+  const ghostShown = useSmoothedPose(ghost ?? start)
   const overview = view === 'overview'
 
   return (
@@ -292,9 +298,10 @@ export function Scene({ trackProfile, vehicleState, trail, previousLapTrail, vie
       {trackProfile && showRacingLine && <RacingLine profile={trackProfile} />}
       <Trail points={previousLapTrail} color="#9ca3af" opacity={0.5} />
       {overview && <Trail points={trail} color="#ff7a00" opacity={0.95} />}
+      {ghost && <Car shown={ghostShown} scale={overview ? 8 : 1} ghost />}
       <Car shown={shown} steering={steering} scale={overview ? 8 : 1} cockpit={view === 'cockpit'} />
       <CameraRig view={view} profile={trackProfile} shown={shown} />
-      {!overview && (
+      {!overview && effects && (
         // Film-style finish: soft glow on bright highlights (lights, sun glints), darker
         // corners, and edge anti-aliasing (the composer bypasses the canvas MSAA).
         <EffectComposer multisampling={0}>

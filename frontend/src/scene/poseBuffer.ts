@@ -10,7 +10,7 @@ export interface TimedPose {
   heading: number
 }
 
-export const RENDER_DELAY_S = 0.1 // two 20 Hz ticks
+export const RENDER_DELAY_S = 0.05 // one 20 Hz tick: smooth, without making steering feel late
 const MAX_EXTRAPOLATE_S = 0.1
 
 const wrap = (a: number) => ((((a + Math.PI) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) - Math.PI

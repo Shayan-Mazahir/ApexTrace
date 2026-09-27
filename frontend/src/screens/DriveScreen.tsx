@@ -1,4 +1,5 @@
 import { Canvas } from '@react-three/fiber'
+import { PerformanceMonitor } from '@react-three/drei'
 import { useEffect, useRef, useState } from 'react'
 import { getTrack } from '../api/session'
 import { useDemo } from '../app/DemoContext'
@@ -37,6 +38,8 @@ export function DriveScreen() {
   const input = useInputAdapter()
   const session = useDriveSession(input.normalized, input.buttonCounts, input.presses.ersCycle)
   const demo = useDemo()
+  // Retina screens: start at 1.5x, drop to 1x if the frame rate can't keep up
+  const [dpr, setDpr] = useState(1.5)
   const { selection } = useGarage()
   const { start, connectionState } = session
 
@@ -80,7 +83,8 @@ export function DriveScreen() {
 
   return (
     <div className="drive-screen" data-connection={connectionState}>
-      <Canvas camera={{ position: [400, 500, 400], fov: 50, near: 0.5, far: 8000 }} dpr={[1, 2]}>
+      <Canvas camera={{ position: [400, 500, 400], fov: 50, near: 0.5, far: 8000 }} dpr={dpr}>
+        <PerformanceMonitor onDecline={() => setDpr(1)} onIncline={() => setDpr(1.5)} />
         <Scene
           view={view}
           trackProfile={profile}
@@ -89,6 +93,7 @@ export function DriveScreen() {
           previousLapTrail={session.previousLapTrail}
           steering={steeringRef}
           showRacingLine={showRacingLine && inSession}
+          effects={dpr > 1}
         />
       </Canvas>
 

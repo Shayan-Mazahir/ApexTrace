@@ -258,30 +258,29 @@ try {
   await shot(garage, '1-garage-results')
 
   // --------------------------------------------------------------- Compare
-  await step('compare: synchronized baseline and upgraded replays', async () => {
+  await step('compare: both runs replay together in one view with plain outcomes', async () => {
     await clickButton(garage, 'Watch a replay')
-    await garage.waitForSelector('.replay-panel canvas', { timeout: 60000 })
-    await waitText(garage, 'Automated replay')
-    assert((await garage.$$('.replay-panel')).length === 2, 'expected two replay panels')
-    const labels = await garage.$$eval('.replay-panel h2', (els) => els.map((e) => e.textContent))
-    assert(labels[0].startsWith('Baseline') && labels[1].startsWith('Upgraded'), `labels: ${labels}`)
-    assert((await garage.$$('.replay-timeline')).length === 2, 'expected two timelines')
-    await assertRendered(garage, '.replay-panel:nth-child(1) canvas', 'baseline replay view')
-    await assertRendered(garage, '.replay-panel:nth-child(2) canvas', 'upgraded replay view')
-    const before = await garage.$eval('.compare-screen__time', (e) => e.textContent)
+    await garage.waitForSelector('.cmp-view canvas', { timeout: 60000 })
+    const who = await garage.$$eval('.cmp-card__who', (els) => els.map((e) => e.textContent.trim()))
+    assert(who.length === 2 && who[0].startsWith('No upgrades') && who[1].startsWith('Your car'), `cards: ${who}`)
+    const heads = await garage.$$eval('.cmp-card h2', (els) => els.map((e) => e.textContent))
+    assert(heads.every((h) => /Finished|off the track|Hit the wall|Too close/.test(h)), `outcomes: ${heads}`)
+    assert((await garage.$$('.schart svg path.schart__line')).length === 2, 'expected both speed lines')
+    await assertRendered(garage, '.cmp-view canvas', 'replay view')
+    const before = await garage.$eval('.cmp-time', (e) => e.textContent)
     await clickButton(garage, 'Play', { exact: true })
     await sleep(1500)
-    const after = await garage.$eval('.compare-screen__time', (e) => e.textContent)
+    const after = await garage.$eval('.cmp-time', (e) => e.textContent)
     assert(before !== after, `playback did not advance (${before} -> ${after})`)
     await sleep(800)
     await shot(garage, '2-compare-playing')
   })
 
-  await step('compare: scrubber moves both replays together', async () => {
+  await step('compare: scrubber moves the replay', async () => {
     await clickButton(garage, 'Pause', { exact: true })
-    await setInput(garage, '.compare-screen__controls input[type=range]', 0, 20)
+    await setInput(garage, '.cmp-controls input[type=range]', 0, 20)
     await sleep(300)
-    const t = await garage.$eval('.compare-screen__time', (e) => e.textContent)
+    const t = await garage.$eval('.cmp-time', (e) => e.textContent)
     assert(t.startsWith('20.0'), `time label: ${t}`)
   })
   await garage.close()
@@ -460,10 +459,9 @@ try {
         execSync('lsof -ti tcp:8000 -sTCP:LISTEN | xargs kill -9')
         await clickButton(p, 'Watch a replay')
         await waitText(p, 'backup recording', 20000)
-        await p.waitForSelector('.replay-panel canvas', { timeout: 20000 })
-        assert((await p.$$('.replay-panel')).length === 2, 'expected two replay panels from the backup')
-        await assertRendered(p, '.replay-panel:nth-child(1) canvas', 'backup baseline view')
-        await assertRendered(p, '.replay-panel:nth-child(2) canvas', 'backup upgraded view')
+        await p.waitForSelector('.cmp-view canvas', { timeout: 20000 })
+        assert((await p.$$('.cmp-card')).length === 2, 'expected both outcome cards from the backup')
+        await assertRendered(p, '.cmp-view canvas', 'backup replay view')
         await waitText(p, 'Backend unreachable', 8000)
         await shot(p, '10-compare-backup')
       } finally {
@@ -507,7 +505,7 @@ try {
         assert(demoFrames.some((f) => f.includes('"scenario_id":"monza_high_speed_blackout"')), 'demo engineer never launched the scenario')
       }
       if (i === 2) {
-        await demo.waitForSelector('.replay-panel canvas', { timeout: 60000 })
+        await demo.waitForSelector('.cmp-view canvas', { timeout: 60000 })
         await shot(demo, '6-demo-inspect')
       }
       if (i === 3) {

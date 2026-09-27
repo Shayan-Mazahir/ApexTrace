@@ -8,6 +8,7 @@ import { GarageCar } from '../garage/GarageCar'
 import { PairedPanel } from '../garage/PairedPanel'
 import { ResultsTable } from '../garage/ResultsTable'
 import { ScenarioGrid } from '../garage/ScenarioGrid'
+import { measuredFixes } from '../garage/measuredFixes'
 import { UpgradeCard } from '../garage/UpgradeCard'
 import { UPGRADE_IDS } from '../types/schemas'
 import './GarageScreen.css'
@@ -50,6 +51,7 @@ export function GarageScreen() {
     ? [...new Set(unsolved.map((id) => evaluation.suite.tests.find((t) => t.id === id)?.name ?? id))]
     : []
   const baseline = group?.configs.find((c) => c.key === 'baseline')
+  const measured = evaluation && group ? measuredFixes(evaluation, group) : null
   const nothingToBuy = recommended?.result.key === 'baseline' && (baseline?.passed_solvable ?? baseline?.passed)
 
   return (
@@ -72,7 +74,7 @@ export function GarageScreen() {
               if (!spec) return null
               return (
                 <UpgradeCard key={id} spec={spec} selected={selection[id]} blocked={!canAdd(id, selection, specs, available)}
-                  onToggle={() => garage.toggleUpgrade(id)} />
+                  onToggle={() => garage.toggleUpgrade(id)} measured={measured?.[id] ?? null} />
               )
             })}
           </div>
