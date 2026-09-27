@@ -202,6 +202,7 @@ export function CompareScreen() {
                   ghost={bp ? { x: bp.x, y: bp.y, heading: bp.heading, speed: bp.speed } : null}
                   trail={[]}
                   previousLapTrail={[]}
+                  exactPose
                 />
               </Canvas>
               <div className="cmp-view__tags">
@@ -215,6 +216,7 @@ export function CompareScreen() {
                   {base.result.track_exit && playback.t >= runDuration(base.frames) && <b className="cmp-crash"> · crashed</b>}
                 </span>
               </div>
+              <p className="cmp-view__note">See-through car = the same run without upgrades, at the same moment. They overlap until the faults make them split.</p>
               <div className="cmp-view__cams" role="group" aria-label="Camera">
                 {(['follow', 'overview'] as SceneView[]).map((v) => (
                   <button key={v} type="button" className={view === v ? 'on' : ''} onClick={() => setView(v)}>

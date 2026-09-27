@@ -25,6 +25,7 @@ approximation for a simulator, not team data.
 from __future__ import annotations
 
 import math
+from functools import lru_cache
 from dataclasses import dataclass, replace
 from typing import Literal
 
@@ -57,6 +58,12 @@ class CarParams:
     tyre_b: float = 15.4  # with tyre_c this puts peak lateral force near 7 degrees of slip
     tyre_c: float = 1.45
     sliding_mu_ratio: float = 0.80  # grip of a locked or spinning tyre
+    # Tyre load sensitivity: friction falls as a tyre is pressed harder, so doubling
+    # the load (downforce, or weight thrown onto the outside tyres in a corner) gives
+    # less than double the grip. mu(f) = mu0 * (1 - k (f / f_ref - 1)), per tyre.
+    load_sensitivity: float = 0.10
+    tyre_ref_load: float = 3700.0  # N per tyre: about the load at 200 km/h
+    track_width: float = 1.6  # m, for lateral load transfer between inner and outer tyres
     rolling_resistance: float = 0.015
     # brakes (brake-by-wire, no ABS)
     brake_force_max: float = 33_000.0  # ~4.2 g of brake-system force
@@ -164,30 +171,78 @@ def aero_coefficients(drs_open: bool, p: CarParams = CAR) -> tuple[float, float]
     return cl * p.frontal_area, cd * p.frontal_area
 
 
-def max_lateral_accel(speed: float, grip: float = 1.0, drs_open: bool = False, p: CarParams = CAR) -> float:
-    """Steady cornering limit in m/s^2 at this speed (weight + downforce times mu)."""
+def axle_grip(axle_load: float, mu: float, transfer: float = 0.0, p: CarParams = CAR) -> float:
+    """Peak force (N) one axle's two tyres can make: each tyre carries half the
+    axle load, +/- the lateral load transfer, with load-sensitive friction."""
+    total = 0.0
+    for f in (axle_load / 2 + transfer, axle_load / 2 - transfer):
+        f = max(0.0, f)
+        total += f * mu * max(0.55, 1.0 - p.load_sensitivity * (f / p.tyre_ref_load - 1.0))
+    return total
+
+
+def _axle_loads(speed: float, drs_open: bool, p: CarParams) -> tuple[float, float]:
     cla, _ = aero_coefficients(drs_open, p)
     downforce = 0.5 * RHO * cla * speed * speed
-    return grip * p.mu_lat * (p.mass * G + downforce) / p.mass
+    a, b, L = p.cg_to_front, p.cg_to_rear, p.wheelbase
+    return p.mass * G * b / L + downforce * p.aero_balance_front, p.mass * G * a / L + downforce * (1 - p.aero_balance_front)
+
+
+def max_lateral_accel(speed: float, grip: float = 1.0, drs_open: bool = False, p: CarParams = CAR) -> float:
+    """Steady cornering limit in m/s^2 at this speed: weight + downforce, with
+    load-sensitive tyres and the load transfer the cornering itself causes."""
+    if p is CAR:  # hot path (steering range, driver, warnings): cache on a fine grid
+        return _max_lateral_cached(round(speed, 1), round(grip, 3), drs_open)
+    return _max_lateral(speed, grip, drs_open, p)
+
+
+@lru_cache(maxsize=65536)
+def _max_lateral_cached(speed: float, grip: float, drs_open: bool) -> float:
+    return _max_lateral(speed, grip, drs_open, CAR)
+
+
+def _max_lateral(speed: float, grip: float, drs_open: bool, p: CarParams) -> float:
+    fz_f, fz_r = _axle_loads(speed, drs_open, p)
+    total = fz_f + fz_r
+    acc = grip * p.mu_lat * total / p.mass
+    for _ in range(6):  # fixed point: transfer depends on the acceleration it limits
+        moved = p.mass * acc * p.cg_height / p.track_width
+        acc = grip * (axle_grip(fz_f, p.mu_lat, moved * fz_f / total, p) + axle_grip(fz_r, p.mu_lat, moved * fz_r / total, p)) / p.mass
+    return acc
 
 
 def corner_speed_for_radius(radius: float, grip: float = 1.0, p: CarParams = CAR, cap: float = 100.0) -> float:
-    """Highest steady speed on a constant radius: v^2 / R = mu (g + k v^2)."""
-    cla, _ = aero_coefficients(False, p)
-    k = 0.5 * RHO * cla / p.mass
-    mu = grip * p.mu_lat
-    denom = 1.0 - mu * k * radius
-    if denom <= 0:
-        return cap  # aero grip grows faster than the need: flat out
-    return min(cap, math.sqrt(mu * G * radius / denom))
+    """Highest steady speed on a constant radius: largest v with v^2 / R <= a_lat(v)."""
+    if p is CAR:
+        return _corner_speed_cached(round(radius, 1), round(grip, 3), cap)
+    return _corner_speed(radius, grip, p, cap)
+
+
+@lru_cache(maxsize=65536)
+def _corner_speed_cached(radius: float, grip: float, cap: float) -> float:
+    return _corner_speed(radius, grip, CAR, cap)
+
+
+def _corner_speed(radius: float, grip: float, p: CarParams, cap: float) -> float:
+    if cap * cap / radius <= max_lateral_accel(cap, grip, False, p):
+        return cap  # grip grows with speed faster than the need: flat out
+    lo, hi = 1.0, cap
+    for _ in range(40):
+        v = (lo + hi) / 2
+        if v * v / radius <= max_lateral_accel(v, grip, False, p):
+            lo = v
+        else:
+            hi = v
+    return lo
 
 
 def braking_decel(speed: float, grip: float = 1.0, brake_scale: float = 1.0, p: CarParams = CAR) -> float:
     """Straight-line deceleration at full brake (with ABS): the tyre or brake
     system limit, times brake effectiveness, plus drag."""
-    cla, cda = aero_coefficients(False, p)
+    _, cda = aero_coefficients(False, p)
     q = 0.5 * RHO * speed * speed
-    tyre = 0.97 * grip * p.mu_long * (p.mass * G + q * cla)
+    fz_f, fz_r = _axle_loads(speed, False, p)
+    tyre = 0.97 * grip * (axle_grip(fz_f, p.mu_long, 0.0, p) + axle_grip(fz_r, p.mu_long, 0.0, p))
     return (min(tyre, p.brake_force_max) * brake_scale + q * cda) / p.mass
 
 
@@ -426,8 +481,12 @@ def step_car(
         transfer = m * s.ax * p.cg_height / L
         fz_f = max(0.0, m * G * b / L + downforce * p.aero_balance_front - transfer)
         fz_r = max(0.0, m * G * a / L + downforce * (1 - p.aero_balance_front) + transfer)
-        cap_f_lat, cap_r_lat = grip * p.mu_lat * fz_f, grip * p.mu_lat * fz_r
-        cap_f_long, cap_r_long = grip * p.mu_long * fz_f, grip * p.mu_long * fz_r
+        # lateral load transfer (outer tyres loaded, inner unloaded), split by axle load
+        moved = m * abs(s.ay) * p.cg_height / p.track_width
+        share_f = fz_f / max(fz_f + fz_r, 1e-6)
+        dt_f, dt_r = moved * share_f, moved * (1 - share_f)
+        cap_f_lat, cap_r_lat = grip * axle_grip(fz_f, p.mu_lat, dt_f, p), grip * axle_grip(fz_r, p.mu_lat, dt_r, p)
+        cap_f_long, cap_r_long = grip * axle_grip(fz_f, p.mu_long, dt_f, p), grip * axle_grip(fz_r, p.mu_long, dt_r, p)
 
         # --- power unit ------------------------------------------------------
         rpm = engine_rpm(max(vx, 0.0), gear, p)

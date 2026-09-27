@@ -37,7 +37,7 @@ type ShownPose = { x: number; y: number; heading: number; speed: number; drsOpen
 
 // Telemetry arrives at 20 Hz; the car and camera are drawn at display rate,
 // easing toward the latest server pose (a few tens of ms behind it).
-function useSmoothedPose(pose: CarPose) {
+function useSmoothedPose(pose: CarPose, exact = false) {
   const target = useRef(pose)
   target.current = pose
   const shown = useRef<ShownPose>({ x: pose.x, y: pose.y, heading: pose.heading, speed: pose.speed ?? 0, drsOpen: false })
@@ -60,7 +60,7 @@ function useSmoothedPose(pose: CarPose) {
     }
     // no server timestamps (replays, idle): exponential follow
     const jump = Math.hypot(t.x - s.x, t.y - s.y) > 60
-    const k = first.current || jump ? 1 : 1 - Math.exp(-Math.min(dt, 0.1) * 18)
+    const k = exact || first.current || jump ? 1 : 1 - Math.exp(-Math.min(dt, 0.1) * 18)
     first.current = false
     s.x += (t.x - s.x) * k
     s.y += (t.y - s.y) * k
@@ -124,16 +124,24 @@ function CameraRig({ view, profile, shown }: { view: SceneView; profile: TrackPr
     }
   })
 
+  const camHeading = useRef<number | null>(null)
   useFrame((_, dt) => {
-    if (view !== 'follow') return
+    if (view !== 'follow') {
+      camHeading.current = null
+      return
+    }
     const cam = camera as PerspectiveCamera
     const p = shown.current
-    const fx = Math.cos(p.heading)
-    const fz = Math.sin(p.heading)
+    // Rigidly behind the car (no positional lag, so the car never drifts on
+    // screen); only the camera's heading eases after the car's, so it swings
+    // smoothly through corners instead of snapping.
+    if (camHeading.current === null) camHeading.current = p.heading
+    const dh = ((((p.heading - camHeading.current + Math.PI) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) - Math.PI
+    camHeading.current += dh * (1 - Math.exp(-Math.min(dt, 0.1) * 6))
+    const fx = Math.cos(camHeading.current)
+    const fz = Math.sin(camHeading.current)
     const back = 8.5 + p.speed * 0.02
-    scratch.target.set(p.x - fx * back, 2.6 + p.speed * 0.006, p.y - fz * back)
-    if (cam.position.distanceTo(scratch.target) > 150) cam.position.copy(scratch.target) // coming from overview: snap
-    else cam.position.lerp(scratch.target, 1 - Math.exp(-Math.min(dt, 0.1) * 12))
+    cam.position.set(p.x - fx * back, 2.6 + p.speed * 0.006, p.y - fz * back)
     scratch.look.set(p.x + fx * 10, 0.9, p.y + fz * 10)
     cam.lookAt(scratch.look)
     const fov = 58 + Math.min(p.speed, 88) * 0.14 // widen with speed
@@ -279,17 +287,19 @@ interface SceneProps {
   effects?: boolean
   // a second car drawn in grey (e.g. the no-upgrades run in a replay)
   ghost?: CarPose | null
+  // replays: poses are already interpolated exactly; don't add smoothing lag
+  exactPose?: boolean
 }
 
-export function Scene({ trackProfile, vehicleState, trail, previousLapTrail, view = 'overview', steering, showRacingLine = false, effects = true, ghost = null }: SceneProps) {
+export function Scene({ trackProfile, vehicleState, trail, previousLapTrail, view = 'overview', steering, showRacingLine = false, effects = true, ghost = null, exactPose = false }: SceneProps) {
   const start = useMemo<CarPose>(() => {
     if (!trackProfile) return { x: 0, y: 0, heading: 0 }
     const [x0, y0] = trackProfile.centerline[0]
     const [x1, y1] = trackProfile.centerline[1]
     return { x: x0, y: y0, heading: Math.atan2(y1 - y0, x1 - x0) }
   }, [trackProfile])
-  const shown = useSmoothedPose(vehicleState ?? start)
-  const ghostShown = useSmoothedPose(ghost ?? start)
+  const shown = useSmoothedPose(vehicleState ?? start, exactPose)
+  const ghostShown = useSmoothedPose(ghost ?? start, exactPose)
   const overview = view === 'overview'
 
   return (

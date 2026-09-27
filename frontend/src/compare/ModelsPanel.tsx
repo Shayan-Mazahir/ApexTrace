@@ -27,8 +27,8 @@ type Sac = {
 
 const BASELINE_NAME: Record<string, string> = {
   constant_base_rate: 'Guessing the average',
-  'naive_stopping_margin (observed speed & corner distance)': 'Simple rule: speed vs distance to corner',
-  'current_true_clearance (not available to the TCN)': 'Cheat: knows the true distance to the edge now',
+  'naive_stopping_margin (observed speed & corner distance)': 'Simple speed rule',
+  'current_true_clearance (not available to the TCN)': 'Knows true edge distance',
 }
 
 function Bars({ rows, max, fmt }: { rows: { label: string; value: number; hero?: boolean; note?: string }[]; max: number; fmt: (v: number) => string }) {
@@ -95,10 +95,7 @@ export function ModelsPanel() {
         <header>
           <span className="ml-card__kicker">AI model 1 · neural network</span>
           <h3>Crash predictor</h3>
-          <p>
-            Watches the last 2.5 s of what the car reports (speed, pedals, steering, warnings, but never the hidden true grip) and
-            predicts the chance of leaving the track in the next second. It only observes; it never triggers warnings.
-          </p>
+          <p>Predicts, 1 second ahead, whether the car will leave the track, using only what the car reports.</p>
         </header>
         {!tcn.available || !m ? (
           <p className="ml-muted">Not available: {tcn.reason ?? 'no trained model'}.</p>
@@ -110,26 +107,23 @@ export function ModelsPanel() {
             </div>
             <div className="ml-grid">
               <div>
-                <h4>How well it spots crashes coming <small>(PR-AUC: 1 is perfect)</small></h4>
+                <h4>Spotting crashes <small>(score, 1 = perfect)</small></h4>
                 <Bars
                   max={1}
                   fmt={(v) => v.toFixed(2)}
                   rows={[
-                    { label: `Crash predictor (${tcn.ensemble_size ?? 1} models averaged)`, value: m.tcn.pr_auc, hero: true },
+                    { label: 'Crash predictor', value: m.tcn.pr_auc, hero: true },
                     ...Object.entries(m.baselines)
                       .filter(([, b]) => b.pr_auc !== undefined)
                       .map(([k, b]) => ({ label: BASELINE_NAME[k] ?? k, value: b.pr_auc as number })),
                   ]}
                 />
-                <p className="ml-foot">
-                  Tested on {m.windows.toLocaleString()} moments it never trained on, {m.positives.toLocaleString()} of them just before a crash.
-                  Its distance-to-edge guess is off by {m.tcn.clearance_mae_m.toFixed(2)} m on average.
-                </p>
+                <p className="ml-foot">{m.windows.toLocaleString()} unseen moments · edge distance off by {m.tcn.clearance_mae_m.toFixed(2)} m on average</p>
               </div>
               <div className="ml-calwrap">
-                <h4>Are its percentages honest?</h4>
+                <h4>Honest percentages?</h4>
                 <Calibration bins={m.reliability} />
-                <p className="ml-foot">Dots on the diagonal mean &quot;when it says 70%, it happens about 70% of the time&quot;.</p>
+                <p className="ml-foot">On the dashed line = yes.</p>
               </div>
             </div>
           </>
@@ -140,10 +134,7 @@ export function ModelsPanel() {
         <header>
           <span className="ml-card__kicker">AI model 2 · reinforcement learning</span>
           <h3>Fault-finding AI vs random search</h3>
-          <p>
-            An AI (SAC) learns to switch on grip loss, telemetry delay and brake fade, within fixed limits, to make the car crash. We
-            compare it with trying random faults, both given the same number of attempts{sac?.budget_decision_steps_per_seed ? ` (${sac.budget_decision_steps_per_seed.toLocaleString()} per seed)` : ''}.
-          </p>
+          <p>Learns which faults make the car crash. Same limits and number of attempts as random search.</p>
         </header>
         {!sac ? (
           <p className="ml-muted">Not run yet (python -m app.ml.train_sac).</p>
@@ -155,7 +146,7 @@ export function ModelsPanel() {
                 {sacRows('failures_found_total', (v) => String(v))}
               </div>
               <div>
-                <h4>Attempts before the first crash <small>(fewer is better)</small></h4>
+                <h4>Attempts to first crash <small>(fewer = better)</small></h4>
                 {sacRows('median_first_failure_step', (v) => Math.round(v).toLocaleString(), true)}
               </div>
               <div>
@@ -163,16 +154,16 @@ export function ModelsPanel() {
                 {sacRows('distinct_failure_bins', (v) => String(v))}
               </div>
             </div>
-            <h4 className="ml-h4">Crashes it discovered, replayed on a full lap</h4>
+            <h4 className="ml-h4">Its crashes, re-run on a full lap</h4>
             <div className="ml-chips">
               {sac.exported_schedules.map((e) => (
                 <span key={e.scenario_id} className={`ml-chip ${e.full_lap_track_exit ? 'is-crash' : ''}`}>
                   {e.scenario_id.replace(/^sac_monza_/, '').replace(/__t\d+_/, ' · ').replace(/_/g, ' ')}
-                  <b>{e.full_lap_track_exit ? `crashes again (${e.full_lap_exit_location})` : 'did not crash on a full lap'}</b>
+                  <b>{e.full_lap_track_exit ? 'crashes again' : 'no crash'}</b>
                 </span>
               ))}
             </div>
-            <p className="ml-foot">A crash found on a short test stretch may not repeat on a full lap, where the car arrives at a different speed. You can arm these from the Engineer tab.</p>
+
           </>
         )}
       </article>

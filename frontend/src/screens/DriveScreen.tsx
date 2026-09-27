@@ -72,13 +72,8 @@ export function DriveScreen() {
   }, [demo.active, demo.step.id, connectionState, start])
 
   const info = session.sessionInfo
-  const engineer: { label: string; tone: StatusTone } | null = !info
-    ? null
-    : info.engineer_connected
-      ? { label: 'Engineer connected', tone: 'success' }
-      : info.engineer_ever_connected
-        ? { label: 'Engineer disconnected', tone: 'danger' }
-        : null
+  // only while someone is watching; "disconnected" was just noise on screen
+  const engineer: { label: string; tone: StatusTone } | null = info?.engineer_connected ? { label: 'Engineer connected', tone: 'success' } : null
   const v = session.vehicleState
 
   return (
@@ -130,9 +125,9 @@ export function DriveScreen() {
               />
             )}
             {info && <StatusBadge tone="neutral" label={`Upgrades: ${carLabel(info.upgrades)}`} />}
+            {/* stacked under the badges (not floating over them) */}
+            <FaultHeadsUp faults={session.faultState?.faults ?? []} profile={profile} distanceAlongLap={v?.distance_along_lap ?? 0} />
           </div>
-
-          <FaultHeadsUp faults={session.faultState?.faults ?? []} profile={profile} distanceAlongLap={v?.distance_along_lap ?? 0} />
           <BrakeWarning warning={session.warning} />
           <RunStateBanner vehicleState={v} />
           <DriveHud normalized={input.normalized} vehicleState={v} profile={profile} sessionId={session.sessionId} />

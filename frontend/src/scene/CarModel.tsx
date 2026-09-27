@@ -93,7 +93,7 @@ function buildRig(source: Object3D, ghost: boolean): Rig {
   }
 
   if (ghost) {
-    const grey = new MeshStandardMaterial({ color: '#9aa3ad', roughness: 0.5, metalness: 0.3, transparent: true, opacity: 0.75 })
+    const grey = new MeshStandardMaterial({ color: '#c3cbd6', roughness: 0.4, metalness: 0.2, transparent: true, opacity: 0.38, depthWrite: false })
     inner.traverse((o) => {
       const m = o as Mesh
       if (m.isMesh) m.material = grey

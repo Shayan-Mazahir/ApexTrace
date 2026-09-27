@@ -50,3 +50,4 @@
   .cmp-pick { min-width: 0; width: 100%; }
   .compare-screen { padding: 64px 16px 32px; }
 }
+.cmp-view__note { position: absolute; left: 14px; bottom: 12px; margin: 0; max-width: 60%; padding: 6px 12px; border-radius: 10px; background: rgba(10, 12, 16, 0.7); font-size: 13px; color: #cbd5e1; }

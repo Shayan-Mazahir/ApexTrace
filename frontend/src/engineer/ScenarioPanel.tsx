@@ -81,22 +81,12 @@ export function ScenarioPanel({ scenarios, profile, activeScenarioId, disabled, 
       {selected && (
         <>
           {guide ? (
-            <div className="scenario-panel__guide">
-              <p><b>What happens:</b> {guide.story}</p>
-              <p><b>What to watch:</b> {guide.watch}</p>
-            </div>
+            <p className="scenario-panel__guide" title={guide.watch}>{guide.story}</p>
           ) : (
             <p className="scenario-panel__description">{selected.description}</p>
           )}
-          <ul className="scenario-panel__faults">
-            {selected.faults.map((f) => (
-              <li key={f.id}>
-                <code>{f.type}</code> [{f.target}] {Object.entries(f.parameters ?? {}).map(([k, v]) => `${k}=${v}`).join(', ')}
-                {' — '}
-                {f.trigger?.kind === 'zone' ? `zone ${f.trigger.zone_id}` : f.trigger?.kind ?? 'always'}
-              </li>
-            ))}
-          </ul>
+          <details className="scenario-panel__adjust">
+            <summary>Adjust (severity, zone, duration, seed)</summary>
           <div className="scenario-panel__grid">
             <label>
               <span title="Which braking zone the faults are attached to. 'as defined' keeps the preset's own zone.">Trigger zone</span>
@@ -124,6 +114,7 @@ export function ScenarioPanel({ scenarios, profile, activeScenarioId, disabled, 
               <input type="number" value={seed} disabled={disabled} onChange={(e) => setSeed(e.target.value)} />
             </label>
           </div>
+          </details>
         </>
       )}
 
@@ -143,14 +134,8 @@ export function ScenarioPanel({ scenarios, profile, activeScenarioId, disabled, 
           Reset experiment
         </button>
       </div>
-      {activeScenarioId ? (
-        <p className="scenario-panel__armed">Armed on this session: <b>{selected?.name ?? activeScenarioId}</b>. Go to the Drive tab and drive; faults switch on at their triggers.</p>
-      ) : (
-        <p className="scenario-panel__note">
-          Arming restarts the driver&apos;s lap from the scenario&apos;s start with its seed (and clears single faults you added
-          before). Faults then wait for their own triggers. Single faults added <i>after</i> arming stack on top.
-        </p>
-      )}
+      {activeScenarioId && <p className="scenario-panel__armed">✓ Armed: {selected?.name ?? activeScenarioId}</p>}
+      <p className="scenario-panel__note">Arming restarts the lap. Each fault switches on at its own trigger.</p>
     </div>
   )
 }

@@ -376,9 +376,9 @@ try {
     await shot(engineer, '4-engineer')
   })
 
-  await step('drive: shows engineer disconnected after the engineer leaves', async () => {
+  await step('drive: engineer badge goes away after the engineer leaves', async () => {
     await engineer.close()
-    await waitText(drive, 'Engineer disconnected', 8000)
+    await drive.waitForFunction(() => !document.body.innerText.includes('Engineer connected'), { timeout: 8000, polling: 250 })
   })
 
   await step('recovery: a dropped socket resumes the same session (server stayed up)', async () => {

@@ -5,7 +5,6 @@ import { useActiveSession } from '../app/ActiveSessionContext'
 import { useScreen } from '../app/ScreenContext'
 import { useErrorContext } from '../app/ErrorContext'
 import { SimulatedFaultLabel } from '../components/SimulatedFaultLabel'
-import { StatusBadge } from '../components/StatusBadge'
 import { ActiveFaults } from '../engineer/ActiveFaults'
 import { EventLog } from '../engineer/EventLog'
 import { FaultBuilder } from '../engineer/FaultBuilder'
@@ -14,15 +13,14 @@ import { LinkIndicators } from '../engineer/LinkIndicators'
 import { RunInfo } from '../engineer/RunInfo'
 import { ScenarioPanel } from '../engineer/ScenarioPanel'
 import { TcnPanel } from '../engineer/TcnPanel'
-import { HelpNote } from '../components/HelpNote'
 import { useEngineerSession } from '../engineer/useEngineerSession'
 import { Scene } from '../scene/Scene'
 import type { FaultType, StressScenario } from '../types/schemas'
 import './EngineerScreen.css'
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Section({ title, children, tone }: { title: string; children: ReactNode; tone?: string }) {
   return (
-    <section className="engineer-screen__section">
+    <section className={`engineer-screen__section ${tone ? `eng-tone--${tone}` : ''}`}>
       <h2>{title}</h2>
       {children}
     </section>
@@ -88,7 +86,7 @@ export function EngineerScreen() {
       </div>
 
       <aside className="engineer-screen__panel">
-        <Section title="Engineer station">
+        <Section title="Engineer station" tone="orange">
           <form
             className="engineer-screen__join"
             onSubmit={(e) => {
@@ -113,39 +111,17 @@ export function EngineerScreen() {
               </button>
             )}
           </form>
-          <div className="engineer-screen__warning">
-            <StatusBadge
-              tone={connected ? 'success' : engineer.joined ? 'warning' : 'neutral'}
-              label={connected ? 'Connected' : engineer.joined ? 'Connecting…' : 'Not joined'}
-            />
-            {engineer.joined && <StatusBadge tone="neutral" label={`Session ${engineer.joined.id}`} />}
-            {engineer.joined && (
-              <StatusBadge tone={engineer.sessionInfo?.driver_connected ? 'success' : 'warning'}
-                label={engineer.sessionInfo?.driver_connected ? 'Driver online' : 'Driver offline'} />
-            )}
-          </div>
+          <p className={`eng-status ${connected ? 'is-live' : ''}`}>
+            <i />
+            {connected ? `Connected to ${engineer.joined?.id}` : engineer.joined ? 'Connecting…' : 'Not joined: enter the code from the Drive screen'}
+            {connected && (engineer.sessionInfo?.driver_connected ? ' · driver on track' : ' · driver not driving')}
+            {w.active && <b className="eng-status__brake"> · driver sees BRAKE</b>}
+            {w.stale && <b className="eng-status__stale"> · driver sees STALE</b>}
+          </p>
           <SimulatedFaultLabel delayMs={v?.injected_delay_ms ?? 0} />
-          <div className="engineer-screen__warning">
-            {w.active && <StatusBadge tone="danger" label={`Driver sees BRAKE — ${w.hazardZone} (${w.source})`} />}
-            {w.stale && <StatusBadge tone="warning" label={`Driver sees STALE — ${w.reason ?? ''}`} />}
-            {!w.active && !w.stale && <StatusBadge tone="neutral" label="Driver sees: clear" />}
-          </div>
         </Section>
 
-        <Section title="1 · What do you want to break?">
-          <HelpNote title="How this screen works (30 seconds)" open={false}>
-            <p>
-              You are the pit-wall <b>engineer</b>. The driver drives on the <b>Drive</b> tab. You inject failures and see whether the
-              car&apos;s brake-warning system still keeps the car on track.
-            </p>
-            <ol>
-              <li><b>Scenario</b> = a saved bundle of faults with a short story (recommended).</li>
-              <li><b>Single fault</b> = build one fault yourself (what breaks, how much, when).</li>
-              <li>Press <b>Arm &amp; go drive</b>. The lap restarts, you land on the Drive tab, and the fault switches on when you reach its trigger zone. Nothing else changes.</li>
-              <li>Come back here to see the fault turn <i>waiting</i>, <i>active</i>, <i>completed</i>, and watch the event log.</li>
-            </ol>
-            <p>Want to watch live? Open a second browser tab on <b>/#engineer</b> and join with the code shown on the Drive screen.</p>
-          </HelpNote>
+        <Section title="1 · Pick what to break" tone="blue">
           <div className="engineer-screen__tabs" role="tablist">
             <button type="button" role="tab" aria-selected={mode === 'scenario'} className={mode === 'scenario' ? 'on' : ''} onClick={() => setMode('scenario')}>
               Saved scenario
@@ -176,7 +152,7 @@ export function EngineerScreen() {
           </div>
         </Section>
 
-        <Section title="2 · What is happening now">
+        <Section title="2 · Live faults" tone="red">
           <ActiveFaults
             faults={engineer.faultState?.faults ?? []}
             disabled={!connected}
@@ -190,7 +166,7 @@ export function EngineerScreen() {
           </div>
         </Section>
 
-        <Section title="3 · Evidence (what actually happened)">
+        <Section title="3 · Event log" tone="green">
           <EventLog entries={engineer.eventLog} />
         </Section>
 
