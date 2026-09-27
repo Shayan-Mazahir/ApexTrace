@@ -162,3 +162,16 @@
   margin: var(--space-md) 0 0;
   font-size: var(--font-size-lg);
 }
+
+.gstep { display: flex; flex-direction: column; gap: 12px; padding: 18px 20px; margin-bottom: 14px; border-radius: 14px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.07); }
+.gstep__head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.gstep__head h2 { margin: 0; font-size: 19px; }
+.gstep__head p { margin: 0; color: #9aa1ab; font-size: 13px; }
+.gstep__n { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: #ff8000; color: #1a1206; font-weight: 700; align-self: center; }
+.garage-verdict { padding: 14px 16px; border-radius: 12px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.garage-verdict p { margin: 0; line-height: 1.5; }
+.garage-verdict.is-good { background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(74, 222, 128, 0.4); }
+.garage-verdict.is-bad { background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(248, 113, 113, 0.4); }
+.garage-verdict__limits { font-size: 13px; color: #fcd34d; }
+.garage-screen__details { margin-top: 6px; }
+.garage-screen__details summary { cursor: pointer; color: #b9c0cb; padding: 6px 0; }

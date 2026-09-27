@@ -7,9 +7,9 @@ interface BudgetPanelProps {
 }
 
 const FIELDS: { key: keyof BudgetInputs; label: string; hint: string }[] = [
-  { key: 'cash', label: 'Cash on hand', hint: 'editable demo assumption' },
-  { key: 'commitments', label: 'Remaining event commitments', hint: 'four events left' },
-  { key: 'reserve', label: 'Chosen reserve', hint: 'kept untouched' },
+  { key: 'cash', label: 'Cash in the bank', hint: '' },
+  { key: 'commitments', label: 'Already owed (4 races left)', hint: '' },
+  { key: 'reserve', label: 'Emergency reserve', hint: '' },
 ]
 
 export function BudgetPanel({ budget, onChange }: BudgetPanelProps) {
@@ -31,16 +31,15 @@ export function BudgetPanel({ budget, onChange }: BudgetPanelProps) {
                 onChange={(e) => onChange({ ...budget, [key]: Number(e.target.value) || 0 })}
               />
             </div>
-            <small>{hint}</small>
+            {hint && <small>{hint}</small>}
           </label>
         ))}
       </div>
       <div className="budget-panel__available" aria-live="polite">
-        <span className="budget-panel__available-label">Available for upgrades</span>
+        <span className="budget-panel__available-label">You can spend</span>
         <strong className={available < 0 ? 'budget-panel__negative' : ''}>{formatCad(available)}</strong>
         <small>
-          {formatCad(budget.cash)} − {formatCad(budget.commitments)} commitments − {formatCad(budget.reserve)}{' '}
-          reserve{available < 0 ? ' · shortfall: no purchase possible' : ''}
+          bank − owed − reserve{available < 0 ? ' · short of money: nothing can be bought' : ''}
         </small>
       </div>
     </section>

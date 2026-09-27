@@ -1,10 +1,9 @@
-import { useLayoutEffect, useMemo, useRef } from 'react'
-import { BufferAttribute, BufferGeometry, Color, DoubleSide, IcosahedronGeometry, Object3D, Vector3, type InstancedMesh, type Texture } from 'three'
+import { Suspense, useLayoutEffect, useMemo, useRef } from 'react'
+import { useLoader } from '@react-three/fiber'
+import { BufferAttribute, BufferGeometry, Color, DoubleSide, Object3D, PlaneGeometry, SRGBColorSpace, TextureLoader, type InstancedMesh, type Texture } from 'three'
 import type { TrackId, TrackProfile } from '../types/schemas'
 import {
   asphaltTexture,
-  barkTexture,
-  foliageTexture,
   crowdTexture,
   fenceTexture,
   grassTexture,
@@ -98,52 +97,31 @@ function TexturedStrip({ strip, map, colour = '#ffffff', transparent = false, ro
 }
 
 // offsets of the three foliage blobs relative to the crown centre
-// Crown clusters (offset in crown radii, size): three overlapping lumps give an
-// irregular canopy silhouette instead of a single ball.
-const BLOBS: [number, number, number, number][] = [
-  [0, 0.1, 0, 1],
-  [0.62, -0.28, 0.25, 0.72],
-  [-0.58, -0.22, -0.3, 0.7],
-]
-
-// A lumpy, smooth-shaded foliage ball: an icosphere with vertices pushed in
-// and out by layered noise, and darker underneath (light barely reaches there).
-function makeCrownGeometry(): BufferGeometry {
-  const g = new IcosahedronGeometry(1, 2)
-  const pos = g.getAttribute('position')
-  const colors = new Float32Array(pos.count * 3)
-  const v = new Vector3()
-  for (let i = 0; i < pos.count; i++) {
-    v.fromBufferAttribute(pos, i)
-    const n =
-      Math.sin(v.x * 3.1 + v.y * 1.7) * Math.cos(v.z * 2.9 - v.x * 1.3) * 0.13 +
-      Math.sin(v.x * 7.3 + v.z * 5.1) * Math.cos(v.y * 6.7) * 0.07
-    v.multiplyScalar(1 + n)
-    v.y *= 0.88
-    pos.setXYZ(i, v.x, v.y, v.z)
-    const shade = 0.62 + 0.38 * Math.max(0, Math.min(1, (v.y + 0.9) / 1.6))
-    colors.set([shade, shade, shade], i * 3)
-  }
-  g.setAttribute('color', new BufferAttribute(colors, 3))
-  g.computeVertexNormals()
-  return g
-}
+// Trees are impostors of a real fir model (Poly Haven fir_tree_01, baked from
+// two sides into public/textures/fir_a.png / fir_b.png by e2e/tmp/bake.mjs).
+// Each tree is two crossed textured planes: the model's real silhouette for 4
+// triangles, so hundreds of trees stay cheap. Baked lighting, so unlit material.
+const TREE_IMAGE_ASPECT = 1024 / 1536
+const TREE_IMAGE_HEIGHT_PER_TREE = 1.02 // the bake frames the tree with 2% headroom
 
 function Trees({ items }: { items: Prop[] }) {
-  const trunks = useRef<InstancedMesh>(null)
-  const crownRefs = useRef<(InstancedMesh | null)[]>([])
-  const crownGeometry = useMemo(makeCrownGeometry, [])
-  const leaves = useMemo(() => {
-    const t = foliageTexture().clone()
-    t.repeat.set(3, 3)
-    t.needsUpdate = true
-    return t
-  }, [])
-  const colours = useMemo(() => {
+  const [texA, texB] = useLoader(TextureLoader, ['/textures/fir_a.png', '/textures/fir_b.png'])
+  const planeA = useRef<InstancedMesh>(null)
+  const planeB = useRef<InstancedMesh>(null)
+  const geometry = useMemo(() => new PlaneGeometry(TREE_IMAGE_ASPECT, 1).translate(0, 0.5, 0), [])
+  useMemo(() => {
+    for (const t of [texA, texB]) {
+      t.colorSpace = SRGBColorSpace
+      t.anisotropy = 8
+      t.needsUpdate = true
+    }
+  }, [texA, texB])
+  const tints = useMemo(() => {
     const c = new Color()
     const out = new Float32Array(items.length * 3)
     items.forEach((p, i) => {
-      c.setHSL(0.24 + (p.rotation % 0.08), 0.45 + (p.scale - 0.7) * 0.15, 0.62 + (p.rotation % 0.3) * 0.25)
+      const v = 0.82 + (p.rotation % 0.25)
+      c.setRGB(v * (0.95 + (p.scale % 0.1)), v, v * 0.97)
       out.set([c.r, c.g, c.b], i * 3)
     })
     return out
@@ -152,45 +130,29 @@ function Trees({ items }: { items: Prop[] }) {
   useLayoutEffect(() => {
     const o = new Object3D()
     items.forEach((p, i) => {
-      const h = p.height * p.scale
-      o.position.set(p.x, h * 0.36, p.z)
+      const h = (12 + p.height * 0.6) * p.scale * TREE_IMAGE_HEIGHT_PER_TREE
+      o.position.set(p.x, -0.2, p.z)
+      o.scale.set(h, h, h)
       o.rotation.set(0, p.rotation, 0)
-      o.scale.set(p.scale, h * 0.72, p.scale)
       o.updateMatrix()
-      trunks.current?.setMatrixAt(i, o.matrix)
-      const r = 2.7 * p.scale + h * 0.2
-      BLOBS.forEach(([dx, dy, dz, s], k) => {
-        const c = Math.cos(p.rotation)
-        const sn = Math.sin(p.rotation)
-        o.position.set(p.x + (dx * c - dz * sn) * r, h * 0.8 + dy * r, p.z + (dx * sn + dz * c) * r)
-        o.rotation.set(0, p.rotation * 3 + k, 0)
-        o.scale.set(r * s, r * s, r * s)
-        o.updateMatrix()
-        crownRefs.current[k]?.setMatrixAt(i, o.matrix)
-      })
+      planeA.current?.setMatrixAt(i, o.matrix)
+      o.rotation.set(0, p.rotation + Math.PI / 2, 0)
+      o.updateMatrix()
+      planeB.current?.setMatrixAt(i, o.matrix)
     })
-    if (trunks.current) trunks.current.instanceMatrix.needsUpdate = true
-    for (const c of crownRefs.current) if (c) c.instanceMatrix.needsUpdate = true
+    for (const m of [planeA.current, planeB.current]) if (m) m.instanceMatrix.needsUpdate = true
   }, [items])
-
-  const bark = useMemo(() => {
-    const t = barkTexture().clone()
-    t.repeat.set(1, 3)
-    t.needsUpdate = true
-    return t
-  }, [])
 
   if (items.length === 0) return null
   return (
     <>
-      <instancedMesh ref={trunks} args={[undefined, undefined, items.length]}>
-        <cylinderGeometry args={[0.14, 0.34, 1, 8]} />
-        <meshStandardMaterial map={bark} roughness={1} />
-      </instancedMesh>
-      {BLOBS.map((_, k) => (
-        <instancedMesh key={k} ref={(m) => { crownRefs.current[k] = m }} args={[crownGeometry, undefined, items.length]}>
-          <instancedBufferAttribute attach="instanceColor" args={[colours, 3]} />
-          <meshStandardMaterial map={leaves} vertexColors roughness={0.95} />
+      {[
+        [planeA, texA],
+        [planeB, texB],
+      ].map(([ref, tex], k) => (
+        <instancedMesh key={k} ref={ref as React.RefObject<InstancedMesh>} args={[geometry, undefined, items.length]}>
+          <instancedBufferAttribute attach="instanceColor" args={[tints, 3]} />
+          <meshBasicMaterial map={tex as Texture} alphaTest={0.45} side={DoubleSide} />
         </instancedMesh>
       ))}
     </>
@@ -439,7 +401,13 @@ export function TrackScenery({ profile }: { profile: TrackProfile }) {
       <TexturedStrip strip={parts.altR} map={limitlabBoard()} roughness={0.6} />
       <TexturedStrip strip={parts.fenceL} map={fenceTexture()} transparent />
       <TexturedStrip strip={parts.fenceR} map={fenceTexture()} transparent />
-      {theme.props === 'trees' ? <Trees items={parts.props} /> : <Buildings items={parts.props} />}
+      {theme.props === 'trees' ? (
+        <Suspense fallback={null}>
+          <Trees items={parts.props} />
+        </Suspense>
+      ) : (
+        <Buildings items={parts.props} />
+      )}
       <Grandstand profile={profile} from={60} to={300} side={1} />
       <Grandstand profile={profile} from={60} to={300} side={-1} />
       <StartFinish profile={profile} />

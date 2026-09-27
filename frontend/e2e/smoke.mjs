@@ -75,8 +75,8 @@ async function setInput(page, selector, index, value) {
 // Selects the cheapest passing configuration if the evaluation found one;
 // otherwise (a legitimate result) picks the Local warning fallback card by hand.
 async function selectSomeUpgrade(page) {
-  const passing = await page.evaluate(() => [...document.querySelectorAll('button')].some((b) => !b.disabled && b.textContent.includes('Select cheapest passing')))
-  if (passing) return clickButton(page, 'Select cheapest passing')
+  const passing = await page.evaluate(() => [...document.querySelectorAll('button')].some((b) => !b.disabled && b.textContent.trim() === 'Select it'))
+  if (passing) return clickButton(page, 'Select it', { exact: true })
   await page.evaluate(() => {
     const card = [...document.querySelectorAll('.upgrade-card')].find((c) => c.innerText.includes('Local warning fallback'))
     card.querySelector('footer button').click()
@@ -180,7 +180,7 @@ try {
   await garage.goto(`${BASE}/#garage`)
 
   await step('garage: sample budget shows CAD 4,000 available', async () => {
-    await waitText(garage, 'Upgrade garage')
+    await waitText(garage, 'Your budget')
     await garage.waitForSelector('.upgrade-card')
     const available = await garage.$eval('.budget-panel__available strong', (e) => e.textContent)
     assert(available.includes('4,000'), `available was "${available}"`)
@@ -219,15 +219,17 @@ try {
   })
 
   await step('garage: fixed evaluation suite runs all 8 configurations', async () => {
-    await clickButton(garage, 'Run fixed evaluation suite')
+    await clickButton(garage, 'Run the tests')
     await garage.waitForSelector('.results-table', { timeout: 90000 })
-    await waitText(garage, 'cheapest configuration that passed', 5000).catch(async () => {
+    await garage.waitForSelector('.sgrid', { timeout: 90000 })
+    await waitText(garage, 'Buy:', 5000).catch(async () => {
       await waitText(garage, 'No affordable configuration passed', 5000)
     })
     const criteria = await garage.$eval('.results-table__criteria', (e) => e.textContent)
     const suite = await (await fetch(`${API}/evaluation/suite?kind=heldout`)).json()
     assert(new RegExp(`\\b\\d+ tests`).test(criteria) && suite.tests.length > 0, `criteria text: ${criteria}`)
-    await waitText(garage, 'of 8 configurations pass') // full-suite summary alongside the selected group
+    const cols = await garage.$$eval('.sgrid__row--head .sgrid__col', (e) => e.length)
+    assert(cols === 8, `expected 8 combination columns, got ${cols}`)
     await garage.$eval('.results-table__filter input', (e) => e.click())
     const rows = (await garage.$$('.results-table tbody tr')).length
     assert(rows === 8, `expected 8 rows with the filter off, got ${rows}`)
@@ -237,7 +239,7 @@ try {
   await step('garage: never shows a generic SAFE verdict', async () => {
     const text = await bodyText(garage)
     assert(!/\bSAFE\b/.test(text), 'found a bare SAFE')
-    assert(text.includes('Passed this test suite') || text.includes('No affordable configuration'), 'no scoped verdict wording')
+    assert(text.includes('Buy:') || text.includes('Nothing to buy') || text.includes('No affordable configuration'), 'no verdict')
   })
 
   await step('garage: shows "No affordable configuration passed" when nothing feasible', async () => {
@@ -251,13 +253,13 @@ try {
     assert(/CAD [\d,]+/.test(verdict) || verdict.includes('No affordable configuration passed'), `verdict: ${verdict}`)
     await selectSomeUpgrade(garage)
     const summary = await garage.$eval('.garage-screen__summary', (e) => e.innerText)
-    assert(summary.includes('Remaining after commitments, reserve and upgrades'), summary)
+    assert(summary.includes('Left to spend') && /CAD [\d,]+/.test(summary), summary)
   })
   await shot(garage, '1-garage-results')
 
   // --------------------------------------------------------------- Compare
   await step('compare: synchronized baseline and upgraded replays', async () => {
-    await clickButton(garage, 'Compare baseline vs selected')
+    await clickButton(garage, 'Watch a replay')
     await garage.waitForSelector('.replay-panel canvas', { timeout: 60000 })
     await waitText(garage, 'Automated replay')
     assert((await garage.$$('.replay-panel')).length === 2, 'expected two replay panels')
@@ -452,11 +454,11 @@ try {
       const p = await newPage('backup')
       try {
         await p.goto(`${BASE}/#garage`)
-        await clickButton(p, 'Run fixed evaluation suite')
+        await clickButton(p, 'Run the tests')
         await p.waitForSelector('.results-table', { timeout: 90000 })
         await selectSomeUpgrade(p)
         execSync('lsof -ti tcp:8000 -sTCP:LISTEN | xargs kill -9')
-        await clickButton(p, 'Compare baseline vs selected')
+        await clickButton(p, 'Watch a replay')
         await waitText(p, 'backup recording', 20000)
         await p.waitForSelector('.replay-panel canvas', { timeout: 20000 })
         assert((await p.$$('.replay-panel')).length === 2, 'expected two replay panels from the backup')
