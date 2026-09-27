@@ -12,6 +12,7 @@ from typing import Iterable
 
 from app.schemas import ConfigurationName, Scenario, SimulationResult
 from app.sim.simulator import Simulator
+from app.worker_guard import exit_with_parent
 
 
 def run_scenario(
@@ -39,5 +40,5 @@ def run_batch(
         workers = os.cpu_count() or 1
     if workers <= 1 or len(jobs) < 8:
         return [_run_args(j) for j in jobs]
-    with ProcessPoolExecutor(max_workers=workers) as pool:
+    with ProcessPoolExecutor(max_workers=workers, initializer=exit_with_parent) as pool:
         return list(pool.map(_run_args, jobs, chunksize=max(1, len(jobs) // (workers * 4))))

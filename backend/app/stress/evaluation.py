@@ -16,11 +16,14 @@ from __future__ import annotations
 import math
 import os
 import random
+import threading
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
+from app import result_cache
 from app.budget import config_label, enumerate_configs
+from app.worker_guard import exit_with_parent
 from app.f1_car import max_lateral_accel, steering_for_curvature
 from app.placeholder_sim import TRACK_PRESETS, DemoVehicleState, loop_size, signed_clearance
 from app.schemas import UpgradeConfig, UpgradeOption
@@ -259,6 +262,7 @@ SUITE_GROUPS: dict[str, dict[str, Any]] = {
 
 
 def _low_priority() -> None:
+    exit_with_parent()  # don't keep evaluating if the server is killed mid-run
     try:
         os.nice(10)
     except OSError:
@@ -295,9 +299,18 @@ _CACHE: dict[str, dict[str, Any]] = {}
 
 def evaluate_all(kind: str = "heldout", use_cache: bool = True, parallel: bool = True) -> dict[str, Any]:
     """Every upgrade combination on every test of the suite, then aggregated
-    per suite group. Deterministic, so cached."""
+    per suite group. Deterministic, so cached in memory and on disk (a
+    restart reads the stored suite instead of re-running ~340 laps)."""
     if use_cache and kind in _CACHE:
         return _CACHE[kind]
+    if not use_cache:
+        return _evaluate_all(kind, parallel)
+    response = result_cache.cached("evaluation", {"kind": kind}, lambda: _evaluate_all(kind, parallel))
+    _CACHE[kind] = response
+    return response
+
+
+def _evaluate_all(kind: str, parallel: bool) -> dict[str, Any]:
     jobs = [(o.model_dump(), kind) for o in enumerate_configs()]
     raw = None
     if parallel:
@@ -331,10 +344,7 @@ def evaluate_all(kind: str = "heldout", use_cache: bool = True, parallel: bool =
             "solvable_count": len(keep) - len(unsolved),
             "configs": configs,
         }
-    response = {"suite": suite_info(kind), "groups": groups, "configs": groups["full"]["configs"]}
-    if use_cache:
-        _CACHE[kind] = response
-    return response
+    return {"suite": suite_info(kind), "groups": groups, "configs": groups["full"]["configs"]}
 
 
 def find_test(test_id: str) -> StressScenario | None:
@@ -346,9 +356,23 @@ def find_test(test_id: str) -> StressScenario | None:
 
 
 def replay(test_id: str, baseline: UpgradeConfig, upgraded: UpgradeConfig) -> dict[str, Any]:
-    scenario = find_test(test_id)
-    if scenario is None:
+    """Baseline vs upgraded run of one suite test, with 10 Hz frames. Deterministic
+    (the TCN overlay too, when its models load), so cached in memory and on disk."""
+    if find_test(test_id) is None:
         raise KeyError(test_id)
+    return result_cache.cached("replay", _replay_key(test_id, baseline, upgraded),
+                               lambda: _replay(test_id, baseline, upgraded))
+
+
+def _replay_key(test_id: str, baseline: UpgradeConfig, upgraded: UpgradeConfig) -> dict[str, Any]:
+    from app.ml import risk
+
+    return {"test_id": test_id, "baseline": baseline.model_dump(mode="json"),
+            "upgraded": upgraded.model_dump(mode="json"), "tcn": risk.status()["available"]}
+
+
+def _replay(test_id: str, baseline: UpgradeConfig, upgraded: UpgradeConfig) -> dict[str, Any]:
+    scenario = find_test(test_id)
     from app.ml import risk
     from app.ml.features import vector
 
@@ -390,3 +414,65 @@ def paired(scenario: StressScenario, upgrade: UpgradeConfig) -> dict[str, Any]:
         out = run_scenario(s, cfg, test_id=f"{scenario.id}:{key}")
         rows.append({"key": key, "label": label, "upgrades": cfg.model_dump(), "result": out.result})
     return {"scenario_id": scenario.id, "scenario_name": scenario.name, "seed": scenario.seed, "rows": rows}
+
+
+# --------------------------------------------------------------------------
+# replay pre-warming
+
+
+def default_test(baseline: list[dict[str, Any]], upgraded: list[dict[str, Any]]) -> str | None:
+    """The test the Compare screen opens first (mirrors pickDefaultTest in
+    frontend/src/compare/compareLogic.ts): the tightest test the upgrade fixes,
+    else the tightest baseline failure, else the tightest test overall."""
+    def tightest(tests: list[dict[str, Any]]) -> str:
+        return min(tests, key=lambda t: t["min_clearance_m"])["test_id"]
+
+    if not baseline:
+        return None
+    passed_upgraded = {t["test_id"] for t in upgraded if t["passed"]}
+    fixed = [t for t in baseline if not t["passed"] and t["test_id"] in passed_upgraded]
+    failed = [t for t in baseline if not t["passed"]]
+    return tightest(fixed or failed or baseline)
+
+
+def replay_warm_order(kind: str = "heldout") -> list[tuple[str, dict[str, Any]]]:
+    """Every (test, upgrade set) the Compare screen can ask for (always against
+    no upgrades), most likely first: each set's default test, then the tests
+    the baseline fails, then the rest."""
+    configs = evaluate_all(kind)["configs"]
+    base = next(c for c in configs if not any(c["upgrades"].values()))
+    others = [c for c in configs if c is not base]
+    failing = sorted(base["tests"], key=lambda t: (t["passed"], t["min_clearance_m"]))
+    ordered = [(default_test(base["tests"], c["tests"]), c["upgrades"]) for c in others]
+    ordered += [(t["test_id"], c["upgrades"]) for t in failing for c in others]
+    seen, jobs = set(), []
+    for test_id, upgrades in ordered:
+        mark = (test_id, tuple(sorted(upgrades.items())))
+        if test_id is not None and mark not in seen:
+            seen.add(mark)
+            jobs.append((test_id, upgrades))
+    return jobs
+
+
+def _warm_replay(job: tuple[str, dict[str, Any]]) -> None:
+    test_id, upgrades = job
+    replay(test_id, UpgradeConfig(), UpgradeConfig.model_validate(upgrades))  # stored on disk by the cache
+
+
+def prewarm_replays(kind: str = "heldout", stop: threading.Event | None = None) -> int:
+    """Compute and store every Compare replay not yet cached, one at a time in a
+    single low-priority worker process (a thread here would compete with live
+    sessions for the GIL). Checks `stop` between replays; returns how many ran."""
+    if not result_cache.enabled() or os.environ.get("LIMITLAB_PREWARM", "1") == "0":
+        return 0
+    jobs = [(tid, up) for tid, up in replay_warm_order(kind)
+            if not result_cache.contains("replay", _replay_key(tid, UpgradeConfig(), UpgradeConfig.model_validate(up)))]
+    done = 0
+    if jobs:
+        with ProcessPoolExecutor(max_workers=1, initializer=_low_priority) as pool:
+            for job in jobs:
+                if stop is not None and stop.is_set():
+                    break
+                pool.submit(_warm_replay, job).result()
+                done += 1
+    return done
