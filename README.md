@@ -97,6 +97,10 @@ Our 3D printer never showed up. So we built it out of premium, aerospace-grade c
 - **1.69" ST7789 colour screen:** your speed, the link status, and a big red **BRAKE**
 - **2× SG90 servos:** rumble on kerbs, crashes and warnings
 
+<img src="docs/screenshots/wiring.webp" alt="Wiring overview: ESP32, two MPU6050 IMUs, HW-504 joystick, ST7789 screen and two SG90 servos on a breadboard" width="100%" />
+
+<sub>Wiring overview. Exact pin assignments live in [`embedded-firmware/steering-wheel/steering-wheel.ino`](embedded-firmware/steering-wheel/steering-wheel.ino).</sub>
+
 ## ⚙️ How it works
 
 ```mermaid
