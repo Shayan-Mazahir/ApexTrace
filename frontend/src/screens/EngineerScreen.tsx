@@ -176,19 +176,25 @@ export function EngineerScreen() {
           </div>
         </Section>
 
-        <Section title="3 · Evidence">
+        <Section title="3 · Evidence (what actually happened)">
           <EventLog entries={engineer.eventLog} />
         </Section>
 
         <details className="engineer-screen__more">
           <summary>Connection, run details and AI risk model</summary>
           <Section title="Link">
-            <LinkIndicators connection={engineer.connection} vehicleState={v} lastMessageAt={engineer.lastMessageAt} />
+            <LinkIndicators connection={engineer.connection} vehicleState={v} lastMessageAt={engineer.lastMessageAt}
+              driverOffline={engineer.sessionInfo?.driver_connected === false} />
           </Section>
           <Section title="Run">
             <RunInfo info={engineer.sessionInfo} />
           </Section>
-          <Section title="TCN risk observer">
+          <Section title="TCN risk observer (AI)">
+            <p className="engineer-screen__key">
+              A small neural network that watches only what the car reports (speed, inputs, warning state) and predicts, one
+              second ahead, the chance the car leaves the track and how close to the edge it will get. It only observes: it
+              never triggers warnings. &quot;Actual clearance&quot; is the ground truth from the simulator, for comparison.
+            </p>
             <TcnPanel status={engineer.sessionInfo?.tcn ?? null} vehicleState={v} />
           </Section>
         </details>

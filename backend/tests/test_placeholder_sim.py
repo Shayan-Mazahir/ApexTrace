@@ -320,3 +320,30 @@ def test_windowed_nearest_matches_full_scan_along_a_lap():
         assert math.hypot(x - centerline[hint][0], y - centerline[hint][1]) == math.hypot(
             x - centerline[full][0], y - centerline[full][1]
         )
+
+
+def test_after_hitting_a_barrier_holding_brake_reverses_the_car_away():
+    import math
+    from dataclasses import replace
+
+    from app import placeholder_sim as ps
+
+    prof = ps.TRACK_PRESETS["monza"]
+    cx, cy = prof.centerline[20]
+    lx, ly = prof.left_edge[20]
+    nx, ny = lx - cx, ly - cy
+    norm = math.hypot(nx, ny)
+    s = replace(ps.initial_state(prof), x=cx, y=cy, heading=math.atan2(ny, nx), speed=30.0,
+                nearest_point_index=20, gear=4)
+    for _ in range(80):
+        s = ps.step(s, 0.0, 1.0, 0.0, 0.05, prof)
+    assert s.in_contact and s.speed == 0.0
+    hit = (s.x, s.y)
+    for _ in range(40):  # 2 s on the brake pedal
+        s = ps.step(s, 0.0, 0.0, 1.0, 0.05, prof)
+    assert s.gear == -1 and s.speed < 0
+    assert math.hypot(s.x - hit[0], s.y - hit[1]) > 2.0  # it actually backed away from the wall
+    assert not s.in_contact
+    for _ in range(80):  # throttle stops the car, then selects drive again
+        s = ps.step(s, 0.0, 0.6, 0.0, 0.05, prof)
+    assert s.gear >= 1

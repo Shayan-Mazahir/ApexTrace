@@ -101,3 +101,4 @@
 .engineer-screen__more { border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 6px 10px; }
 .engineer-screen__more summary { cursor: pointer; font-size: 13px; color: #b9c0cb; padding: 4px 0; }
 .engineer-screen__more .engineer-screen__section { margin-top: 8px; }
+.engineer-screen__key { margin: 0 0 6px; font-size: 12px; line-height: 1.5; color: #b9c0cb; }

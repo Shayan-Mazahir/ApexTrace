@@ -94,6 +94,11 @@ export function DriveHud({ normalized, vehicleState: v, profile, sessionId }: Dr
               <span key={i} className={`f1-dash__tick ${i < lit ? 'on' : ''} f1-dash__tick--${i < 5 ? 'g' : i < 10 ? 'r' : 'b'}`} />
             ))}
           </div>
+          <div className="f1-dash__lapline">
+            <b>LAP {v?.lap ?? 1}</b>
+            <span>{formatLapTime(v?.lap_time_s ?? 0)}</span>
+            {(v?.laps_completed ?? 0) > 0 && <span>{v?.laps_completed} done</span>}
+          </div>
           <div className="f1-dash__main">
             <div className="f1-dash__side">
               <div className={`f1-dash__battery ${battery < 15 ? 'low' : ''}`} title="Battery state of charge">

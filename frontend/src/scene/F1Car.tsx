@@ -135,27 +135,45 @@ function SteeringWheel({ steer }: { steer: React.MutableRefObject<number> }) {
     // driver input -1..1 maps to about +/-140 degrees of hand-wheel rotation
     if (wheel.current) wheel.current.rotation.x = -steer.current * 2.4
   })
+  const buttons: [number, number, string][] = [
+    [0.09, 0.05, '#22c55e'], [0.09, -0.05, '#ef4444'], [-0.02, 0.09, '#3b82f6'],
+    [-0.02, -0.09, '#facc15'], [0.09, 0.115, '#f97316'], [0.09, -0.115, '#e879f9'],
+  ]
   return (
-    <group position={[0.5, 0.7, 0]} rotation={[0, 0, -0.95]}>
+    <group position={[0.6, 0.8, 0]} rotation={[0, 0, -0.35]} scale={1.5}>
       <group ref={wheel}>
+        {/* carbon-fibre body */}
         <mesh>
-          <boxGeometry args={[0.03, 0.12, 0.3]} />
-          <meshStandardMaterial color="#141416" roughness={0.45} metalness={0.4} />
+          <boxGeometry args={[0.03, 0.13, 0.26]} />
+          <meshStandardMaterial color="#3a3f4a" roughness={0.35} metalness={0.7} envMapIntensity={1.4} />
         </mesh>
-        <mesh position={[0.018, 0.005, 0]}>
-          <boxGeometry args={[0.008, 0.055, 0.1]} />
-          <meshStandardMaterial color="#071018" emissive="#4be1ff" emissiveIntensity={0.9} />
+        {/* orange trim along the top edge */}
+        <mesh position={[-0.017, 0.068, 0]}>
+          <boxGeometry args={[0.006, 0.012, 0.26]} />
+          <meshStandardMaterial color="#ff8000" emissive="#ff6a00" emissiveIntensity={0.5} />
         </mesh>
+        {/* lit display */}
+        <mesh position={[-0.02, 0.012, 0]}>
+          <boxGeometry args={[0.006, 0.06, 0.13]} />
+          <meshStandardMaterial color="#04121c" emissive="#38bdf8" emissiveIntensity={1.6} />
+        </mesh>
+        {/* shift-light strip */}
+        <mesh position={[-0.02, 0.055, 0]}>
+          <boxGeometry args={[0.006, 0.008, 0.12]} />
+          <meshStandardMaterial color="#000" emissive="#22c55e" emissiveIntensity={1.4} />
+        </mesh>
+        {/* rubber grips */}
         {[1, -1].map((side) => (
-          <mesh key={side} position={[0, -0.005, side * 0.16]}>
-            <boxGeometry args={[0.05, 0.13, 0.05]} />
-            <meshStandardMaterial color="#2b2b2f" roughness={0.9} />
+          <mesh key={side} position={[0, -0.01, side * 0.155]}>
+            <boxGeometry args={[0.055, 0.14, 0.055]} />
+            <meshStandardMaterial color="#565b66" roughness={0.9} />
           </mesh>
         ))}
-        {[-1, 1].map((k) => (
-          <mesh key={`b${k}`} position={[0.02, 0.03 * k, k * 0.09]}>
-            <cylinderGeometry args={[0.013, 0.013, 0.01, 12]} />
-            <meshStandardMaterial color={k > 0 ? '#22c55e' : '#ef4444'} />
+        {/* buttons and rotaries */}
+        {buttons.map(([y, z, c]) => (
+          <mesh key={`${y}${z}`} position={[-0.02, y * 0.5, z * 1.05]} rotation={[0, 0, Math.PI / 2]}>
+            <cylinderGeometry args={[0.014, 0.014, 0.012, 14]} />
+            <meshStandardMaterial color={c} emissive={c} emissiveIntensity={0.55} roughness={0.4} />
           </mesh>
         ))}
       </group>

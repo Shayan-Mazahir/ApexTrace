@@ -24,13 +24,14 @@ interface LinkIndicatorsProps {
   connection: StreamConnection
   vehicleState: VehicleStateMessage | null
   lastMessageAt: number | null
+  driverOffline?: boolean
 }
 
 const ms = (v: number | null | undefined) => (v === null || v === undefined ? '—' : `${v.toFixed(0)} ms`)
 
 // Real link (this device <-> server, heartbeat-driven) and the SIMULATED
 // warning-data path are shown separately: only the first is a network.
-export function LinkIndicators({ connection, vehicleState: v, lastMessageAt }: LinkIndicatorsProps) {
+export function LinkIndicators({ connection, vehicleState: v, lastMessageAt, driverOffline }: LinkIndicatorsProps) {
   const now = useNow(500)
   const msSince = lastMessageAt === null ? null : Math.max(0, now - lastMessageAt)
   const quality = classifyConnection({ connected: connection === 'connected', msSinceLastMessage: msSince, packetAgeMs: v?.packet_age_ms ?? null })
@@ -43,6 +44,11 @@ export function LinkIndicators({ connection, vehicleState: v, lastMessageAt }: L
         {v?.blackout && <StatusBadge label="Simulated blackout" tone="danger" />}
         {v?.local_fallback_active && <StatusBadge label="Local fallback active" tone="info" />}
       </div>
+      <p className="link-indicators__key">
+        <b>Real</b> rows measure the actual connection between this browser and the server. <b>Sim</b> rows are artificial:
+        they show the faults we are injecting into the warning system (the network itself is fine).
+        {driverOffline && ' The driver tab is closed or not sending (leaving the Drive tab disconnects the driver), so "driver control age" keeps growing. That is expected.'}
+      </p>
       <dl className="link-indicators__grid">
         <dt>Real: last data received</dt>
         <dd>{msSince === null ? '—' : `${msSince.toFixed(0)} ms ago`}</dd>

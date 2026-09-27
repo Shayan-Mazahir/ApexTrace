@@ -21,7 +21,7 @@ import './DriveScreen.css'
 function carLabel(upgrades: UpgradeConfig): string {
   const names = { brake_servicing: 'serviced brakes', comms_improvement: 'improved comms', local_fallback: 'local fallback' }
   const on = UPGRADE_IDS.filter((id) => upgrades[id]).map((id) => names[id])
-  return on.length ? on.join(' + ') : 'stock car, no upgrades'
+  return on.length ? on.join(' + ') : 'none'
 }
 
 // The view button cycles cockpit -> chase -> overview -> cockpit; its label names the next view.
@@ -117,7 +117,13 @@ export function DriveScreen() {
             {engineer && <StatusBadge label={engineer.label} tone={engineer.tone} />}
             <SimulatedFaultLabel delayMs={v?.injected_delay_ms ?? 0} />
             {v?.local_fallback_active && <StatusBadge tone="info" label="Local warning fallback active" />}
-            {info && <StatusBadge tone="neutral" label={`Car: ${carLabel(info.upgrades)}`} />}
+            {info && (
+              <StatusBadge
+                tone={info.scenario_name ? 'warning' : 'neutral'}
+                label={info.scenario_name ? `Scenario armed: ${info.scenario_name}` : 'No scenario armed'}
+              />
+            )}
+            {info && <StatusBadge tone="neutral" label={`Upgrades: ${carLabel(info.upgrades)}`} />}
           </div>
 
           <BrakeWarning warning={session.warning} />

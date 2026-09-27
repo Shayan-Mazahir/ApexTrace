@@ -136,3 +136,6 @@
   .f1-dash__gear { font-size: 46px; }
   .f1-dash__speed strong { font-size: 30px; }
 }
+
+.f1-dash__lapline { display: flex; justify-content: center; align-items: baseline; gap: 12px; font-size: 12px; color: #aab0b8; letter-spacing: 0.08em; }
+.f1-dash__lapline b { color: #f3f4f6; font-size: 15px; letter-spacing: 0.14em; }

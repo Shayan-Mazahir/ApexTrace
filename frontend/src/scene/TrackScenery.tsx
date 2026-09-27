@@ -245,6 +245,32 @@ function Buildings({ items }: { items: Prop[] }) {
 // A grandstand beside the start straight, facing the track. Its extent comes
 // from grandstandSpan so it never reaches over a corner (Baku's Turn 1 starts
 // ~200 m after the line).
+// Trees and buildings are scattered before the stands are placed, so drop any
+// that would poke through a grandstand (or stand in the crowd's footprint).
+function keepClearOfGrandstands(profile: TrackProfile, props: Prop[]): Prop[] {
+  const spans = ([1, -1] as const)
+    .map((side) => grandstandSpan(profile, 60, 300, side))
+    .filter((span): span is { from: number; to: number } => span !== null)
+  if (spans.length === 0) return props
+  const line = profile.centerline as Pt[]
+  const reach = grandstandBack(profile) + 34 // stand depth + tree crown radius
+  const margin = 25
+  const ranges = spans.map((span) => [indexAt(profile, Math.max(0, span.from - margin)), indexAt(profile, span.to + margin)] as const)
+  return props.filter((p) => {
+    let best = 0
+    let bestD = Infinity
+    for (let i = 0; i < line.length; i++) {
+      const d = Math.hypot(line[i][0] - p.x, line[i][1] - p.z)
+      if (d < bestD) {
+        bestD = d
+        best = i
+      }
+    }
+    if (bestD > reach) return true
+    return !ranges.some(([a, b]) => best >= a && best <= b)
+  })
+}
+
 function Grandstand({ profile, from, to, side }: { profile: TrackProfile; from: number; to: number; side: 1 | -1 }) {
   const span = useMemo(() => grandstandSpan(profile, from, to, side), [profile, from, to, side])
   return span ? <GrandstandBody profile={profile} from={span.from} to={span.to} side={side} /> : null
@@ -368,7 +394,7 @@ export function TrackScenery({ profile }: { profile: TrackProfile }) {
       altR: uvWall(barrierR, 0, h, BOARD_LENGTH, (i) => !tangerineAt(i)),
       fenceL: uvWall(out(left, 1, profile.barrier_offset + 0.3), h, h + 3.4, 3.4, fenceAt),
       fenceR: uvWall(out(right, -1, profile.barrier_offset + 0.3), h, h + 3.4, 3.4, fenceAt),
-      props: scatterProps(profile, {
+      props: keepClearOfGrandstands(profile, scatterProps(profile, {
         count: theme.props === 'trees' ? 320 : 200,
         minGap: theme.props === 'trees' ? profile.barrier_offset + 16 : buildingMinGap(profile),
         maxGap: profile.barrier_offset + 140,
@@ -377,7 +403,7 @@ export function TrackScenery({ profile }: { profile: TrackProfile }) {
         seed: profile.id === 'baku' ? 11 : 7,
         minHeight: theme.props === 'trees' ? 9 : 14,
         maxHeight: theme.props === 'trees' ? 17 : 70,
-      }),
+      })),
       box: bounds(profile.centerline as Pt[]),
     }
   }, [profile, theme])
