@@ -164,6 +164,8 @@ export interface VehicleStateMessage {
   tc_active?: boolean
   wheelspin?: boolean
   lockup?: boolean
+  // what the wheels are on, from the server's surface model
+  surface?: 'track' | 'kerb' | 'runoff' | 'grass'
   g_lat?: number
   g_long?: number
   setup?: CarSetupConfig

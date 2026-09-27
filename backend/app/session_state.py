@@ -9,7 +9,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from app.f1_car import CAR, NO_REQUESTS, CarSetup, DriverRequests
-from app.placeholder_sim import DemoVehicleState
+from app.placeholder_sim import DemoVehicleState, surface_at
 from app.schemas import (
     CLIENT_MESSAGE_ADAPTER,
     DRIVER_MESSAGE_TYPES,
@@ -234,6 +234,9 @@ class Session:
             "tc_active": vehicle.tc_cut > 0.03,
             "wheelspin": vehicle.wheelspin,
             "lockup": vehicle.front_lock or vehicle.rear_lock,
+            # what the wheels are on (track / kerb / runoff / grass): the same
+            # model the physics uses, for rumble and dust on the Drive screen
+            "surface": surface_at(tel["signed_clearance"], vehicle.distance_along_lap, profile),
             "g_lat": vehicle.ay / 9.81,
             "g_long": vehicle.ax / 9.81,
             "setup": self.setup.model_dump(),

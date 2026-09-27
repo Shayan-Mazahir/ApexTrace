@@ -14,7 +14,7 @@
   flex-shrink: 0;
   overflow-y: auto;
   padding: var(--space-md);
-  padding-top: calc(var(--space-xl) + var(--space-lg));
+  padding-top: 88px; /* clear of the screen nav and the Demo mode button above it */
   background: var(--color-charcoal);
   border-left: 1px solid var(--color-charcoal-light);
   display: flex;

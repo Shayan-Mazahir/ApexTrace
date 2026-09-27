@@ -47,6 +47,15 @@ describe('HapticsTracker', () => {
     expect(fast.strength).toBeLessThanOrEqual(1)
   })
 
+  it('trusts the server past the line: paved runoff rumbles lightly, grass hard', () => {
+    const t = new HapticsTracker()
+    const runoff = t.update(state({ signed_clearance: -4, distance_along_lap: 100, surface: 'runoff' }), profile, false)
+    const grass = t.update(state({ signed_clearance: -8, distance_along_lap: 100, surface: 'grass' }), profile, false)
+    expect(runoff.surface).toBe('runoff')
+    expect(grass.surface).toBe('rough')
+    expect(runoff.rumble.strength).toBeLessThan(grass.rumble.strength)
+  })
+
   it('surface beats slip; slip when on the track; nothing when crawling', () => {
     const t = new HapticsTracker()
     expect(t.update(state({ signed_clearance: 0.3, lockup: true }), profile, false).rumble.effect).toBe('kerb')

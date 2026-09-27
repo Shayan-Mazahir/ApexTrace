@@ -5,6 +5,7 @@ import { getTrack } from '../api/session'
 import { useDemo } from '../app/DemoContext'
 import { CalibrationPanel } from '../components/CalibrationPanel'
 import { SimulatedFaultLabel } from '../components/SimulatedFaultLabel'
+import { Icon } from '../components/Icon'
 import { StatusBadge, type StatusTone } from '../components/StatusBadge'
 import { BrakeWarning } from '../drive/BrakeWarning'
 import { CarSetupPanel } from '../drive/CarSetupPanel'
@@ -185,36 +186,54 @@ export function DriveScreen() {
           <TelemetryPanel normalized={input.normalized} vehicleState={v} />
 
           <div className="drive-screen__dock">
-            <button type="button" onClick={session.togglePause} disabled={connectionState !== 'connected'}>
-              {session.running ? 'Pause' : 'Resume'}
-            </button>
-            <button type="button" onClick={session.reset} disabled={connectionState !== 'connected'}>
-              Reset to grid
-            </button>
-            <button type="button" onClick={() => setViewOverride(NEXT_VIEW[view])}>
-              {VIEW_BUTTON_LABEL[view]}
-            </button>
-            <button type="button" onClick={() => setShowSetup((s) => !s)} aria-pressed={showSetup}>
-              Car setup
-            </button>
-            <button type="button" onClick={() => setShowRacingLine((s) => !s)} aria-pressed={showRacingLine}>
-              Racing line
-            </button>
-            <button type="button" onClick={() => setShowControls((s) => !s)} aria-pressed={showControls}>
-              Controls
-            </button>
-            <button
-              type="button"
-              onClick={() => setGraphicsMode(lowGraphics ? 'quality' : 'performance')}
-              aria-pressed={lowGraphics}
-              title="Performance: 1x resolution, no bloom/anti-aliasing effects — for integrated GPUs"
-            >
-              {lowGraphics ? 'Graphics: Performance' : 'Graphics: Quality'}
-            </button>
-            <button type="button" onClick={() => setShowReport(true)} aria-pressed={showReport}>
-              Safety report
-            </button>
+            <div className="drive-screen__group">
+              <span className="drive-screen__caption">Session</span>
+              <button type="button" onClick={session.togglePause} disabled={connectionState !== 'connected'}>
+                <Icon name={session.running ? 'pause' : 'play'} />
+                {session.running ? 'Pause' : 'Resume'}
+              </button>
+              <button type="button" onClick={session.reset} disabled={connectionState !== 'connected'}>
+                <Icon name="reset" />
+                Reset to grid
+              </button>
+              <button type="button" onClick={() => setShowReport(true)} aria-pressed={showReport}>
+                <Icon name="report" />
+                Safety report
+              </button>
+            </div>
+            <div className="drive-screen__group">
+              <span className="drive-screen__caption">View</span>
+              <button type="button" onClick={() => setViewOverride(NEXT_VIEW[view])}>
+                <Icon name="camera" />
+                {VIEW_BUTTON_LABEL[view]}
+              </button>
+              <button type="button" onClick={() => setShowRacingLine((s) => !s)} aria-pressed={showRacingLine}>
+                <Icon name="route" />
+                Racing line
+              </button>
+              <button
+                type="button"
+                onClick={() => setGraphicsMode(lowGraphics ? 'quality' : 'performance')}
+                aria-pressed={lowGraphics}
+                title="Performance: 1x resolution, no shadows or bloom/anti-aliasing effects — for integrated GPUs"
+              >
+                <Icon name="sparkle" />
+                {lowGraphics ? 'Graphics: Performance' : 'Graphics: Quality'}
+              </button>
+            </div>
+            <div className="drive-screen__group">
+              <span className="drive-screen__caption">Car</span>
+              <button type="button" onClick={() => setShowSetup((s) => !s)} aria-pressed={showSetup}>
+                <Icon name="sliders" />
+                Car setup
+              </button>
+              <button type="button" onClick={() => setShowControls((s) => !s)} aria-pressed={showControls}>
+                <Icon name="gamepad" />
+                Controls
+              </button>
+            </div>
             <button type="button" className="drive-screen__end" onClick={endWithReport}>
+              <Icon name="exit" />
               End session
             </button>
           </div>

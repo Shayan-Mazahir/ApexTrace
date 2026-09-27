@@ -295,13 +295,13 @@ export function asphaltTexture(): Texture {
  * 24 m, so the stripes run across the whole infield like a real circuit's),
  * over fine blade noise and a few darker clumps. */
 export function grassTexture(): Texture {
-  return make('grass2', 512, 512, (ctx) => {
+  return make('grass3', 512, 512, (ctx) => {
     const rnd = seeded(17)
     const img = ctx.createImageData(512, 512)
     for (let i = 0; i < 512 * 512; i++) {
       const y = Math.floor(i / 512)
       // stripe: smooth light/dark band across the tile
-      const band = Math.cos((y / 512) * Math.PI * 2) * 11
+      const band = Math.cos((y / 512) * Math.PI * 2) * 5 // subtle: strong stripes band into lines from overhead
       const blade = (rnd() - 0.5) * 22
       img.data[i * 4] = 58 + band * 0.7 + blade * 0.6
       img.data[i * 4 + 1] = 116 + band + blade

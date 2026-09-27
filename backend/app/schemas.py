@@ -187,6 +187,7 @@ class VehicleStateMessage(BaseModel):
     tc_active: bool = False
     wheelspin: bool = False
     lockup: bool = False
+    surface: Literal["track", "kerb", "runoff", "grass"] = "track"
     g_lat: float = 0.0
     g_long: float = 0.0
     setup: CarSetupConfig = Field(default_factory=CarSetupConfig)

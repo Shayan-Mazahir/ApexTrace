@@ -22,7 +22,7 @@ export interface HapticEvent {
   strength: number // 0..1
 }
 
-export type Surface = 'track' | 'kerb' | 'rough'
+export type Surface = 'track' | 'kerb' | 'runoff' | 'rough' // rough = grass
 
 // Wheel centre to the car's centreline (F1Car: 0.95 m to the tyre's outer wall).
 export const CAR_HALF_WIDTH = 0.95
@@ -66,7 +66,7 @@ const clampRate = (v: number) => Math.min(RATE_MAX_HZ, Math.max(RATE_MIN_HZ, v))
 
 type HapticInput = Pick<
   VehicleStateMessage,
-  'speed' | 'signed_clearance' | 'distance_along_lap' | 'barrier_contacts' | 'lockup' | 'wheelspin'
+  'speed' | 'signed_clearance' | 'distance_along_lap' | 'barrier_contacts' | 'lockup' | 'wheelspin' | 'surface'
 >
 
 export interface HapticFrame {
@@ -100,12 +100,20 @@ export class HapticsTracker {
     if (warningActive && !this.warning) events.push({ kind: 'warning', strength: 0.8 })
     this.warning = warningActive
 
-    const surface = surfaceUnder(v.signed_clearance, v.distance_along_lap, profile)
+    // The local estimate catches a wheel touching the kerb while the car's
+    // centre is still on the track; past the line, the server's surface model
+    // (the one the physics uses) knows paved runoff from grass.
+    let surface = surfaceUnder(v.signed_clearance, v.distance_along_lap, profile)
+    if (v.surface === 'kerb') surface = 'kerb'
+    else if (v.surface === 'runoff' && surface !== 'kerb') surface = 'runoff'
+    else if (v.surface === 'grass') surface = 'rough'
     let rumble = NO_RUMBLE
     if (speed >= MIN_SPEED_MS) {
       const pace = clamp01(speed / 60)
       if (surface === 'kerb') {
         rumble = { effect: 'kerb', strength: 0.45 + 0.55 * pace, rateHz: clampRate(speed / stripeLength(profile)) }
+      } else if (surface === 'runoff') {
+        rumble = { effect: 'rough', strength: 0.15 + 0.25 * pace, rateHz: clampRate(speed / 4) }
       } else if (surface === 'rough') {
         rumble = { effect: 'rough', strength: 0.3 + 0.5 * pace, rateHz: clampRate(speed / 3) }
       } else if (v.lockup || v.wheelspin) {

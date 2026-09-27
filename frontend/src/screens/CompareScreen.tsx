@@ -1,5 +1,5 @@
 import { Canvas } from '@react-three/fiber'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { getReplay, loadBackupReplay } from '../api/evaluation'
 import { getTrack } from '../api/session'
 import { useDemo } from '../app/DemoContext'
@@ -61,7 +61,16 @@ function OutcomeCard({ run, who, tone }: { run: ReplayRun; who: string; tone: 'b
 
 export function CompareScreen() {
   const lowGraphics = useGraphicsMode() === 'performance'
-  const { evaluation, selection } = useGarage()
+  const { evaluation, selection, evaluating, evaluate, catalog, toggleUpgrade } = useGarage()
+  // Load the results here rather than sending people to the garage first: the
+  // server keeps them cached, so this is near-instant. Once only: a failure
+  // offers a retry instead of hammering the backend.
+  const triedEvaluation = useRef(false)
+  useEffect(() => {
+    if (evaluation || evaluating || triedEvaluation.current) return
+    triedEvaluation.current = true
+    void evaluate()
+  }, [evaluation, evaluating, evaluate])
   const { setScreen } = useScreen()
   const { reportError } = useErrorContext()
   const demo = useDemo()
@@ -141,9 +150,35 @@ export function CompareScreen() {
   if (!evaluation || !anySelected) {
     return (
       <div className="compare-screen compare-screen--empty">
-        <h1>Replay</h1>
-        <p>{!evaluation ? 'Run the tests in the garage first.' : 'Pick at least one upgrade in the garage, then come back.'}</p>
-        <button type="button" onClick={() => setScreen('garage')}>Go to the garage</button>
+        <div className="cmp-empty">
+          <p className="cmp-empty__kicker">Replay</p>
+          <h1>Same test, same faults — with and without the fix</h1>
+          {!evaluation ? (
+            evaluating ? (
+              <LoadingIndicator label="Loading the stress-test results" />
+            ) : (
+              <p>
+                Couldn’t load the stress-test results.{' '}
+                <button type="button" className="cmp-empty__retry" onClick={() => void evaluate()}>Try again</button>
+              </p>
+            )
+          ) : (
+            <>
+              <p>Pick an upgrade to replay against the car with none. You can combine them in the garage, within the season budget.</p>
+              <div className="cmp-empty__upgrades">
+                {(catalog?.upgrades ?? []).map((u) => (
+                  <button key={u.id} type="button" onClick={() => toggleUpgrade(u.id)}>
+                    <strong>{u.name}</strong>
+                    <span>CAD {u.price_cad.toLocaleString()}</span>
+                  </button>
+                ))}
+              </div>
+              <button type="button" className="cmp-empty__link" onClick={() => setScreen('garage')}>
+                Plan it with the budget in the garage →
+              </button>
+            </>
+          )}
+        </div>
       </div>
     )
   }

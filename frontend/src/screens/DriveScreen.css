@@ -68,26 +68,59 @@
   z-index: 10;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+  width: 176px;
+  padding: 10px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(20, 21, 25, 0.82), rgba(12, 13, 16, 0.86));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(10px);
+}
+
+.drive-screen__group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.drive-screen__caption {
+  margin: 0 0 3px 6px;
+  font-family: var(--font-base);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #6b7280;
 }
 
 .drive-screen__dock button {
-  min-width: 140px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
   text-align: left;
-  background: rgba(10, 10, 12, 0.75);
-  color: var(--color-white);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: transparent;
+  color: #e5e7eb;
+  border: 1px solid transparent;
   border-radius: 8px;
-  padding: 8px 12px;
+  padding: 7px 9px;
   font-family: var(--font-mono);
   font-size: 12px;
   cursor: pointer;
-  backdrop-filter: blur(6px);
+  transition: background 0.12s ease, color 0.12s ease;
 }
 
+.drive-screen__dock button svg { flex: none; color: #9ca3af; transition: color 0.12s ease; }
+
 .drive-screen__dock button:hover:not(:disabled) {
-  border-color: var(--color-orange);
+  background: rgba(255, 255, 255, 0.07);
 }
+
+.drive-screen__dock button:hover:not(:disabled) svg { color: var(--color-orange); }
+
+.drive-screen__dock button:focus-visible { outline: 2px solid var(--color-orange); outline-offset: 1px; }
 
 .drive-screen__dock button:disabled {
   opacity: 0.4;
@@ -95,12 +128,26 @@
 }
 
 .drive-screen__dock button[aria-pressed='true'] {
-  border-color: var(--color-orange);
-  color: var(--color-orange);
+  background: rgba(255, 140, 0, 0.12);
+  color: #ffb866;
 }
 
+.drive-screen__dock button[aria-pressed='true'] svg { color: var(--color-orange); }
+
 .drive-screen__dock .drive-screen__end {
-  color: #fca5a5;
+  justify-content: center;
+  color: #fecaca;
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.35);
+}
+
+.drive-screen__dock .drive-screen__end svg { color: #f87171; }
+
+.drive-screen__dock .drive-screen__end:hover:not(:disabled) { background: rgba(239, 68, 68, 0.22); }
+
+@media (max-height: 760px) {
+  .drive-screen__caption { display: none; }
+  .drive-screen__dock button { padding: 5px 9px; }
 }
 
 .drive-screen__setup {

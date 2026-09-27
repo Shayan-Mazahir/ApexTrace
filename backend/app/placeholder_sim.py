@@ -32,9 +32,19 @@ MAX_SPEED = f1_car.top_speed_estimate(drs_open=True)  # ~343 km/h in X-mode
 # over a typical stop; the real value is speed dependent, see
 # f1_car.braking_decel). The baseline warning assumes this for healthy brakes.
 BRAKE_DECEL = 32.0
-# Off the track (runoff/grass): less grip and power, heavy drag above a crawl.
+# Off the track (grass): less grip and power, heavy drag above a crawl.
 RUNOFF_MAX_SPEED = 22.0
 RUNOFF_DECEL = 18.0
+# What is actually beside the edge line, matching what the Drive screen draws
+# (frontend TrackScenery): kerbs 1.4 m wide at corners (within 20 m of a
+# hazard zone), then paved runoff (Monza: 4 m of asphalt; Baku: paving right up
+# to the wall), then grass. Before, anything past the line drove like grass,
+# so putting two wheels on a kerb halved the grip.
+KERB_WIDTH_M = 1.4
+KERB_PAD_M = 20.0
+PAVED_RUNOFF_M = {"monza": 4.0}  # tracks not listed are paved to the barrier
+# (grip, power) multipliers per surface; grass also gets RUNOFF drag.
+SURFACE_GRIP = {"track": (1.0, 1.0), "kerb": (0.93, 1.0), "runoff": (0.8, 0.9), "grass": (0.5, 0.35)}
 CAR_HALF_WIDTH = 0.95  # 2026 car: 1.9 m wide
 
 # Corner detection from the smoothed centerline.
@@ -502,6 +512,24 @@ def on_straight(distance_along_lap: float, profile: TrackProfile, clearance_m: f
     return True
 
 
+def surface_at(clearance: float, distance_along_lap: float, profile: TrackProfile) -> str:
+    """The surface under the car, from its centre's clearance to the edge line.
+
+    Only used for how the car drives off the line: whether it has *left the
+    track* (the safety metric) is still decided by the edge line alone."""
+    if clearance >= 0:
+        return "track"
+    depth = -clearance
+    d = distance_along_lap % profile.total_length
+    at_corner = any(h.start_distance - KERB_PAD_M <= d <= h.end_distance + KERB_PAD_M for h in profile.hazard_zones)
+    # the car is on the kerb while its inner wheels are (centre within half a car of the kerb's outer edge)
+    if at_corner and depth < KERB_WIDTH_M + CAR_HALF_WIDTH:
+        return "kerb"
+    if depth < PAVED_RUNOFF_M.get(profile.id, profile.barrier_offset) + CAR_HALF_WIDTH:
+        return "runoff"
+    return "grass"
+
+
 def step(
     state: DemoVehicleState,
     steering: float,
@@ -521,12 +549,15 @@ def step(
     Laps are timed against track limits: a lap is invalid (and cannot set a
     best time) once the whole car is past an edge line or touches a barrier."""
     offroad = state.off_track
+    surface = surface_at(_clearance_at_index(state.x, state.y, state.nearest_point_index, profile),
+                         state.distance_along_lap, profile) if offroad else "track"
+    grip_scale, power_scale = SURFACE_GRIP[surface]
     car, heading, dx, dy = f1_car.step_car(
         state.car_state(), state.heading, steering, throttle, brake, dt,
-        grip=grip * (0.5 if offroad else 1.0),
+        grip=grip * grip_scale,
         brake_scale=brake_wear,
-        power_scale=0.35 if offroad else 1.0,
-        offroad_drag=RUNOFF_DECEL * f1_car.CAR.mass if offroad and state.speed > RUNOFF_MAX_SPEED else 0.0,
+        power_scale=power_scale,
+        offroad_drag=RUNOFF_DECEL * f1_car.CAR.mass if surface == "grass" and state.speed > RUNOFF_MAX_SPEED else 0.0,
         setup=setup,
         requests=requests,
         drs_allowed=on_straight(state.distance_along_lap, profile) and state.speed > 30.0 and not offroad,

@@ -357,3 +357,39 @@ def test_after_hitting_a_barrier_holding_brake_reverses_the_car_away():
     for _ in range(80):  # throttle stops the car, then selects drive again
         s = ps.step(s, 0.0, 0.6, 0.0, 0.05, prof)
     assert s.gear >= 1
+
+
+def _offset_state(profile, lateral, speed=60.0, index=0):
+    """A car `lateral` metres left of the centreline at sample `index`, heading along it."""
+    line = profile.centerline
+    (x0, y0), (x1, y1) = line[index], line[index + 1]
+    heading = math.atan2(y1 - y0, x1 - x0)
+    return DemoVehicleState(x=x0 - math.sin(heading) * lateral, y=y0 + math.cos(heading) * lateral,
+                            heading=heading, speed=speed, nearest_point_index=index,
+                            distance_along_lap=index * profile.total_length / len(line),
+                            off_track=True, track_exit=True, track_exits=1)
+
+
+def test_surface_matches_what_is_drawn_beside_the_line():
+    from app.placeholder_sim import CAR_HALF_WIDTH, KERB_WIDTH_M, surface_at
+
+    monza, baku = TRACK_PRESETS["monza"], TRACK_PRESETS["baku"]
+    corner = monza.hazard_zones[0].start_distance + 5
+    straight = monza.hazard_zones[0].start_distance - 200
+    assert surface_at(0.5, corner, monza) == "track"
+    assert surface_at(-(KERB_WIDTH_M + CAR_HALF_WIDTH) + 0.1, corner, monza) == "kerb"
+    assert surface_at(-1.0, straight, monza) == "runoff"  # no kerbs on straights
+    assert surface_at(-6.0, straight, monza) == "grass"  # past Monza's 4 m of asphalt
+    assert surface_at(-baku.barrier_offset - 0.5, 10.0, baku) == "runoff"  # Baku is paved to the wall
+
+
+def test_runoff_keeps_more_speed_than_grass():
+    profile = TRACK_PRESETS["monza"]
+    straight = int(len(profile.centerline) * (profile.hazard_zones[0].start_distance - 250) / profile.total_length)
+    half = profile.track_width / 2
+    paved = _offset_state(profile, half + 1.0, index=straight)
+    grass = _offset_state(profile, half + 7.0, index=straight)
+    for _ in range(10):
+        paved = step(paved, 0.0, 0.0, 0.0, 0.1, profile)
+        grass = step(grass, 0.0, 0.0, 0.0, 0.1, profile)
+    assert paved.speed > grass.speed + 10

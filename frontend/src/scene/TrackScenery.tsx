@@ -12,9 +12,9 @@ import {
   sponsorBoard,
   windowsTexture,
 } from './textures'
+import { BrakeBoards, Kerbs, TyreWalls } from './TrackDetails'
 import {
   bounds,
-  cornerMask,
   flatStrip,
   grandstandBack,
   grandstandSpan,
@@ -324,13 +324,9 @@ export function TrackScenery({ profile }: { profile: TrackProfile }) {
     const normals = leftNormals(profile)
     const left = profile.left_edge as Pt[]
     const right = profile.right_edge as Pt[]
-    const mask = cornerMask(profile)
     // vertex colours are read as linear: convert from the sRGB hex, or every
-    // painted colour comes out washed-out pastel (the red kerbs turned pink)
-    const linear = (hex: string) => new Color(hex).toArray() as [number, number, number]
-    const line = linear(theme.line)
-    const kA = linear(theme.kerbA)
-    const kB = linear(theme.kerbB)
+    // painted colour comes out washed-out pastel
+    const line = new Color(theme.line).toArray() as [number, number, number]
     const out = (edge: Pt[], side: 1 | -1, d: number) => offset(edge, normals, d, side)
     const barrierL = out(left, 1, profile.barrier_offset)
     const barrierR = out(right, -1, profile.barrier_offset)
@@ -350,8 +346,6 @@ export function TrackScenery({ profile }: { profile: TrackProfile }) {
       runoffR: uvFlat(right, out(right, -1, runoff), 0.015, 10, 0.5),
       lineL: flatStrip(left, out(left, -1, 0.35), 0.045, () => line),
       lineR: flatStrip(right, out(right, 1, 0.35), 0.045, () => line),
-      kerbL: flatStrip(out(left, 1, 1.4), left, 0.05, (i) => (i % 2 ? kA : kB), (i) => mask[i]),
-      kerbR: flatStrip(right, out(right, -1, 1.4), 0.05, (i) => (i % 2 ? kA : kB), (i) => mask[i]),
       // the "left" line is on the driver's right: run u backwards so the text reads correctly
       boardsL: uvWall(barrierL, 0, h, -BOARD_LENGTH, tangerineAt),
       boardsR: uvWall(barrierR, 0, h, BOARD_LENGTH, tangerineAt),
@@ -397,8 +391,10 @@ export function TrackScenery({ profile }: { profile: TrackProfile }) {
       <TexturedStrip strip={parts.road} map={asphaltTexture()} colour="#c4c7cc" roughness={0.82} />
       <ColourStrip strip={parts.lineL} />
       <ColourStrip strip={parts.lineR} />
-      <ColourStrip strip={parts.kerbL} />
-      <ColourStrip strip={parts.kerbR} />
+      <Kerbs profile={profile} red={theme.kerbA} />
+      <BrakeBoards profile={profile} />
+      {/* street circuits (Baku) keep bare walls: their kerbs reach right up to them */}
+      {profile.barrier_offset >= 4 && <TyreWalls profile={profile} />}
       <TexturedStrip strip={parts.boardsL} map={sponsorBoard()} roughness={0.6} />
       <TexturedStrip strip={parts.boardsR} map={sponsorBoard()} roughness={0.6} />
       <TexturedStrip strip={parts.altL} map={limitlabBoard()} roughness={0.6} />
