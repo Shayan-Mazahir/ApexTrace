@@ -23,6 +23,7 @@ import { SessionReport } from '../drive/SessionReport'
 import { useDriverReport } from '../drive/useDriverReport'
 import { GhostRecorder } from '../drive/ghostLap'
 import { setGraphicsMode, useGraphicsMode } from '../app/graphics'
+import { useEngineSound } from '../audio/useEngineSound'
 import { Scene, type SceneView } from '../scene/Scene'
 import { UPGRADE_IDS, type TrackId, type TrackProfile, type UpgradeConfig } from '../types/schemas'
 import { useGarage } from '../app/GarageContext'
@@ -119,6 +120,7 @@ export function DriveScreen() {
   })
   // The human side of the test: reaction to each BRAKE warning, incidents,
   // best lap; shown live and as a report (with the leaderboard) on End session.
+  const sound = useEngineSound(v, input.normalized.throttle, connectionState === 'connected' && session.running)
   const report = useDriverReport(session.sessionId, v, session.warning, input.normalized.brake)
   const endWithReport = () => (report.responses.length > 0 || report.laps > 0 ? setShowReport(true) : session.endSession())
 
@@ -240,6 +242,10 @@ export function DriveScreen() {
               >
                 <Icon name="sparkle" />
                 {lowGraphics ? 'Graphics: Performance' : 'Graphics: Quality'}
+              </button>
+              <button type="button" onClick={sound.toggle} aria-pressed={sound.on} title="Engine and tyre sound">
+                <Icon name="sound" />
+                {sound.on ? 'Sound: On' : 'Sound: Off'}
               </button>
             </div>
             <div className="drive-screen__group">

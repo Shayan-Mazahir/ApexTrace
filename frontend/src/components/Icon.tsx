@@ -11,7 +11,8 @@ const PATHS: Record<string, string> = {
   sparkle: 'M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z',
   report: 'M6 3h9l4 4v14H6zM15 3v4h4M9 13h6M9 17h6M9 9h2',
   exit: 'M14 4h5v16h-5M10 8l-4 4 4 4M6 12h10',
-  ghost: 'M5 20V10a7 7 0 0 1 14 0v10l-2.5-2-2.3 2-2.2-2-2.2 2-2.3-2zM9.5 11h.01M14.5 11h.01',
+  sound: 'M4 9h4l5-4v14l-5-4H4zM16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12',
+  ghost:'M5 20V10a7 7 0 0 1 14 0v10l-2.5-2-2.3 2-2.2-2-2.2 2-2.3-2zM9.5 11h.01M14.5 11h.01',
 }
 
 export function Icon({ name, size = 16 }: { name: keyof typeof PATHS; size?: number }) {
