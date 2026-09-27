@@ -218,7 +218,7 @@ export function SessionReport({ report, track, trackName, onClose, onEnd }: Prop
               const url = URL.createObjectURL(new Blob([reportCsv(report, trackName)], { type: 'text/csv' }))
               const a = document.createElement('a')
               a.href = url
-              a.download = `limitlab-${track}-safety-report-${new Date().toISOString().slice(0, 16).replace(':', '')}.csv`
+              a.download = `apextrace-${track}-safety-report-${new Date().toISOString().slice(0, 16).replace(':', '')}.csv`
               a.click()
               setTimeout(() => URL.revokeObjectURL(url), 1000)
             }}

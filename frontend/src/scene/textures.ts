@@ -69,8 +69,8 @@ export function sponsorBoard(): Texture {
   })
 }
 
-/** Alternate board: "LIMITLAB" on charcoal (keeps the walls from looking copy-pasted). */
-export function limitlabBoard(): Texture {
+/** Alternate board: "APEXTRACE" on charcoal (keeps the walls from looking copy-pasted). */
+export function brandBoard(): Texture {
   return make('board2', 1024, 128, (ctx) => {
     ctx.fillStyle = '#17181b'
     ctx.fillRect(0, 0, 1024, 128)
@@ -80,9 +80,9 @@ export function limitlabBoard(): Texture {
     ctx.font = 'bold 70px system-ui, -apple-system, Segoe UI, Roboto, sans-serif'
     ctx.textBaseline = 'middle'
     for (const x0 of [0, 512]) {
-      ctx.fillText('LIMIT', x0 + 70, 68)
+      ctx.fillText('APEX', x0 + 50, 68)
       ctx.fillStyle = '#ff7a00'
-      ctx.fillText('LAB', x0 + 285, 68)
+      ctx.fillText('TRACE', x0 + 60 + ctx.measureText('APEX').width, 68)
       ctx.fillStyle = '#ffffff'
     }
   })

@@ -7,7 +7,7 @@ import {
   crowdTexture,
   fenceTexture,
   grassTexture,
-  limitlabBoard,
+  brandBoard,
   pavingTexture,
   sponsorBoard,
   windowsTexture,
@@ -399,8 +399,8 @@ export function TrackScenery({ profile, wet = false }: { profile: TrackProfile; 
       {profile.barrier_offset >= 4 && <TyreWalls profile={profile} />}
       <TexturedStrip strip={parts.boardsL} map={sponsorBoard()} roughness={0.6} />
       <TexturedStrip strip={parts.boardsR} map={sponsorBoard()} roughness={0.6} />
-      <TexturedStrip strip={parts.altL} map={limitlabBoard()} roughness={0.6} />
-      <TexturedStrip strip={parts.altR} map={limitlabBoard()} roughness={0.6} />
+      <TexturedStrip strip={parts.altL} map={brandBoard()} roughness={0.6} />
+      <TexturedStrip strip={parts.altR} map={brandBoard()} roughness={0.6} />
       <TexturedStrip strip={parts.fenceL} map={fenceTexture()} transparent />
       <TexturedStrip strip={parts.fenceR} map={fenceTexture()} transparent />
       {theme.props === 'trees' ? (

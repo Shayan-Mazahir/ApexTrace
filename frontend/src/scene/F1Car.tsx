@@ -332,7 +332,7 @@ export function F1Car({ livery = DEFAULT_LIVERY, speed, steering, aeroOpen, mark
       {[1, -1].map((side) => (
         <mesh key={`fin${side}`} position={[-1.2, 0.94, side * 0.013]} rotation={[0, side > 0 ? 0 : Math.PI, 0]}>
           <planeGeometry args={[1.0, 0.22]} />
-          <meshStandardMaterial map={wordmark('LIMITLAB', '#121214')} transparent depthWrite={false} />
+          <meshStandardMaterial map={wordmark('APEXTRACE', '#121214')} transparent depthWrite={false} />
         </mesh>
       ))}
 
