@@ -243,10 +243,10 @@ export function CompareScreen() {
         </>
       )}
 
-      <details className="cmp-ai">
-        <summary>AI models: how well they did</summary>
+      <section className="cmp-ai">
+        <h2>The AI models behind this</h2>
         <ModelsPanel />
-      </details>
+      </section>
     </div>
   )
 }

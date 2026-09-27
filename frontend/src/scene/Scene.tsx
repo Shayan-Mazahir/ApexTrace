@@ -1,10 +1,12 @@
 import { Environment, Lightformer, Line, OrbitControls, Sky } from '@react-three/drei'
 import { Bloom, EffectComposer, SMAA, Vignette } from '@react-three/postprocessing'
 import { useFrame, useThree } from '@react-three/fiber'
-import { useEffect, useMemo, useRef, type ElementRef } from 'react'
+import { Suspense, useEffect, useMemo, useRef, type ElementRef } from 'react'
 import { BufferAttribute, BufferGeometry, Color, DoubleSide, Vector3, type Group, type PerspectiveCamera } from 'three'
 import type { TrackProfile } from '../types/schemas'
 import { PoseBuffer } from './poseBuffer'
+import { CarModel, useCarModelAvailable } from './CarModel'
+import { ModelBoundary } from './ModelBoundary'
 import { F1Car } from './F1Car'
 import { computeRacingLine } from './racingLine'
 import { bounds, flatStrip, type Pt } from './trackGeometry'
@@ -152,6 +154,9 @@ function Car({ shown, steering, scale, ghost = false }: { shown: React.MutableRe
   const group = useRef<Group>(null)
   const speed = useRef(0)
   const aeroOpen = useRef(false)
+  // detailed model when public/models/car.glb exists, else the built-in car
+  const hasModel = useCarModelAvailable()
+  const builtIn = <F1Car speed={speed} steering={steering} aeroOpen={aeroOpen} hideDriver={false} livery={ghost ? GHOST_LIVERY : undefined} />
   useFrame(() => {
     const p = shown.current
     speed.current = p.speed
@@ -175,7 +180,15 @@ function Car({ shown, steering, scale, ghost = false }: { shown: React.MutableRe
         <planeGeometry args={[5.6, 2.3]} />
         <meshBasicMaterial color="#000" transparent opacity={0.35} depthWrite={false} />
       </mesh>
-      <F1Car speed={speed} steering={steering} aeroOpen={aeroOpen} hideDriver={false} livery={ghost ? GHOST_LIVERY : undefined} />
+      {hasModel ? (
+        <ModelBoundary fallback={builtIn}>
+          <Suspense fallback={builtIn}>
+            <CarModel speed={speed} steering={steering} ghost={ghost} />
+          </Suspense>
+        </ModelBoundary>
+      ) : (
+        builtIn
+      )}
     </group>
   )
 }

@@ -29,13 +29,20 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   )
 }
 
+let lastMode: 'scenario' | 'fault' = 'scenario'
+let lastJoinedId: string | null = null
+
 export function EngineerScreen() {
   const { driverSession } = useActiveSession()
   const { reportError } = useErrorContext()
   const engineer = useEngineerSession()
   const { send } = engineer
   const { setScreen } = useScreen()
-  const [mode, setMode] = useState<'scenario' | 'fault'>('scenario')
+  const [mode, setModeState] = useState<'scenario' | 'fault'>(lastMode)
+  const setMode = (m: 'scenario' | 'fault') => {
+    lastMode = m
+    setModeState(m)
+  }
 
   const [sessionIdInput, setSessionIdInput] = useState(driverSession?.id ?? '')
   const [scenarios, setScenarios] = useState<StressScenario[]>([])
@@ -45,7 +52,8 @@ export function EngineerScreen() {
   // it) still lives on the server, so rejoin it instead of asking for the code again.
   const { join: rejoin, joined } = engineer
   useEffect(() => {
-    if (!joined && driverSession) void rejoin(driverSession.id)
+    const id = driverSession?.id ?? lastJoinedId
+    if (!joined && id) void rejoin(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -57,6 +65,10 @@ export function EngineerScreen() {
       .then(setCatalog)
       .catch((err) => reportError(err instanceof Error ? err.message : 'Failed to load fault catalog'))
   }, [reportError])
+
+  useEffect(() => {
+    lastJoinedId = joined?.id ?? lastJoinedId
+  }, [joined])
 
   const connected = engineer.connection === 'connected'
   const v = engineer.vehicleState
@@ -92,7 +104,7 @@ export function EngineerScreen() {
               aria-label="Session ID"
             />
             {engineer.joined ? (
-              <button type="button" onClick={engineer.leave}>
+              <button type="button" onClick={() => { lastJoinedId = null; engineer.leave() }}>
                 Leave
               </button>
             ) : (
@@ -142,7 +154,8 @@ export function EngineerScreen() {
               Single fault
             </button>
           </div>
-          {mode === 'scenario' ? (
+          {/* both stay mounted so switching tabs keeps what you picked in each */}
+          <div hidden={mode !== 'scenario'}>
             <ScenarioPanel
               scenarios={scenarios}
               profile={engineer.trackProfile}
@@ -156,10 +169,11 @@ export function EngineerScreen() {
               onCancel={() => send({ type: 'cancel_scenario' })}
               onReset={() => send({ type: 'reset' })}
             />
-          ) : (
+          </div>
+          <div hidden={mode !== 'fault'}>
             <FaultBuilder catalog={catalog} profile={engineer.trackProfile} disabled={!connected}
               onAdd={(fault) => send({ type: 'add_fault', fault })} />
-          )}
+          </div>
         </Section>
 
         <Section title="2 · What is happening now">

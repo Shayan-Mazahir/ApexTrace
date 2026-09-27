@@ -84,7 +84,7 @@ class CarParams:
     # reverse
     reverse_force: float = 6_000.0  # N at full throttle
     reverse_max_speed: float = 22 / 3.6
-    reverse_hold_s: float = 0.4  # automatic: brake held this long at standstill selects reverse
+    reverse_hold_s: float = 0.8  # automatic: brake held this long at standstill selects reverse
     reverse_engage_speed: float = 1.5  # m/s: gear change to/from R only below this
     steer_slip_allowance: float = 0.12  # rad beyond the steady-state angle at full lock
     # stability control (part of the traction-control modes): once the rear slip
@@ -466,6 +466,18 @@ def step_car(
 
         if setup.abs:  # hold each axle just under its locking point
             brake_f, brake_r = min(brake_f, 0.97 * room_f), min(brake_r, 0.97 * room_r)
+            # Keep the car steerable: a tyre's grip is shared between braking and
+            # cornering (friction ellipse). Reserve the lateral grip the current
+            # steering asks for, so full brake + full lock trail-brakes into the
+            # corner instead of ploughing straight on. Straight-line braking is
+            # unchanged; at least 35% of the braking capacity always remains.
+            delta_pre = steering * max_steer_angle(max(vx, 0.0), p, s.drs_open)
+            vx_pre = max(vx, 1.0)
+            want_f = abs(_tyre_lateral(math.atan2(vy + a * r, vx_pre) - delta_pre, cap_f_lat, p)) / max(cap_f_lat, 1e-6)
+            want_r = abs(_tyre_lateral(math.atan2(vy - b * r, vx_pre), cap_r_lat, p)) / max(cap_r_lat, 1e-6)
+            keep_f = max(0.35, math.sqrt(max(0.0, 1.0 - min(1.0, want_f) ** 2)))
+            keep_r = max(0.35, math.sqrt(max(0.0, 1.0 - min(1.0, want_r) ** 2)))
+            brake_f, brake_r = min(brake_f, 0.97 * keep_f * cap_f_long), min(brake_r, 0.97 * keep_r * cap_r_long)
         brake_f, brake_r = brake_f * brake_scale, brake_r * brake_scale
         front_lock = brake_f > room_f and vx > 2.0
         fx_f = -(p.sliding_mu_ratio * cap_f_long if front_lock else brake_f)

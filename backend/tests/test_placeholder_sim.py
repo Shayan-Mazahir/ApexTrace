@@ -248,12 +248,22 @@ def test_grip_loss_lowers_the_speed_a_corner_can_be_taken_at():
     assert abs(wet.heading) < abs(full.heading)
 
 
-def test_full_braking_reduces_cornering_grip():
+def test_braking_shares_grip_with_cornering_but_the_car_still_turns():
     profile = TRACK_PRESETS["monza"]
-    state = DemoVehicleState(speed=40.0)
-    coasting = step(state, 1.0, 0.0, 0.0, 0.05, profile)
-    braking = step(state, 1.0, 0.0, 1.0, 0.05, profile)
-    assert abs(braking.heading) < abs(coasting.heading)
+
+    def run(brake):
+        s = DemoVehicleState(speed=40.0)
+        lat = []
+        for _ in range(20):  # 1 s at full lock
+            s = step(s, 1.0, 0.0, brake, 0.05, profile)
+            lat.append(abs(s.ay))
+        return s, sum(lat) / len(lat)
+
+    coast, coast_lat = run(0.0)
+    brake, brake_lat = run(1.0)
+    assert brake_lat < coast_lat  # friction ellipse: braking leaves less grip for turning
+    assert math.degrees(abs(brake.heading)) > 20  # but ABS keeps the car steerable (no straight-on plough)
+    assert brake.speed < coast.speed
 
 
 def test_grip_loss_also_limits_braking():

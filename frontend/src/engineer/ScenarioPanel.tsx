@@ -16,9 +16,13 @@ interface ScenarioPanelProps {
 
 const SOURCE_LABEL: Record<string, string> = { preset: 'Presets', sac: 'Discovered by SAC', random: 'Random search', manual: 'Manual' }
 
+let lastSelected = ''
+
 export function ScenarioPanel({ scenarios, profile, activeScenarioId, disabled, onArm, onArmAndDrive, onCancel, onReset }: ScenarioPanelProps) {
   const forTrack = scenarios.filter((s) => s.track === profile?.id)
-  const [selectedId, setSelectedId] = useState('')
+  const [selectedId, setSelectedIdState] = useState(lastSelected)
+  const setSelectedId = (v: string | ((cur: string) => string)) =>
+    setSelectedIdState((cur) => (lastSelected = typeof v === 'function' ? v(cur) : v))
   const selected = forTrack.find((s) => s.id === selectedId)
   const [zone, setZone] = useState('')
   const [severity, setSeverity] = useState(1)
@@ -143,8 +147,8 @@ export function ScenarioPanel({ scenarios, profile, activeScenarioId, disabled, 
         <p className="scenario-panel__armed">Armed on this session: <b>{selected?.name ?? activeScenarioId}</b>. Go to the Drive tab and drive; faults switch on at their triggers.</p>
       ) : (
         <p className="scenario-panel__note">
-          Arming restarts the driver&apos;s lap from the scenario&apos;s start with its seed. Faults then wait for their own
-          triggers, so arming does not switch them all on at once.
+          Arming restarts the driver&apos;s lap from the scenario&apos;s start with its seed (and clears single faults you added
+          before). Faults then wait for their own triggers. Single faults added <i>after</i> arming stack on top.
         </p>
       )}
     </div>
