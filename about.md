@@ -148,6 +148,11 @@ A warning that is correct but arrives 0.4 s late is a car in the wall at
   filtered with a One-Euro filter (smooths rumble and hand shake without
   lag), and given a gentle response curve.
 - **Best-lap ghost:** a see-through car replays your best valid lap.
+- **Engine sound:** generated live in the browser (Web Audio, no audio
+  files). The pitch follows the server's rpm, and the loudness and tone follow
+  your throttle. It includes cuts on each gear shift, crackle when you lift off
+  and tyre squeal on lock-ups or wheelspin. There's a **Sound: On/Off**
+  button in the Drive panel, and the setting is remembered.
 
 ### The ESP32 wheel (`embedded-firmware/`)
 - **Steering:** two MPU6050s, averaged tilt.

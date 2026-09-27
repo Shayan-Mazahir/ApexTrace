@@ -125,6 +125,9 @@ and TELUS**. All four are genuinely covered.
 - **Scenery:** raised striped kerbs, tyre walls, braking boards, clouds and
   sun shadows.
 - **Best-lap ghost car.**
+- **Engine sound:** synthesised live from the car's rpm and your throttle,
+  with shift cuts, crackle when you lift off and tyre squeal. Toggle it with
+  Sound: On/Off in the Drive panel; turn it off if the judging room is quiet.
 - **3-minute Demo mode:** runs the whole story on a timer.
 - **Graphics: Performance mode** for weak laptops.
 
