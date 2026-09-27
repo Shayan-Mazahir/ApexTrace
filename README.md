@@ -1,270 +1,151 @@
-# LimitLab — test the limit, fund the fix
+<div align="center">
 
-A motorsport safety-testing prototype. A driver drives full laps of
-Monza or Baku (real layouts, simplified, low-poly 3D), an engineer injects bounded faults into
-a corner-entry **BRAKE warning system** from a second device, and a budget
-screen helps a fictional small team decide which upgrade to fund — by
-re-running the same fixed test suite and checking what the season budget can
-afford.
+<img src="frontend/public/favicon.svg" width="88" alt="ApexTrace logo" />
 
-This is an F1-*inspired* prototype: a toy vehicle model with a scripted
-driver, **not** F1 physics, not certification, and no real team economics.
-See [docs/DEMO.md](docs/DEMO.md) for the demo script, launch checklist and
-the honest limits of the evidence, and [ARCHITECTURE.md](ARCHITECTURE.md) for
-the design.
+# ApexTrace
 
-## Requirements
+### We crash F1 cars so real ones don't have to.
 
-- Node.js 20+ and npm
-- Python **3.11** or 3.12 (3.14 has no prebuilt `pydantic-core` wheels yet)
-- Google Chrome (only for the optional browser end-to-end test)
+![Python](https://img.shields.io/badge/Python-FastAPI-3776AB?logo=python&logoColor=white)
+![React](https://img.shields.io/badge/React-Three.js-61DAFB?logo=react&logoColor=black)
+![PyTorch](https://img.shields.io/badge/AI-PyTorch%20%2B%20RL-EE4C2C?logo=pytorch&logoColor=white)
+![ESP32](https://img.shields.io/badge/Hardware-ESP32-E7352C?logo=espressif&logoColor=white)
+![Chassis](https://img.shields.io/badge/chassis-100%25%20cardboard-C19A6B)
 
-## First-time setup
+<img src="docs/screenshots/drive-rain.jpg" alt="Driving Monza in the rain, spray coming off the tyres" width="100%" />
+
+</div>
+
+---
+
+**334 km/h to 76 km/h in 2.8 seconds.** That's turn one at Monza. The car covers 93 metres every second, and the message that tells the driver *brake now* travels over a radio link to the pit wall and back.
+
+So what happens when that link blinks? When the rain arrives before the grip sensor notices? When the speedometer freezes but still looks healthy?
+
+**ApexTrace is a crash lab for race-car safety warnings.** You drive. Your engineer sabotages you from a second device. Then the garage works out the cheapest fix that actually keeps you on track, and proves it.
+
+---
+
+## 🏎️ Drive
+
+<img src="docs/screenshots/drive.jpg" alt="Cockpit view at Monza" width="100%" />
+
+- **Real Monza and Baku layouts:** 5.8 km and 6.0 km, every corner where it should be.
+- **A 2026-regulation car:** load-sensitive tyres, downforce, active aero, a 400 kW engine with a 350 kW hybrid kick, traction control and ABS.
+- **Kerbs, grass and walls that bite back:** they all grip differently, and walls stop you dead.
+- **Engine sound built live from your revs:** gear-shift cuts, overrun crackle and tyre squeal.
+- **Rain, a wet reflective road and tyre spray** roll in the moment the engineer makes it slippery.
+- **Drive it with the keyboard, a gamepad,** or [our cardboard wheel](#-the-wheel-yes-its-cardboard).
+
+## 💥 Break it
+
+<img src="docs/screenshots/engineer.jpg" alt="Engineer station with a blackout scenario armed" width="100%" />
+
+The engineer joins with a code and gets **22 ways to break the car across 7 layers:** road, car, sensors, the radio up to the pit wall, the warning computer, the radio back down, and the driver.
+
+| Scenario | What goes wrong |
+| --- | --- |
+| **Monza: high-speed blackout** | The radio dies 390 m before turn 1 at 330 km/h. You get *DATA STALE* instead of *BRAKE*. |
+| **Monza: wet braking zone** | Rain hits turn 1, and the grip sensor catches on 4 seconds too late. |
+| **Baku: speed sensor freeze** | The speedometer sticks. The data looks perfectly fresh. It's lying. |
+| **Baku: shared-sensor failure** | Speed reads 20% low *and* arrives late. Even the backup can't save you. |
+| **Combined moderate faults** | Two faults that are harmless alone and fatal together. |
+
+Twelve hand-built scenarios, **plus four found by our AI**. Or build your own, one fault at a time, mid-lap.
+
+## 💸 Fund the fix
+
+<img src="docs/screenshots/garage.jpg" alt="Garage results grid across every upgrade combination" width="100%" />
+
+- **Three upgrades, eight possible combinations.** Every combination drives **42 held-out test laps** (14 scenarios × 3 seeds): 336 laps in under a minute.
+- **A real budget:** cash in the bank, minus what's still owed for the season, minus an emergency reserve you never touch.
+
+| | Tests passed | Cost |
+| --- | :---: | ---: |
+| No upgrades | 14 / 42 | CAD 0 |
+| Faster radio (the "obvious" buy) | fixes the least | CAD 2,500 |
+| **Brake servicing + onboard fallback** | **31 / 42** ✅ | **CAD 2,500** |
+| Buy everything | 31 / 42 | CAD 5,000 |
+
+**The most expensive upgrade barely helps. The cheapest one fixes the most.** A faster radio that's switched off still sends nothing. A CAD 1,000 backup that lets the car warn the driver itself saves it. The 11 tests nothing fixes (frozen sensors, wet braking) are shown in the open: some problems need a better sensor, not a bigger budget.
+
+## 🔁 See the difference
+
+<img src="docs/screenshots/compare.jpg" alt="Replay comparing no upgrades against the recommended upgrades" width="100%" />
+
+Same scenario, same seed, same computer driver, run twice. The see-through car has no upgrades; the solid one is yours. They match perfectly until the radio dies, then one brakes and one goes straight on.
+
+## 🧠 Two AI models, both honest
+
+**Crash predictor (temporal CNN ensemble, PyTorch)**
+- Reads 2.5 s of what the car *reports* and predicts whether it leaves the track in the next second.
+- **PR-AUC 0.94** on 153,304 unseen moments, versus 0.08 for a stopping-distance rule and 0.20 even when the rule is handed the true distance to the edge.
+- It only watches and never touches the warnings, so it can't make the car less safe.
+
+**Fault-finding adversary (Soft Actor-Critic, Stable-Baselines3)**
+- An RL attacker that dials rain, radio lag and brake fade under a hard budget, and learns when to hit.
+- **First crash in 410 attempts vs 2,174** for random search, and 14 crashes found vs 8.
+- We re-run its crashes on full laps and say so when they don't hold up: 1 of 4 does.
+
+## 🔧 The wheel (yes, it's cardboard)
+
+Our 3D printer never showed up. So we built it out of premium, aerospace-grade cardboard.
+
+- **ESP32** brain, talking to the browser through a Python serial-to-WebSocket bridge
+- **2× MPU6050 IMUs** (accelerometer + gyro): tilt the wheel to steer, smoothed with a One-Euro filter
+- **HW-504 joystick:** push forward for throttle, pull back to brake, click to reset to the grid
+- **1.69" ST7789 colour screen:** your speed, the link status, and a big red **BRAKE**
+- **2× SG90 servos:** rumble on kerbs, crashes and warnings
+
+## ⚙️ How it works
+
+```mermaid
+flowchart LR
+    W[ESP32 wheel] -- serial --> B[bridge.py]
+    B -- WebSocket --> D[Drive screen]
+    D -- inputs --> S[(FastAPI server<br/>car physics @ 20 Hz)]
+    E[Engineer on a 2nd device] -- faults --> S
+    S --> P[Sensors → radio → warning computer → radio → driver]
+    P -- BRAKE / STALE --> D
+    S --> G[Garage: 8 combos × 42 tests]
+    G --> C[Compare replay]
+    S --> AI[TCN crash predictor]
+```
+
+The warning under test shows **BRAKE** at the last safe moment:
+
+$$d_{warn} = \frac{v^2 - v_{corner}^2}{2\,a_{brake}} + v\,t_{react} + d_{margin}$$
+
+It only knows what the car *reports*, and every fault attacks exactly that. If its data is more than 0.3 s old, it can't trust it, and the driver sees **WARNING DATA STALE** instead.
+
+## 🚀 Run it
 
 ```bash
-cd backend && python3.11 -m venv venv && source venv/bin/activate \
-  && pip install -r requirements.txt && cd ..
-cd frontend && npm install && cd ..
+# terminal 1: the server
+cd backend && python3.11 -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+# terminal 2: the app
+cd frontend && npm install && npm run dev -- --host
+
+# terminal 3 (only with the wheel)
+python embedded-firmware/bridge.py
 ```
 
-**Detailed car model (optional, per machine):** the game draws
-`frontend/public/models/car.glb` if it exists, and silently falls back to the
-built-in car if not. Both it and the raw model are git-ignored (too big), so on
-each machine drop the RB22 `.glb` into `frontend/public/` and run:
+- **Drive:** open **http://localhost:5173/#drive** and hit *Start session*.
+- **Sabotage:** open `/#engineer` in a second window, or on a phone on the same Wi-Fi, and enter the code.
 
-```bash
-python3 scripts/optimize_car_model.py   # needs Pillow; writes public/models/car.glb
-```
+Controls, the optional detailed car model, tests and everything else are in **[docs/SETUP.md](docs/SETUP.md)**.
 
-It caps textures at 1024 px (GPU texture memory ~391 MB → ~122 MB) and leaves
-the meshes and material names alone, so the wheels still spin and steer. Refresh
-the page afterwards: the game checks for the model once per page load.
+## 🧰 Built with
 
-## Launch (driver laptop)
+Python · FastAPI · WebSockets · NumPy · PyTorch · Stable-Baselines3 · Gymnasium · TypeScript · React · Vite · three.js · React Three Fiber · Web Audio · ESP32 · Arduino · pytest · Vitest · Puppeteer · cardboard
 
-```bash
-scripts/start.sh
-```
+## 👥 Team
 
-Starts the API on `:8000` and the app on `:5173`, both reachable on the local
-network. It prints two URLs:
+**Aaryan Ved Bhalla · Kahn Shah · Shayan Mazahir**
 
-- Driver laptop: `http://localhost:5173/#drive`
-- Engineer device (same Wi-Fi): `http://<laptop-ip>:5173/#engineer`
+Built for Formula Tech Hacks 2026.
 
-Manual equivalents:
-
-```bash
-cd backend  && source venv/bin/activate && uvicorn app.main:app --host 0.0.0.0 --port 8000
-cd frontend && npm run dev -- --host --port 5173
-```
-
-**Result cache:** the upgrade evaluation (~340 simulated laps) and every
-Compare replay are deterministic, so they are stored in `backend/.cache/`
-(git-ignored). The first start after a change computes the evaluation
-(~1.5 min) and then fills the replays in the background on one low-priority
-core (~5 min); later starts read them back instantly. Editing anything under
-`backend/app/`, `config/`, `scenarios/` or the TCN models invalidates it
-automatically. `rm -rf backend/.cache` clears it, `LIMITLAB_CACHE=0` turns it off.
-
-Screens are addressable by hash: `#home` (the front page: what LimitLab is,
-how a run works, which challenge track each part answers, live leaderboard),
-`#drive`, `#engineer`, `#garage`, `#compare`.
-
-**Driver safety report + leaderboard:** the Drive screen times the real
-driver's reaction to every BRAKE warning (warning shown -> brake past 30 %),
-flags warnings ignored or anticipated, and tracks the closest call, walls,
-off-tracks, best lap, top speed and peak g. A chip under the BRAKE banner
-shows each reaction as it happens; **Safety report** (and End session) opens
-the full report: a 0-100 safety score, every reaction charted against the
-0.25-0.40 s the stress suite's scripted driver assumes, and what a slower
-reaction costs in metres. Scores can be posted to a per-track leaderboard
-(`GET/POST /leaderboard`, stored in `backend/.data/leaderboard.json`,
-git-ignored; `rm` it to reset before a demo).
-Health check: `curl localhost:8000/health`.
-
-## Controls
-
-| Action | Keyboard | Wheel / gamepad | ESP32 wheel |
-| --- | --- | --- | --- |
-| Throttle / brake | W / ↑, S / ↓ / Space | right / left trigger | joystick forward / back |
-| Steer | A / ←, D / → | axis 0 | turn the wheel |
-| Shift up / down (manual) | E / Q | RB / LB (paddles) | — |
-| DRS / active aero (manual) | F | A | — |
-| Reverse (when stopped) | R | X | — |
-| Cycle battery mode | B | Y | — |
-| Reset to grid | dock button | dock button | press the joystick down |
-| Force feedback | — | rumble motors | 2x SG90 servos |
-
-A wheel/gamepad is used automatically if the browser sees one (calibrate
-centre and dead-zone in the Controls panel of the Drive screen). The view
-button cycles cockpit, chase and overview cameras. **Graphics: Quality /
-Performance** (Drive screen dock) is remembered per machine and applies to
-every 3D view: Performance renders at 1x with no bloom/anti-aliasing effects,
-for integrated GPUs such as Intel Iris Xe.
-
-**ESP32 wheel** (`embedded-firmware/`): flash `steering-wheel/steering-wheel.ino`,
-plug the ESP32 into the driver laptop, and run the serial-to-WebSocket bridge
-alongside the app (`pip install pyserial websockets` once):
-
-```bash
-cd embedded-firmware && python bridge.py   # auto-detects the port; --list / --port to choose
-```
-
-Its live readout shows the steering, pedal and reset values it forwards, so
-the hardware can be checked on its own. The Drive screen picks the wheel up
-automatically (Controls panel: `Input: ESP32 wheel`); a plugged-in gamepad
-takes priority. On Linux, reading the port needs the `dialout` group.
-**Leave the joystick untouched while the wheel powers up:** the firmware
-measures its rest point at boot (the Serial Monitor shows
-`# joystick centre ...`), so a stick held during boot reads as drift.
-
-**Wheel screen** (1.69" 240x280 ST7789V2, 4-wire SPI): GND→GND, VCC→3V3,
-SCL→D18, SDA→D23, RES→D4, DC→D2, CS→D5, BLK→3V3. Needs the *Adafruit ST7735
-and ST7789* and *Adafruit GFX* libraries; `testing/display_test` is a quick
-bring-up sketch for the screen alone. It shows steering (a centre-zero bar and
-the raw g value), throttle and brake, the live BRAKE / STALE warning or the
-speed, and the actual send rate and packet number. The game's side of that
-reaches the ESP32 back through the bridge. The top banner says where the chain
-is broken:
-
-| Banner | Meaning | Fix |
-| --- | --- | --- |
-| LIVE | in a session, driving with this wheel | — |
-| NO BRIDGE | nothing from `bridge.py` for 1.5 s | start the bridge (and close the Serial Monitor) |
-| NO GAME | bridge up, no Drive screen connected | open `#drive` on the laptop |
-| NO SESSION | Drive screen open, no session | press Start |
-| CONNECTING | session (re)connecting to the backend | check the backend is running |
-| WHEEL NOT IN USE | in a session, but another input is driving | unplug the gamepad, or check the wheel's data reaches the browser |
-
-**Force feedback** (like a console pad's rumble): kerbs drum at the rate the
-stripes pass under the wheels, run-off shakes irregularly, locked or spinning
-wheels fizz, a barrier hit knocks hard and a new BRAKE warning taps twice. It
-goes to whichever input is driving: the ESP32 wheel's two SG90 servos (below)
-or an Xbox-style gamepad's motors (Chrome/Edge). The same signal drives what
-you see: camera shake, sparks from the floor (kerbs, bottoming out at top
-speed, heavy braking, barrier hits), tyre smoke and skid marks from locked or
-spinning wheels, dust off the track, a red flash round the screen on impact,
-and red chevrons painted down the road into the corner while BRAKE is shown.
-
-**Wheel servos** (2x SG90, rumble): both signal wires -> D12, V+ -> **5 V**
-(not 3V3), GND -> GND. Each can pull ~0.6 A when it reverses, which browns
-out the ESP32 and its screen from 3V3: use a separate 5 V supply (or the
-ESP32's 5V/VIN pin off a good USB port for short demos), with a 470-1000 uF
-capacitor across the servos' V+ and GND. D12 is a boot strapping pin: if the
-board won't boot with the servos attached, move the signal to D13/D14/D26/D27
-and change `PIN_RUMBLE_SERVO` in `rumble.cpp`. The servos stop on their own
-0.5 s after the game stops sending, and go limp (silent) when still.
-
-**Car setup** (track picker or the dock during a run; applies immediately):
-traction control Off/Medium/Full, ABS On/Off, automatic or manual
-transmission, DRS Off/Auto/Manual, and battery power Harvest/Balanced/Overtake.
-
-**Car model** (`backend/app/f1_car.py`): a simplified 2026-regulation car -
-tyre slip and a friction circle (so braking or wheelspin costs cornering
-grip), downforce and drag that grow with speed plus Z/X-mode active aero, a
-400 kW engine through an 8-speed gearbox and a 350 kW MGU-K that fades above
-290 km/h and runs on a 4 MJ battery recharged under braking. It reaches
-0-100 km/h in about 2.6 s and 325-343 km/h. Plausible public figures, not team
-data. Laps are timed against track limits (void once the whole car is past
-the edge line) and the dash keeps the session's best valid lap.
-
-## Tests
-
-```bash
-cd backend  && source venv/bin/activate && python -m pytest
-cd frontend && npm test
-cd frontend && npm run e2e                                       # 23 real-Chrome checks (25 with E2E_OUTAGE=1)
-cd frontend && node e2e/barriers.mjs                             # wall impacts + live TCN on both tracks
-```
-
-`npm run e2e` needs the app running (`scripts/start.sh`) and Chrome installed.
-`E2E_OUTAGE=1 npm run e2e` additionally kills and restarts the backend to check
-outage recovery. Screenshots land in `frontend/e2e/shots/` (git-ignored).
-
-## Production build (the frozen demo build)
-
-```bash
-cd frontend && npm run build && npm run preview -- --host --port 4173
-# e2e against it:  BASE=http://localhost:4173 npm run e2e
-```
-
-## Layout
-
-```
-frontend/   React + TypeScript + React Three Fiber (Drive, Engineer, Garage, Compare, demo mode)
-backend/    FastAPI: sessions + WebSockets, faults, scenarios, upgrades, evaluation
-            + app/sim (lap simulator), app/ai (TCN lap forecaster, SAC/TPE/random scenario search)
-config/     upgrades.json — upgrade prices/effects and default budget (editable assumptions)
-scenarios/  saved stress scenarios (*.json); scenarios/presets/ = lap-simulator presets
-scripts/    start.sh, record_backup_replay.py
-docs/       DEMO.md
-```
-
-## Simulator and AI status
-
-`backend/app/placeholder_sim.py` still contains the simplified vehicle model,
-pending integration with Person A's simulator. `backend/app/stress/` owns
-the shared fault pipeline and evaluation. Solid barriers use swept collision
-checks against the rendered wall geometry and the whole 5.6 × 2 m car.
-Impact stops the car and records a failed run; use Reset to restart after a
-head-on crash. This is a contact constraint, not a realistic damage model.
-
-The optional TCN observer loads three trained checkpoints and `meta.json`
-from `backend/models/tcn/`. It predicts one-second exit risk and clearance
-from 2.5 seconds of observed telemetry, in both live sessions and replays;
-it does not control braking warnings. Missing models or ML dependencies
-are shown as unavailable. SAC artifacts and its random-search comparison
-are in `backend/models/sac/`.
-
-```bash
-cd backend
-venv/bin/pip install -r requirements-ml.txt
-venv/bin/python -m app.ml.dataset        # regenerate training data if needed
-venv/bin/python -m app.ml.train_tcn      # train and evaluate the ensemble
-venv/bin/python -m app.ml.evaluate_tcn   # recheck saved models after simulator changes
-```
-
-The saved training/test results use the original dataset; the held-out
-stress suite is reevaluated after the solid-barrier fix. Simulator hashes
-and this distinction are recorded in the model metadata. Clearance error
-must be compared with its baseline separately from exit classification.
-
-## Lap simulator and AI scenario search (Person A)
-
-A separate deterministic lap simulator lives in `backend/app/sim/` with its
-AI layer in `backend/app/ai/`. It runs one flying lap of simplified closed
-Monza (~4.4 km, 11 corners) and Baku (~4.3 km, 13 corners) layouts with a
-scripted driver, a corner-entry warning system and seeded faults (grip
-mismatch, telemetry delay, sensor noise, burst packet loss, brake
-degradation, reaction delay). The same scenario and seed always give the same
-lap. It is served under `/simulation/*`, `/scenario/*`,
-`/configuration/*`, `/ai/status` and `/ws/simulation`; interactive docs at
-`http://localhost:8000/docs`. The AI routes need `requirements-ml.txt` and
-are skipped if torch/optuna are missing. Presets are in `scenarios/presets/`;
-design notes are in [ARCHITECTURE.md](ARCHITECTURE.md), and progress/decisions
-in [docs/person-a-progress.md](docs/person-a-progress.md).
-
-Trained artifacts are committed (`backend/models/tcn/model.pt` +
-`config.json`, `backend/models/sac/sac.pt`, `backend/models/experiment.json`),
-next to the TCN observer / SAC artifacts above. To regenerate (from `backend/`,
-venv active, ML requirements installed):
-
-```bash
-python scripts/demo.py   # baseline vs upgrades on presets, replays, AI search -> simulator
-
-# simulator-labelled data and a held-out set (5000 laps take ~4 min on 8 cores)
-python scripts/generate_data.py --num-runs 5000 --seed 42 --output data/training.json
-python scripts/generate_data.py --num-runs 1500 --seed 7  --output data/test.json
-python scripts/train_tcn.py --data data/training.json --output models/tcn
-python scripts/evaluate_tcn.py --model models/tcn --data data/test.json
-python scripts/train_sac.py --steps 3072 --output models/sac
-python scripts/run_experiment.py --budget 50 --seeds 0 1 2 3 4 --output models/experiment.json
-```
-
-Quick API example:
-
-```bash
-curl -s -X POST localhost:8000/simulation/run -H 'content-type: application/json' \
-  -d '{"scenario": {"track": "monza", "entry_speed": 85, "brake_effectiveness": 0.5, "warning_margin": 0, "driver_reaction_delay": 0.5}, "configuration": "baseline"}'
-```
+<sub>ApexTrace is an F1-inspired prototype: a simplified car model and a scripted test driver, not real team data or certification. The point is the testing method.</sub>
