@@ -1,7 +1,8 @@
 import { Environment, Lightformer } from '@react-three/drei'
-import { Canvas, useFrame } from '@react-three/fiber'
-import { Suspense, useRef } from 'react'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { Suspense, useEffect, useRef } from 'react'
 import type { Group } from 'three'
+import { contactShadow } from '../scene/Atmosphere'
 import { CarModel, useCarModelAvailable } from '../scene/CarModel'
 import { F1Car } from '../scene/F1Car'
 import { ModelBoundary } from '../scene/ModelBoundary'
@@ -32,6 +33,21 @@ function Turntable({ selection, detailed }: { selection: UpgradeConfig; detailed
   )
 }
 
+// The camera must be aimed: an R3F camera given only a position looks straight
+// down -z, which left the car off-centre with its nose cut off. Pulled back
+// further when the panel is tall and narrow, so the whole car always fits.
+function AimCamera() {
+  const { camera, size } = useThree()
+  useEffect(() => {
+    const aspect = size.width / Math.max(size.height, 1)
+    const d = aspect < 1.2 ? 11.5 : 10
+    camera.position.set(d * 0.68, d * 0.34, d * 0.68)
+    camera.lookAt(0, 0.35, 0)
+    camera.updateProjectionMatrix()
+  }, [camera, size.width, size.height])
+  return null
+}
+
 const FITTED: { id: keyof UpgradeConfig; label: string }[] = [
   { id: 'brake_servicing', label: 'Serviced brakes' },
   { id: 'comms_improvement', label: 'Improved comms' },
@@ -47,6 +63,7 @@ export function GarageCar({ selection }: { selection: UpgradeConfig }) {
   return (
     <div className="garage-car">
       <Canvas camera={{ position: [5.2, 2.4, 5.2], fov: 36 }} dpr={lowGraphics ? 1 : [1, 1.5]}>
+        <AimCamera />
         <color attach="background" args={['#15171c']} />
         <hemisphereLight args={['#e8eef5', '#2a2a2e', 0.7]} />
         <directionalLight position={[4, 6, 3]} intensity={1.6} />
@@ -63,6 +80,10 @@ export function GarageCar({ selection }: { selection: UpgradeConfig }) {
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.005, 0]}>
           <ringGeometry args={[4.05, 4.2, 64]} />
           <meshBasicMaterial color="#ff8a1a" />
+        </mesh>
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
+          <planeGeometry args={[6.4, 6.4]} />
+          <meshBasicMaterial map={contactShadow()} transparent depthWrite={false} />
         </mesh>
         <group scale={0.9}>
           <Turntable selection={selection} detailed={detailed} />
