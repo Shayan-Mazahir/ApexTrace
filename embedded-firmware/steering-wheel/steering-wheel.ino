@@ -14,12 +14,18 @@
 
     #S <clients> <session> <active> <warning> <speed_kmh>
 
+  Two SG90 servos rumble the wheel like a game controller's motors — kerbs,
+  run-off, wheel slip, barrier hits and the BRAKE warning (see rumble.h):
+
+    #R <effect> <strength_pct> <rate_hz>     #E <kind> <strength_pct>
+
   Wiring (Elegoo ESP32):
     MPU #1 (left):  VCC->3V3, GND->GND, SCL->D22, SDA->D21, AD0->GND   (0x68)
     MPU #2 (right): VCC->3V3, GND->GND, SCL->D22, SDA->D21, AD0->3V3  (0x69)
     HW-504:         GND->GND, VCC->3V3, VRx->D34, VRy->D35, SW->D25
     Screen:         GND->GND, VCC->3V3, SCL->D18, SDA->D23, RES->D4, DC->D2,
                     CS->D5, BLK->3V3
+    Servos (x2):    signal->D12, V+->5V (not 3V3!), GND->GND  (power: rumble.h)
 
   Libraries (Library Manager): "Adafruit ST7735 and ST7789 Library" and
   "Adafruit GFX Library".
@@ -28,6 +34,7 @@
 #include <Wire.h>
 
 #include "dashboard.h"
+#include "rumble.h"
 
 const int MPU_LEFT_ADDR  = 0x68;
 const int MPU_RIGHT_ADDR = 0x69;
@@ -36,7 +43,51 @@ const int ACCEL_XOUT_H   = 0x3B;
 
 const int PIN_VRY = 35; // joystick forward/back -> throttle/brake
 const int PIN_SW  = 25; // joystick pressed down  -> reset the car to the grid
-const int JOY_CENTER = 2048;
+
+// Where the joystick rests is measured at boot, not assumed to be mid-scale:
+// the HW-504's pot and the ESP32's ADC (which is not ratiometric to the 3V3
+// rail) put "hands off" well away from 2048 — on this wheel ~1880, which read
+// as 8% brake held on permanently. So keep the stick untouched while the
+// wheel powers up. A reading outside this band means someone was holding it;
+// then the old mid-scale assumption is used instead.
+const int JOY_ADC_MAX = 4095;
+const int JOY_CENTER_DEFAULT = 2048;
+const int JOY_CENTER_MIN = 1200, JOY_CENTER_MAX = 2900;
+int joyCenter = JOY_CENTER_DEFAULT;
+
+// One joystick reading: 8 ADC samples, highest and lowest dropped, rest
+// averaged. The ESP32 ADC jitters by ~±2% here and occasionally spikes (one
+// sample read 1366 at rest — a one-frame 33% brake stab); the trimmed mean
+// removes the spikes and most of the jitter for ~0.3 ms.
+int readJoystickY() {
+  int lo = JOY_ADC_MAX, hi = 0;
+  long sum = 0;
+  for (int i = 0; i < 8; i++) {
+    int v = analogRead(PIN_VRY);
+    sum += v;
+    lo = min(lo, v);
+    hi = max(hi, v);
+  }
+  return (int)((sum - lo - hi) / 6);
+}
+
+// -1 (full back) .. 0 (rest) .. +1 (full forward). Each side is scaled by its
+// own travel, since the centre is no longer the middle of the range.
+float joystickAxis(int raw, int center) {
+  float v = raw >= center ? (raw - center) / (float)(JOY_ADC_MAX - center)
+                          : (raw - center) / (float)center;
+  return constrain(v, -1.0f, 1.0f);
+}
+
+int calibrateJoystickCenter() {
+  long sum = 0;
+  const int N = 32;
+  for (int i = 0; i < N; i++) {
+    sum += readJoystickY();
+    delay(5);
+  }
+  return (int)(sum / N);
+}
 
 uint32_t sequence = 0;
 
@@ -51,6 +102,16 @@ char bridgeLine[48];
 size_t bridgeLineLen = 0;
 
 void handleBridgeLine(const char* line) {
+  int effect, strength, rate;
+  if (sscanf(line, "#R %d %d %d", &effect, &strength, &rate) == 3) {
+    rumbleSet((RumbleEffect)constrain(effect, 0, 3), (uint8_t)constrain(strength, 0, 100),
+              (uint8_t)constrain(rate, 0, 50));
+    return;
+  }
+  if (sscanf(line, "#E %d %d", &effect, &strength) == 2) {
+    if (effect == 1 || effect == 2) rumbleTrigger((RumbleEvent)effect, (uint8_t)constrain(strength, 0, 100));
+    return;
+  }
   int clients, session, active, warning, speedKmh;
   if (sscanf(line, "#S %d %d %d %d %d", &clients, &session, &active, &warning, &speedKmh) != 5) {
     return;  // not a status line (or a torn one): ignore
@@ -128,8 +189,20 @@ void setup() {
   // released reads HIGH, pressed reads LOW.
   pinMode(PIN_SW, INPUT_PULLUP);
 
-  rateWindowStartMs = millis();
   dashboardBegin();
+  rumbleBegin();
+
+  // Measure the joystick's rest point with the screen already running: its
+  // backlight and SPI load shift the 3V3 rail, and the ADC reading with it.
+  delay(400);
+  int measured = calibrateJoystickCenter();
+  bool plausible = measured >= JOY_CENTER_MIN && measured <= JOY_CENTER_MAX;
+  joyCenter = plausible ? measured : JOY_CENTER_DEFAULT;
+  // Not JSON, so bridge.py ignores it; visible in the Serial Monitor.
+  Serial.printf("# joystick centre %d (%s)\n", joyCenter,
+                plausible ? "measured at boot" : "default: stick was held during boot?");
+
+  rateWindowStartMs = millis();
 }
 
 void loop() {
@@ -140,8 +213,7 @@ void loop() {
   float steeringRaw = (leftY + rightY) / 2.0;
 
   // Joystick forward = throttle, joystick back = brake, split from one axis.
-  int rawY = analogRead(PIN_VRY);
-  float joyNorm = (rawY - JOY_CENTER) / (float)JOY_CENTER; // -1..1
+  float joyNorm = joystickAxis(readJoystickY(), joyCenter); // -1..1
   float throttleRaw = joyNorm > 0 ? joyNorm : 0.0;
   float brakeRaw     = joyNorm < 0 ? -joyNorm : 0.0;
 

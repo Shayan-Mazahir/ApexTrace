@@ -50,6 +50,20 @@ and the bridge writes the game's state down the serial port to the ESP32 at
 
 That line doubles as the bridge's heartbeat: if the ESP32 stops hearing it,
 its screen shows NO BRIDGE.
+
+Force feedback (game -> wheel servos): the Drive screen also sends
+
+    {"type": "rumble", "effect": "kerb", "strength": 0.8, "rate_hz": 12}
+    {"type": "haptic_event", "kind": "impact", "strength": 0.9}
+
+The first is a held rumble (kerb, rough, slip or none), resent while it lasts;
+the second a one-shot jolt (impact, warning). They go down the serial port as
+
+    #R <effect> <strength_pct> <rate_hz>     effect: 0 none, 1 kerb, 2 rough, 3 slip
+    #E <kind> <strength_pct>                 kind:   1 impact, 2 warning
+
+#R is written the moment it changes and repeated at 10 Hz while it is not
+"none"; the firmware stops the servos 0.5 s after the last one on its own.
 """
 
 import argparse
@@ -84,6 +98,13 @@ connected_clients = set()
 client_feedback = {}
 FEEDBACK_FRESH_S = 1.0  # a tab that stops reporting for this long no longer counts
 STATUS_PERIOD_S = 0.1   # 10 Hz status lines to the ESP32
+
+RUMBLE_CODES = {"none": 0, "kerb": 1, "rough": 2, "slip": 3}
+EVENT_CODES = {"impact": 1, "warning": 2}
+RUMBLE_FRESH_S = 0.5  # matches the firmware's own timeout
+
+# Latest rumble from each tab: websocket -> ((effect, strength_pct, rate_hz), monotonic time).
+client_rumble = {}
 
 SESSION_CODES = {"none": 0, "connecting": 1, "reconnecting": 1, "connected": 2}
 WARNING_CODES = {"clear": 0, "brake": 1, "stale": 2}
@@ -120,6 +141,38 @@ def status_line(status):
     return "#S %d %d %d %d %d\n" % status
 
 
+def _pct(value):
+    return max(0, min(100, int(round(value * 100)))) if isinstance(value, (int, float)) and value == value else 0
+
+
+def parse_rumble(message):
+    """(effect, strength_pct, rate_hz) from a browser "rumble" message; unknown -> none."""
+    effect = RUMBLE_CODES.get(message.get("effect"), 0)
+    rate = message.get("rate_hz")
+    rate = max(0, min(50, int(round(rate)))) if isinstance(rate, (int, float)) and rate == rate else 0
+    return (effect, _pct(message.get("strength")), rate) if effect else (0, 0, 0)
+
+
+def current_rumble(now=None):
+    """The strongest fresh rumble across tabs (normally there is one Drive screen)."""
+    now = time.monotonic() if now is None else now
+    fresh = [r for r, received in client_rumble.values() if now - received <= RUMBLE_FRESH_S and r[0]]
+    return max(fresh, key=lambda r: r[1]) if fresh else (0, 0, 0)
+
+
+def rumble_line(rumble):
+    return "#R %d %d %d\n" % rumble
+
+
+def event_line(message):
+    """"#E ..." for a browser "haptic_event" message, or None if it isn't one we know."""
+    kind = EVENT_CODES.get(message.get("kind"))
+    return None if kind is None else "#E %d %d\n" % (kind, _pct(message.get("strength")))
+
+
+RUMBLE_LABELS = {1: "kerb", 2: "rough", 3: "slip"}
+
+
 GAME_LABELS = {  # for the terminal readout; mirrors the ESP32 screen's banner
     (0, 0): "no session",
     (0, 1): "connecting",
@@ -133,7 +186,9 @@ def describe_game(status):
     if clients == 0:
         return "no game"
     text = GAME_LABELS.get((active, session), "no session")
-    return text + (" BRAKE" if warning == 1 else " stale" if warning == 2 else "")
+    text += " BRAKE" if warning == 1 else " stale" if warning == 2 else ""
+    effect = current_rumble()[0]
+    return text + (f" ~{RUMBLE_LABELS[effect]}" if effect else "")
 
 
 def candidate_ports():
@@ -275,9 +330,19 @@ async def handle_client(websocket):
                 data = json.loads(message)
             except (TypeError, ValueError):
                 continue
-            if isinstance(data, dict) and data.get("type") == "feedback":
+            if not isinstance(data, dict):
+                continue
+            kind = data.get("type")
+            if kind == "feedback":
                 client_feedback[websocket] = (data, time.monotonic())
                 status_changed()
+            elif kind == "rumble":
+                client_rumble[websocket] = (parse_rumble(data), time.monotonic())
+                rumble_changed()
+            elif kind == "haptic_event":
+                line = event_line(data)
+                if line and status_writer is not None:
+                    status_writer.write(line)
     except ConnectionClosed:
         # A browser tab that reloads or hot-reloads usually drops the socket
         # without a closing handshake. That is an ordinary disconnect here, not
@@ -286,6 +351,8 @@ async def handle_client(websocket):
     finally:
         connected_clients.discard(websocket)
         client_feedback.pop(websocket, None)
+        client_rumble.pop(websocket, None)
+        rumble_changed()  # a tab closed mid-rumble: stop the servos now
         readout.note(f"Client disconnected ({len(connected_clients)} total)")
         status_changed()
 
@@ -302,21 +369,36 @@ class StatusWriter:
     def __init__(self, ser):
         self.ser = ser
         self.sent_key = None
+        self.sent_rumble = (0, 0, 0)
         self.failed = False
+
+    def write(self, line):
+        try:
+            self.ser.write(line.encode("ascii"))
+            self.failed = False
+            return True
+        except serial.SerialException as e:
+            if not self.failed:  # say it once, not ten times a second
+                readout.note(f"Could not write to the ESP32: {e}")
+            self.failed = True
+            return False
 
     def send(self, force=False):
         status = game_status()
         key = status[:4]  # everything but speed
         if not force and key == self.sent_key:
             return
-        try:
-            self.ser.write(status_line(status).encode("ascii"))
+        if self.write(status_line(status)):
             self.sent_key = key
-            self.failed = False
-        except serial.SerialException as e:
-            if not self.failed:  # say it once, not ten times a second
-                readout.note(f"Could not write status to the ESP32: {e}")
-            self.failed = True
+
+    def send_rumble(self, force=False):
+        """The rumble on change; with force, re-sent while held (the servos'
+        keep-alive), plus one "none" when it has just stopped."""
+        rumble = current_rumble()
+        if rumble == self.sent_rumble and not (force and rumble[0]):
+            return
+        if self.write(rumble_line(rumble)):
+            self.sent_rumble = rumble
 
 
 status_writer = None  # set in main() once the port is open
@@ -327,9 +409,15 @@ def status_changed():
         status_writer.send()
 
 
+def rumble_changed():
+    if status_writer is not None:
+        status_writer.send_rumble()
+
+
 async def status_loop():
     while True:
         status_writer.send(force=True)
+        status_writer.send_rumble(force=True)  # also notices a rumble going stale
         await asyncio.sleep(STATUS_PERIOD_S)
 
 
