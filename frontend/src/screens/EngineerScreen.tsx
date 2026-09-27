@@ -84,6 +84,7 @@ export function EngineerScreen() {
             vehicleState={v ? { x: v.x, y: v.y, heading: v.heading, speed: v.speed, drsOpen: v.drs_open, t: v.t } : null}
             trail={engineer.trail}
             previousLapTrail={engineer.previousLapTrail}
+            wet={v ? Math.max(0, Math.min(1, (1 - v.true_grip) / 0.4)) : 0}
           />
         </Canvas>
       </div>

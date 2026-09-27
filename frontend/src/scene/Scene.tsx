@@ -14,6 +14,9 @@ import { useGraphicsMode } from '../app/graphics'
 import { Clouds, contactShadow, RacingLine, RubberLine, SKY_HORIZON, SkyDome, Sun } from './Atmosphere'
 import { bounds, type Pt } from './trackGeometry'
 import { TrackScenery } from './TrackScenery'
+import { Rain, Spray } from './Rain'
+
+const RAIN_SKY = '#8a939c'
 
 export interface CarPose {
   x: number
@@ -261,9 +264,11 @@ interface SceneProps {
   haptics?: React.MutableRefObject<HapticSignal>
   // BRAKE shown: the corner it is for gets its braking zone painted on the road
   brakeHazard?: HazardZone | null
+  // 0 dry .. 1 heavy rain: grey sky, closer mist and falling rain (from the live grip)
+  wet?: number
 }
 
-export function Scene({ trackProfile, vehicleState, trail, previousLapTrail, view = 'overview', steering, showRacingLine = false, effects = true, ghost = null, exactPose = false, haptics, brakeHazard = null }: SceneProps) {
+export function Scene({ trackProfile, vehicleState, trail, previousLapTrail, view = 'overview', steering, showRacingLine = false, effects = true, ghost = null, exactPose = false, haptics, brakeHazard = null, wet = 0 }: SceneProps) {
   const start = useMemo<CarPose>(() => {
     if (!trackProfile) return { x: 0, y: 0, heading: 0 }
     const [x0, y0] = trackProfile.centerline[0]
@@ -274,13 +279,16 @@ export function Scene({ trackProfile, vehicleState, trail, previousLapTrail, vie
   const shadows = useGraphicsMode() === 'quality'
   const ghostShown = useSmoothedPose(ghost ?? start, exactPose)
   const overview = view === 'overview'
+  const raining = wet > 0.05
 
   return (
     <>
-      <color attach="background" args={[SKY_HORIZON]} />
-      {!overview && <fog attach="fog" args={[SKY_HORIZON, 450, 3400]} />}
-      <SkyDome />
-      {trackProfile && !overview && <Clouds profile={trackProfile} />}
+      <color attach="background" args={[raining ? RAIN_SKY : SKY_HORIZON]} />
+      {!overview && (raining ? <fog attach="fog" args={[RAIN_SKY, 60, 900]} /> : <fog attach="fog" args={[SKY_HORIZON, 450, 3400]} />)}
+      {!raining && <SkyDome />}
+      {trackProfile && !overview && !raining && <Clouds profile={trackProfile} />}
+      {raining && !overview && <Rain intensity={Math.min(1, 0.4 + wet)} />}
+      {raining && view === 'follow' && <Spray pose={shown} />}
       {/* offline studio-style reflections (no HDRI download): sky dome, sun strip and ground bounce */}
       {/* reflections and fill light only: too strong and every colour washes out to pastel */}
       <Environment resolution={128} frames={1} environmentIntensity={0.55}>
@@ -289,10 +297,10 @@ export function Scene({ trackProfile, vehicleState, trail, previousLapTrail, vie
         <Lightformer form="rect" intensity={0.5} color="#9fb4c8" position={[-12, 3, -4]} scale={[14, 5, 1]} />
         <Lightformer form="rect" intensity={0.25} color="#5d6a45" position={[0, -6, 0]} rotation-x={-Math.PI / 2} scale={[30, 30, 1]} />
       </Environment>
-      <hemisphereLight args={['#bcd6f2', '#4d5a36', 0.55]} />
+      <hemisphereLight args={raining ? ['#9aa4ae', '#3d4430', 0.45] : ['#bcd6f2', '#4d5a36', 0.55]} />
       <Sun follow={shown} shadows={shadows && !overview} />
       {trackProfile && !overview && <Hills profile={trackProfile} />}
-      {trackProfile && <TrackScenery profile={trackProfile} />}
+      {trackProfile && <TrackScenery profile={trackProfile} wet={raining} />}
       {trackProfile && <RubberLine profile={trackProfile} />}
       {trackProfile && showRacingLine && <RacingLine profile={trackProfile} />}
       <Trail points={previousLapTrail} color="#9ca3af" opacity={0.5} />

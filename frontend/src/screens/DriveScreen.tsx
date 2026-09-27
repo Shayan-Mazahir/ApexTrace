@@ -152,6 +152,7 @@ export function DriveScreen() {
           haptics={inSession ? haptics.signal : undefined}
           ghost={ghostPose}
           brakeHazard={brakeHazard}
+          wet={v && inSession ? Math.max(0, Math.min(1, (1 - v.true_grip) / 0.4)) : 0}
         />
       </Canvas>
       {/* barrier hit: a red flash round the screen edge (keyed, so each hit replays it) */}

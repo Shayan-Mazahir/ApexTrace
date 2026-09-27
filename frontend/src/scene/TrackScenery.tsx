@@ -80,17 +80,18 @@ function ColourStrip({ strip }: { strip: StripGeometry }) {
   )
 }
 
-function TexturedStrip({ strip, map, colour = '#ffffff', transparent = false, roughness = 0.9 }: {
+function TexturedStrip({ strip, map, colour = '#ffffff', transparent = false, roughness = 0.9, metalness = 0 }: {
   strip: UvStrip
   map: Texture
   colour?: string
   transparent?: boolean
   roughness?: number
+  metalness?: number
 }) {
   const geometry = useUv(strip)
   return (
     <mesh geometry={geometry} receiveShadow>
-      <meshStandardMaterial map={map} color={colour} side={DoubleSide} roughness={roughness}
+      <meshStandardMaterial map={map} color={colour} side={DoubleSide} roughness={roughness} metalness={metalness}
         transparent={transparent} alphaTest={transparent ? 0.1 : 0} depthWrite={!transparent} />
     </mesh>
   )
@@ -318,7 +319,7 @@ function StartFinish({ profile }: { profile: TrackProfile }) {
   )
 }
 
-export function TrackScenery({ profile }: { profile: TrackProfile }) {
+export function TrackScenery({ profile, wet = false }: { profile: TrackProfile; wet?: boolean }) {
   const theme = THEMES[profile.id]
   const parts = useMemo(() => {
     const normals = leftNormals(profile)
@@ -388,7 +389,8 @@ export function TrackScenery({ profile }: { profile: TrackProfile }) {
           <TexturedStrip strip={parts.runoffR} map={asphaltTexture()} colour="#b9b2a4" />
         </>
       )}
-      <TexturedStrip strip={parts.road} map={asphaltTexture()} colour="#c4c7cc" roughness={0.82} />
+      {/* wet: darker and glossy, so the sky and scenery reflect in it */}
+      <TexturedStrip strip={parts.road} map={asphaltTexture()} colour={wet ? '#6f757d' : '#c4c7cc'} roughness={wet ? 0.12 : 0.82} metalness={wet ? 0.35 : 0} />
       <ColourStrip strip={parts.lineL} />
       <ColourStrip strip={parts.lineR} />
       <Kerbs profile={profile} red={theme.kerbA} />
