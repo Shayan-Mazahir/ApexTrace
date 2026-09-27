@@ -12,10 +12,13 @@ import { CompareScreen } from './screens/CompareScreen'
 import { DriveScreen } from './screens/DriveScreen'
 import { EngineerScreen } from './screens/EngineerScreen'
 import { GarageScreen } from './screens/GarageScreen'
+import { HomeScreen } from './screens/HomeScreen'
 
 function CurrentScreen() {
   const { screen } = useScreen()
   switch (screen) {
+    case 'home':
+      return <HomeScreen />
     case 'drive':
       return <DriveScreen />
     case 'engineer':

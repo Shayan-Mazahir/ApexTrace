@@ -2,6 +2,7 @@ import { SCREENS, useScreen } from './ScreenContext'
 import './ScreenNav.css'
 
 const LABEL: Record<string, string> = {
+  home: 'Home',
   drive: 'Drive',
   engineer: 'Engineer',
   garage: 'Garage',

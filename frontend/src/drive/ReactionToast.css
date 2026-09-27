@@ -1,0 +1,48 @@
+.reaction-toast {
+  position: fixed;
+  top: 292px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 19;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 8px 18px;
+  border-radius: 999px;
+  font-family: var(--font-base);
+  color: var(--color-white);
+  background: rgba(16, 17, 20, 0.86);
+  border: 2px solid currentColor;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  animation: reaction-toast-in 2.6s ease both;
+  white-space: nowrap;
+}
+
+.reaction-toast strong {
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+}
+
+.reaction-toast__label,
+.reaction-toast__note {
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.06em;
+  color: #cbd5e1;
+}
+
+.reaction-toast__label { text-transform: uppercase; }
+
+.reaction-toast--good { border-color: #22c55e; }
+.reaction-toast--good strong { color: #4ade80; }
+.reaction-toast--ok { border-color: var(--color-amber); }
+.reaction-toast--ok strong { color: #fbbf24; }
+.reaction-toast--bad { border-color: var(--color-red); }
+.reaction-toast--bad strong { color: #f87171; }
+
+@keyframes reaction-toast-in {
+  0% { opacity: 0; transform: translate(-50%, -8px) scale(0.96); }
+  8% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  85% { opacity: 1; }
+  100% { opacity: 0; }
+}

@@ -15,6 +15,12 @@ import { TelemetryPanel } from '../drive/TelemetryPanel'
 import { TrackPicker } from '../drive/TrackPicker'
 import { useDriveSession } from '../drive/useDriveSession'
 import { useInputAdapter, type GameState } from '../input/useInputAdapter'
+import { warnedHazard } from '../haptics/haptics'
+import { useHaptics } from '../haptics/useHaptics'
+import { ReactionToast } from '../drive/ReactionToast'
+import { SessionReport } from '../drive/SessionReport'
+import { useDriverReport } from '../drive/useDriverReport'
+import { setGraphicsMode, useGraphicsMode } from '../app/graphics'
 import { Scene, type SceneView } from '../scene/Scene'
 import { UPGRADE_IDS, type TrackId, type TrackProfile, type UpgradeConfig } from '../types/schemas'
 import { useGarage } from '../app/GarageContext'
@@ -38,8 +44,11 @@ export function DriveScreen() {
   const input = useInputAdapter()
   const session = useDriveSession(input.normalized, input.buttonCounts, input.presses.ersCycle, input.presses.reset)
   const demo = useDemo()
-  // Retina screens: start at 1.5x, drop to 1x if the frame rate can't keep up
+  // Retina screens: start at 1.5x, drop to 1x if the frame rate can't keep up.
+  // The Performance graphics setting pins 1x with no effects instead: a GPU
+  // that strains but holds its frame rate never trips that automatic drop.
   const [dpr, setDpr] = useState(1.5)
+  const lowGraphics = useGraphicsMode() === 'performance'
   const { selection } = useGarage()
   const { start, connectionState } = session
 
@@ -48,6 +57,7 @@ export function DriveScreen() {
   const [showControls, setShowControls] = useState(false)
   const [showRacingLine, setShowRacingLine] = useState(true)
   const [showSetup, setShowSetup] = useState(false)
+  const [showReport, setShowReport] = useState(false)
   const steeringRef = useRef(0)
   steeringRef.current = input.normalized.steering
 
@@ -93,10 +103,29 @@ export function DriveScreen() {
     reportGameState({ session: gameSession, warning: gameWarning, speedKmh })
   }, [reportGameState, gameSession, gameWarning, speedKmh, inputSource])
 
+  // Force feedback: kerbs, run-off, wheel slip, barrier hits and the BRAKE
+  // warning rumble the wheel's servos or the gamepad, and drive the scene's
+  // camera shake, sparks, smoke and skid marks.
+  const { reportHaptics } = input
+  const haptics = useHaptics({
+    vehicleState: v,
+    profile,
+    warningActive: session.warning.active,
+    live: connectionState === 'connected',
+    reportHaptics,
+  })
+  // The human side of the test: reaction to each BRAKE warning, incidents,
+  // best lap; shown live and as a report (with the leaderboard) on End session.
+  const report = useDriverReport(session.sessionId, v, session.warning, input.normalized.brake)
+  const endWithReport = () => (report.responses.length > 0 || report.laps > 0 ? setShowReport(true) : session.endSession())
+
+  const brakeHazard =
+    session.warning.active && profile ? warnedHazard(profile, session.warning.hazardZone, v?.next_hazard_zone ?? null) : null
+
   return (
     <div className="drive-screen" data-connection={connectionState}>
-      <Canvas camera={{ position: [400, 500, 400], fov: 50, near: 0.5, far: 8000 }} dpr={dpr}>
-        <PerformanceMonitor onDecline={() => setDpr(1)} onIncline={() => setDpr(1.5)} />
+      <Canvas shadows={lowGraphics ? false : 'percentage'} camera={{ position: [400, 500, 400], fov: 50, near: 0.5, far: 8000 }} dpr={lowGraphics ? 1 : dpr}>
+        {!lowGraphics && <PerformanceMonitor onDecline={() => setDpr(1)} onIncline={() => setDpr(1.5)} />}
         <Scene
           view={view}
           trackProfile={profile}
@@ -105,9 +134,13 @@ export function DriveScreen() {
           previousLapTrail={session.previousLapTrail}
           steering={steeringRef}
           showRacingLine={showRacingLine && inSession}
-          effects={dpr > 1}
+          effects={!lowGraphics && dpr > 1}
+          haptics={inSession ? haptics.signal : undefined}
+          brakeHazard={brakeHazard}
         />
       </Canvas>
+      {/* barrier hit: a red flash round the screen edge (keyed, so each hit replays it) */}
+      {haptics.impacts > 0 && <div key={haptics.impacts} className="drive-screen__impact" aria-hidden="true" />}
 
       {!inSession && (
         <TrackPicker
@@ -146,6 +179,7 @@ export function DriveScreen() {
             <FaultHeadsUp faults={session.faultState?.faults ?? []} profile={profile} distanceAlongLap={v?.distance_along_lap ?? 0} />
           </div>
           <BrakeWarning warning={session.warning} />
+          <ReactionToast latest={report.responses.at(-1)} />
           <RunStateBanner vehicleState={v} />
           <DriveHud normalized={input.normalized} vehicleState={v} profile={profile} sessionId={session.sessionId} />
           <TelemetryPanel normalized={input.normalized} vehicleState={v} />
@@ -169,11 +203,35 @@ export function DriveScreen() {
             <button type="button" onClick={() => setShowControls((s) => !s)} aria-pressed={showControls}>
               Controls
             </button>
-            <button type="button" className="drive-screen__end" onClick={session.endSession}>
+            <button
+              type="button"
+              onClick={() => setGraphicsMode(lowGraphics ? 'quality' : 'performance')}
+              aria-pressed={lowGraphics}
+              title="Performance: 1x resolution, no bloom/anti-aliasing effects — for integrated GPUs"
+            >
+              {lowGraphics ? 'Graphics: Performance' : 'Graphics: Quality'}
+            </button>
+            <button type="button" onClick={() => setShowReport(true)} aria-pressed={showReport}>
+              Safety report
+            </button>
+            <button type="button" className="drive-screen__end" onClick={endWithReport}>
               End session
             </button>
           </div>
         </>
+      )}
+
+      {showReport && inSession && session.selectedTrack && (
+        <SessionReport
+          report={report}
+          track={session.selectedTrack}
+          trackName={profile?.name ?? session.selectedTrack}
+          onClose={() => setShowReport(false)}
+          onEnd={() => {
+            setShowReport(false)
+            session.endSession()
+          }}
+        />
       )}
 
       {showSetup && (
