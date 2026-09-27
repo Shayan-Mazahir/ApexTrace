@@ -1,6 +1,6 @@
 import { Canvas } from '@react-three/fiber'
 import { PerformanceMonitor } from '@react-three/drei'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { getTrack } from '../api/session'
 import { useDemo } from '../app/DemoContext'
 import { CalibrationPanel } from '../components/CalibrationPanel'
@@ -21,6 +21,7 @@ import { useHaptics } from '../haptics/useHaptics'
 import { ReactionToast } from '../drive/ReactionToast'
 import { SessionReport } from '../drive/SessionReport'
 import { useDriverReport } from '../drive/useDriverReport'
+import { GhostRecorder } from '../drive/ghostLap'
 import { setGraphicsMode, useGraphicsMode } from '../app/graphics'
 import { Scene, type SceneView } from '../scene/Scene'
 import { UPGRADE_IDS, type TrackId, type TrackProfile, type UpgradeConfig } from '../types/schemas'
@@ -59,6 +60,7 @@ export function DriveScreen() {
   const [showRacingLine, setShowRacingLine] = useState(true)
   const [showSetup, setShowSetup] = useState(false)
   const [showReport, setShowReport] = useState(false)
+  const [showGhost, setShowGhost] = useState(true)
   const steeringRef = useRef(0)
   steeringRef.current = input.normalized.steering
 
@@ -120,6 +122,15 @@ export function DriveScreen() {
   const report = useDriverReport(session.sessionId, v, session.warning, input.normalized.brake)
   const endWithReport = () => (report.responses.length > 0 || report.laps > 0 ? setShowReport(true) : session.endSession())
 
+  // Best-lap ghost: a see-through car replaying the session's best valid lap
+  // against the current lap clock.
+  const ghostLap = useMemo(() => new GhostRecorder(), [])
+  useEffect(() => ghostLap.reset(), [session.sessionId, ghostLap])
+  useEffect(() => {
+    if (v) ghostLap.push(v)
+  }, [v, ghostLap])
+  const ghostPose = showGhost && v && !lowGraphics ? ghostLap.poseAt(v.lap_time_s) : null
+
   const brakeHazard =
     session.warning.active && profile ? warnedHazard(profile, session.warning.hazardZone, v?.next_hazard_zone ?? null) : null
 
@@ -137,6 +148,7 @@ export function DriveScreen() {
           showRacingLine={showRacingLine && inSession}
           effects={!lowGraphics && dpr > 1}
           haptics={inSession ? haptics.signal : undefined}
+          ghost={ghostPose}
           brakeHazard={brakeHazard}
         />
       </Canvas>
@@ -210,6 +222,15 @@ export function DriveScreen() {
               <button type="button" onClick={() => setShowRacingLine((s) => !s)} aria-pressed={showRacingLine}>
                 <Icon name="route" />
                 Racing line
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowGhost((s) => !s)}
+                aria-pressed={showGhost}
+                title="Replays your best valid lap this session as a see-through car (Quality graphics)"
+              >
+                <Icon name="ghost" />
+                Best-lap ghost
               </button>
               <button
                 type="button"

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { HardwareInputMessage } from './HardwareAdapter'
+import { responseCurve, tiltToSteering } from '../steeringShaping'
 import {
   createHardwareAdapter,
   RESET_RELEASE_DEBOUNCE_MS,
@@ -62,6 +63,15 @@ class FakeSocket {
   }
 }
 
+// Holds the wheel at one reading for 1.5 s of 50 Hz samples, long enough for
+// the steering filter to settle on it.
+function hold(socket: FakeSocket, steeringRaw: number) {
+  for (let i = 0; i < 30; i++) {
+    vi.advanceTimersByTime(50)
+    socket.emit({ steeringRaw })
+  }
+}
+
 function harness() {
   const changes: number[] = []
   const adapter = createHardwareAdapter(() => changes.push(1))
@@ -96,15 +106,24 @@ describe('ESP32 hardware adapter', () => {
 
   it('scales full lock to the ±1 convention normalize.ts expects', () => {
     const h = harness()
-    h.socket.emit({ steeringRaw: STEERING_FULL_SCALE })
-    expect(h.adapter.poll().steeringRaw).toBeCloseTo(1)
+    hold(h.socket, STEERING_FULL_SCALE)
+    expect(h.adapter.poll().steeringRaw).toBeCloseTo(1, 2)
 
-    h.socket.emit({ steeringRaw: -STEERING_FULL_SCALE })
-    expect(h.adapter.poll().steeringRaw).toBeCloseTo(-1)
+    hold(h.socket, -STEERING_FULL_SCALE)
+    expect(h.adapter.poll().steeringRaw).toBeCloseTo(-1, 2)
 
     // past the measured full-lock reading it clamps rather than exceeding 1
-    h.socket.emit({ steeringRaw: 1.5 })
-    expect(h.adapter.poll().steeringRaw).toBe(1)
+    hold(h.socket, 1.5)
+    expect(h.adapter.poll().steeringRaw).toBeLessThanOrEqual(1)
+    expect(h.adapter.poll().steeringRaw).toBeCloseTo(1, 2)
+  })
+
+  it('shapes steering by wheel angle, with finer control around centre', () => {
+    const h = harness()
+    hold(h.socket, 0.4)
+    const s = h.adapter.poll().steeringRaw
+    expect(s).toBeCloseTo(responseCurve(tiltToSteering(0.4)), 2)
+    expect(s).toBeLessThan(0.4 / STEERING_FULL_SCALE) // softer than the old linear map near centre
   })
 
   it('treats a resting joystick as no pedal input', () => {
@@ -134,7 +153,7 @@ describe('ESP32 hardware adapter', () => {
     const h = harness()
     h.socket.emit({ steeringRaw: 0.4 })
     h.socket.onmessage?.({ data: 'not json' } as MessageEvent<string>)
-    expect(h.adapter.poll().steeringRaw).toBeCloseTo(0.5) // last good sample kept
+    expect(h.adapter.poll().steeringRaw).toBeCloseTo(responseCurve(tiltToSteering(0.4))) // last good sample kept
 
     h.socket.emit({ steeringRaw: NaN as unknown as number })
     expect(h.adapter.poll().steeringRaw).toBe(0) // never forwards NaN to the backend
@@ -199,6 +218,7 @@ describe('ESP32 hardware adapter', () => {
     const h = harness()
     h.socket.emit({ steeringRaw: 0.4 })
     const first = h.adapter.poll()
+    vi.advanceTimersByTime(50)
     h.socket.emit({ steeringRaw: 0.8 })
     const second = h.adapter.poll()
     expect(second).not.toBe(first) // not one mutated object handed out twice

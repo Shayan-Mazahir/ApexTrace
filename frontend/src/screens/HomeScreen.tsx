@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { getLeaderboard, type LeaderboardResponse } from '../api/leaderboard'
 import { getTrack } from '../api/session'
 import { DEMO_TOTAL_SECONDS, useDemo } from '../app/DemoContext'
+import { useGarage } from '../app/GarageContext'
 import { useScreen } from '../app/ScreenContext'
 import { ASSUMED_REACTION_S } from '../drive/driverReport'
-import type { TrackId, TrackProfile } from '../types/schemas'
+import type { ConfigResult, EvaluationResponse, TrackId, TrackProfile } from '../types/schemas'
 import './HomeScreen.css'
 
 // The front page for anyone new (judges first): what LimitLab is, how a run
@@ -57,11 +58,34 @@ function TrackHero({ profile }: { profile: TrackProfile | null }) {
   )
 }
 
+// The result in one line: the car with no upgrades, and the cheapest set of
+// upgrades within the season budget that passes the most tests.
+function headline(evaluation: EvaluationResponse, budget: number) {
+  const passed = (c: ConfigResult) => c.tests.filter((t) => t.passed).length
+  const base = evaluation.configs.find((c) => !Object.values(c.upgrades).some(Boolean))
+  const affordable = evaluation.configs.filter((c) => c.cost_cad <= budget)
+  const best = [...affordable].sort((a, b) => passed(b) - passed(a) || a.cost_cad - b.cost_cad)[0]
+  const full = evaluation.groups.full
+  const solvable = full?.solvable_count ?? null
+  if (!base || !best) return null
+  return { total: base.tests.length, base: passed(base), best, bestPassed: passed(best), solvable, unsolved: full?.unsolved_test_ids?.length ?? 0 }
+}
+
 export function HomeScreen() {
   const { setScreen } = useScreen()
   const demo = useDemo()
   const [monza, setMonza] = useState<TrackProfile | null>(null)
   const [boards, setBoards] = useState<Partial<Record<TrackId, LeaderboardResponse>>>({})
+  const garage = useGarage()
+  const { evaluation, evaluating, evaluate } = garage
+  const tried = useRef(false)
+  useEffect(() => {
+    // the server keeps the stress-suite results cached: this is near-instant
+    if (evaluation || evaluating || tried.current) return
+    tried.current = true
+    void evaluate()
+  }, [evaluation, evaluating, evaluate])
+  const result = evaluation ? headline(evaluation, garage.available) : null
 
   useEffect(() => {
     let live = true
@@ -116,6 +140,33 @@ export function HomeScreen() {
         <div><strong>8</strong><span>upgrade combinations compared</span></div>
         <div><strong>{drivers}</strong><span>drivers on the leaderboard</span></div>
       </section>
+
+      {result && (
+        <section className="home__section home__result" aria-label="Headline result">
+          <h2>The result</h2>
+          <div className="home__result-row">
+            <div>
+              <span>No upgrades</span>
+              <strong>{result.base}<small>/{result.total}</small></strong>
+              <p>stress tests passed</p>
+            </div>
+            <div className="home__result-arrow" aria-hidden="true">→</div>
+            <div className="home__result-best">
+              <span>Best buy within budget</span>
+              <strong>{result.bestPassed}<small>/{result.total}</small></strong>
+              <p>{result.best.label} · CAD {result.best.cost_cad.toLocaleString()}</p>
+            </div>
+          </div>
+          <p className="home__muted">
+            {result.solvable !== null && result.bestPassed >= result.solvable
+              ? `That is every test an upgrade can fix. `
+              : ''}
+            {result.unsolved > 0 &&
+              `${result.unsolved} tests fail whatever is bought (sensor faults, wet braking): flagged as unsolved, not hidden. `}
+            Same 42 held-out tests, same seeds and faults for every option; the season budget allows CAD {garage.available.toLocaleString()}.
+          </p>
+        </section>
+      )}
 
       <section className="home__section">
         <h2>How a run works</h2>

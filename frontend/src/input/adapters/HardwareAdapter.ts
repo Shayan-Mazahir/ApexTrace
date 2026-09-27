@@ -2,6 +2,7 @@ import { NO_RUMBLE, type HapticEvent, type Rumble } from '../../haptics/haptics'
 import type { ButtonId, DeviceFeedback, InputAdapter, RawInputSample } from '../InputAdapter'
 import { clamp } from '../normalize'
 import { nextBackoffMs } from '../../stream/reconnect'
+import { FULL_LOCK_G, WheelSteering } from '../steeringShaping'
 
 // Shape the ESP32 wheel pushes over WebSocket (via embedded-firmware/bridge.py,
 // which reads the serial stream and re-broadcasts it as JSON).
@@ -34,7 +35,7 @@ export function bridgeUrl(): string {
 // gravity's projection on the wheel's Y axis (~±0.8 g at full lock), while
 // normalize.ts assumes a device spanning ±1 — adapters convert into that
 // shared convention, see InputAdapter.ts.
-export const STEERING_FULL_SCALE = 0.8
+export const STEERING_FULL_SCALE = FULL_LOCK_G
 
 // The firmware sends at 50 Hz (delay(20)). If samples stop arriving the last
 // one must NOT be held: a frozen packet at full throttle would keep the car
@@ -98,10 +99,6 @@ function pedal(raw: number): number {
   return (magnitude - PEDAL_DEADZONE) / (1 - PEDAL_DEADZONE)
 }
 
-function steering(raw: number): number {
-  if (!Number.isFinite(raw)) return 0
-  return clamp(raw / STEERING_FULL_SCALE, -1, 1)
-}
 
 /**
  * Live ESP32 wheel over the serial->WebSocket bridge.
@@ -113,6 +110,8 @@ function steering(raw: number): number {
  */
 export function createHardwareAdapter(onAvailabilityChange?: () => void): InputAdapter {
   const latest: RawInputSample = { steeringRaw: 0, throttleRaw: 0, brakeRaw: 0 }
+  // tilt -> angle, One-Euro filtered, response curve: see steeringShaping.ts
+  const wheel = new WheelSteering()
   let available = false
   // -Infinity, not 0: a real performance.now() can legitimately be 0, so 0 is
   // not usable as a "nothing received yet" sentinel.
@@ -153,6 +152,7 @@ export function createHardwareAdapter(onAvailabilityChange?: () => void): InputA
       latest.throttleRaw = 0
       latest.brakeRaw = 0
       resetSeenAt = Number.NEGATIVE_INFINITY
+      wheel.reset() // a reconnect must not ease in from wherever the wheel was
     }
     onAvailabilityChange?.()
   }
@@ -181,7 +181,7 @@ export function createHardwareAdapter(onAvailabilityChange?: () => void): InputA
       if (disposed || socket !== ws) return
       try {
         const data = JSON.parse(event.data) as HardwareInputMessage
-        latest.steeringRaw = steering(data.steeringRaw)
+        latest.steeringRaw = wheel.update(data.steeringRaw, performance.now() / 1000)
         latest.throttleRaw = pedal(data.throttleRaw)
         latest.brakeRaw = pedal(data.brakeRaw)
         lastMessageAt = performance.now()
