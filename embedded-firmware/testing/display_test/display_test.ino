@@ -1,8 +1,11 @@
 /*
   Display bring-up test for the 1.69" 240x280 ST7789V2 (4-wire SPI).
-  Cycles black/red/green/blue and prints "Hello!" — flash this first to prove
-  the screen and its wiring work before running the full steering-wheel sketch.
+  Cycles black/red/green/blue and prints "Hello!" .
 
+  Ideally I would recommend doing this before anything, since if you 
+  wire everything up and the screen ends up not workin, that's going to a pain in the arse to figure out why
+
+  (Highly depends on your model) 
   Wiring: GND->GND, VCC->3V3, SCL->D18, SDA->D23, RES->D4, DC->D2, CS->D5, BLK->3V3
 */
 
@@ -38,5 +41,4 @@ void setup() {
 }
 
 void loop() {
-  // nothing yet
 }

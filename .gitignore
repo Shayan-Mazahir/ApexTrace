@@ -23,3 +23,5 @@ runs/
 frontend/public/*.glb
 frontend/e2e/tmp/
 frontend/public/models/
+
+codebase-explained/

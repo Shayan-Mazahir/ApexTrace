@@ -6,8 +6,7 @@ Setup:
     pip install pygame pyserial
 
 Before running: check which serial port your ESP32 is on and set SERIAL_PORT
-below. On Linux it's usually /dev/ttyUSB0. Close the Arduino Serial Monitor
-first — only one program can read the port at a time.
+below. Close the Arduino Serial Monitor first - only one program can read the port at a time.
 """
 
 import json
